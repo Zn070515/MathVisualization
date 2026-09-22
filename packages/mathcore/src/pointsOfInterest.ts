@@ -1,5 +1,5 @@
 /**
- * Finding the points on a curve that are worth naming.
+ * The points on a curve that are worth naming on the picture.
  *
  * A reader looking at a graph wants to know where it crosses the axis and where it
  * turns round. Desmos marks those automatically, and the reason this module exists
@@ -7,16 +7,33 @@
  * height 0.0001 is drawn as a root, and only zooming in shows that the curve never
  * reaches the axis.
  *
- * So the rule here is that a *crossing* and a *touch* are different claims and are
- * reported as different things:
+ * ## What this is not
+ *
+ * **This is not root analysis, and `'crossing'` is not `'zero'`.** The distinction
+ * is deliberate and it is the reason the kinds are named the way they are.
+ *
+ * `t²` has a zero at the origin — a double one — and this module reports
+ * `{ kind: 'minimum', touchesAxis: true }` instead, because what it found is a turn
+ * that sits on the axis, not a sign change. A mathematician reads the double root
+ * off that correctly. A *tool* asking "where are the zeros of this function, and
+ * with what multiplicity" would be asking a different question, and answering it
+ * needs different mathematics: exact factoring where the symbolic engine can do it,
+ * and an order estimate from the derivatives where it cannot.
+ *
+ * So: naming this after what it marks — points of interest *on the picture* — is not
+ * a dodge. Calling it root analysis would invite a caller to use it as one, and it
+ * would be wrong for every even-order root that touches without crossing.
+ *
+ * ## What it does claim
+ *
+ * A *crossing* and a *touch* are different claims, and are different variants:
  *
  * - **A crossing is a fact.** The function changes sign across an interval, and
  *   bisection narrows that interval until the bracket is at the limit of double
  *   precision. Nothing is inferred.
  * - **A touch is a deduction.** It is a local minimum whose height is zero *to
  *   within what the samples can resolve*. That is worth saying — `t²` really does
- *   touch the axis — but it is not the same statement, and it is reported as a
- *   minimum that happens to sit on the axis rather than as a root.
+ *   touch the axis — but it is not the same statement.
  *
  * And a sign change is not always a crossing. `tan` goes from `+∞` to `-∞` across
  * `π/2`, which every sampler sees as a sign change and no function has a root
@@ -29,7 +46,7 @@
 import { type Complex } from './complex';
 import { type MathIssue, type Result } from './errors';
 
-export type CriticalKind = 'zero' | 'minimum' | 'maximum';
+export type PointOfInterestKind = 'crossing' | 'minimum' | 'maximum';
 
 /**
  * A point worth naming, or a point worth being careful about.
@@ -38,9 +55,9 @@ export type CriticalKind = 'zero' | 'minimum' | 'maximum';
  * caller that wants to label them differently should not be able to forget which
  * claim it is making.
  */
-export type CriticalPoint =
+export type PointOfInterest =
   | {
-      readonly kind: 'zero';
+      readonly kind: 'crossing';
       readonly t: number;
       /** `f(t)`. Near zero by construction, and stated so a caller can check. */
       readonly value: number;
@@ -60,7 +77,7 @@ export type CriticalPoint =
       readonly touchesAxis: boolean;
     };
 
-export interface CriticalOptions {
+export interface PointOfInterestOptions {
   readonly tMin: number;
   readonly tMax: number;
   /** How many places the curve is looked at. More finds more, and costs more. */
@@ -184,10 +201,10 @@ function ternary(
  * works on whatever the caller has already bound — parameters, the active
  * expression, a user-defined function — and needs to know nothing about any of it.
  */
-export function findCriticalPoints(
+export function findPointsOfInterest(
   evaluate: (t: number) => Result<Complex, MathIssue>,
-  options: CriticalOptions,
-): readonly CriticalPoint[] {
+  options: PointOfInterestOptions,
+): readonly PointOfInterest[] {
   const { tMin, tMax } = options;
   if (!Number.isFinite(tMin) || !Number.isFinite(tMax) || tMax <= tMin) return [];
 
@@ -212,13 +229,13 @@ export function findCriticalPoints(
   })();
   const touchFloor = range * TOUCH_TOLERANCE;
 
-  const found: CriticalPoint[] = [];
+  const found: PointOfInterest[] = [];
 
   for (let index = 0; index < table.length; index += 1) {
     const sample = table[index];
     if (sample === undefined || sample.value === null) continue;
     if (Math.abs(sample.value) <= ON_AXIS) {
-      found.push({ kind: 'zero', t: sample.t, value: 0 });
+      found.push({ kind: 'crossing', t: sample.t, value: 0 });
     }
   }
 
@@ -233,7 +250,7 @@ export function findCriticalPoints(
   for (const sample of [table[0], table[table.length - 1]]) {
     if (sample === undefined || sample.value === null) continue;
     if (sample.value !== 0 && Math.abs(sample.value) <= edgeFloor) {
-      found.push({ kind: 'zero', t: sample.t, value: sample.value });
+      found.push({ kind: 'crossing', t: sample.t, value: sample.value });
     }
   }
 
@@ -247,7 +264,7 @@ export function findCriticalPoints(
     if (left.value * right.value >= 0) continue;
 
     const root = bisect(evaluate, left.t, right.t, left.value);
-    if (root !== null) found.push({ kind: 'zero', t: root.t, value: root.value });
+    if (root !== null) found.push({ kind: 'crossing', t: root.t, value: root.value });
   }
 
   // A turning point shows up as a change in the sign of the slope between
@@ -281,7 +298,7 @@ export function findCriticalPoints(
   // Two features found from adjacent samples are one feature. The window is not
   // going to resolve anything narrower than the sample spacing anyway.
   const spacing = step * 2;
-  const distinct: CriticalPoint[] = [];
+  const distinct: PointOfInterest[] = [];
   for (const point of found) {
     const previous = distinct[distinct.length - 1];
     if (previous !== undefined && Math.abs(point.t - previous.t) < spacing) {
@@ -290,7 +307,7 @@ export function findCriticalPoints(
       // a crossing is precisely the mistake this module exists to avoid. `t²` and
       // `abs(t)` both land their minimum exactly on a sample, so this is the
       // ordinary case and not an exotic one.
-      if (point.kind !== 'zero' && previous.kind === 'zero') {
+      if (point.kind !== 'crossing' && previous.kind === 'crossing') {
         distinct[distinct.length - 1] = point;
       }
       continue;

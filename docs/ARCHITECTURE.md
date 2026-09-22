@@ -319,7 +319,7 @@ decided from *measured* text widths. That last rule is a pure function
 (`readableLabels`) so that it can be tested without a canvas, which jsdom does not
 have.
 
-**Points of interest.** `mathcore/src/critical.ts` finds where a curve crosses the
+**Points of interest.** `mathcore/src/pointsOfInterest.ts` finds where a curve crosses the
 axis and where it turns round, and the cartesian view marks them and lets the
 cursor take them. It is worth stating what it does *not* claim, because the tool it
 is modelled on gets this wrong and says so: intercepts and extrema are
@@ -328,6 +328,16 @@ you zoom in. So a crossing and a touch are different variants of the result type
 and the difference is visible on screen — a crossing is labelled with a coordinate,
 a turn is labelled `min` or `max` with its value. `(t − 2)² + 0.0001` therefore
 reports a minimum at 0.0001 and never a root.
+
+**It is deliberately not root analysis.** `t²` has a double zero at the origin, and
+this reports the *turn* rather than a crossing, because a crossing is a claim about a
+sign change and there is none. The module is named after what it marks — points of
+interest *on the picture* — rather than after what a caller might hope it computes,
+which is the difference between a name that guides and a name that invites the wrong
+use. Where the zeros of a function are, and with what multiplicity, is a different
+question needing different mathematics: exact factoring where the symbolic engine can
+manage it, and an order estimate from the derivatives where it cannot. That module
+does not exist yet, and until it does, nothing should call this one as if it were.
 
 Two numerical decisions carry that:
 
@@ -601,7 +611,7 @@ There is one convention per row and one place it is written down.
 
 Four levels, all of them runnable:
 
-1. **`pnpm test`** — 646 tests. Parser, AST, type inference, complex arithmetic,
+1. **`pnpm test`** — 647 tests. Parser, AST, type inference, complex arithmetic,
    numerical evaluation, workspace behaviour, GLSL lowering, SymPy lowering,
    colouring, surface sampling, how a number is written, where the axis ticks go,
    and the mathematical reference identities. The identity suite
@@ -684,7 +694,7 @@ MathVisualization/
 │   │   │   ast.ts  lexer.ts  parser.ts  latex.ts  types.ts  infer.ts
 │   │   │   evaluator.ts  format.ts  display.ts  ticks.ts  workspace.ts
 │   │   │   coloring.ts  surface.ts  glsl.ts  surfaceGlsl.ts  sympy.ts  cas.ts
-│   │   └── test/               426 tests
+│   │   └── test/               427 tests
 │   └── app/                    the interface. React, Vite.
 │       ├── src/
 │       │   ├── subsystems.ts   the three subsystems, one description
