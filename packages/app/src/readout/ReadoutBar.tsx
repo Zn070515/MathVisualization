@@ -9,25 +9,27 @@
  * Where a value is undefined, the strip prints the reason the evaluator gave
  * ("the denominator is zero here") instead of a number, which is the distinction
  * GOAL.md section 14 asks for.
+ *
+ * The value here is computed by the same binding the views use, which is the
+ * point: the number in this strip is the value of the function at the point being
+ * pointed at, and it is the same number the picture was drawn from.
  */
 import {
   type Complex,
   type UserFunctionDefinition,
-  type WorkspaceEntry,
   DEFAULT_DOMAIN_COLORING,
   cabs,
-  cx,
+  displayComplex,
+  displayNumber,
   domainColor,
-  evaluateScalar,
   fieldColor,
-  formatComplex,
-  formatReal,
-  makeEnvironment,
   principalArg,
   rgbToCss,
 } from '@mathviz/mathcore';
+import { ComplexText, NumberText } from '../display/NumberText';
 import { useStore } from '../state/store';
-import { variableBindingsFor, type WorkspaceStore } from '../state/workspaceStore';
+import { makePointEvaluation } from '../views/evaluation';
+import type { ActiveExpression, WorkspaceStore } from '../state/workspaceStore';
 
 export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Element {
   const state = useStore(store, (current) => current);
@@ -46,13 +48,13 @@ export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Elem
 
   return (
     <div className="readout">
-      <Cell label="point" value={formatComplex(point, { digits: 5 })} />
+      <Cell label="point" value={<ComplexText value={displayComplex(point, { digits: 5 })} />} />
 
       {active === null ? (
         <Cell label="value" value="—" />
       ) : (
         <ValueCells
-          entry={active.entry}
+          active={active}
           point={point}
           parameters={state.parameterValues}
           functions={state.workspace.functions}
@@ -68,35 +70,25 @@ export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Elem
 }
 
 function ValueCells({
-  entry,
+  active,
   point,
   parameters,
   functions,
 }: {
-  entry: WorkspaceEntry;
+  active: ActiveExpression;
   point: Complex;
   parameters: ReadonlyMap<string, number>;
   functions: ReadonlyMap<string, UserFunctionDefinition>;
 }): React.JSX.Element {
-  const body = entry.statement?.body;
-  if (body === undefined) return <Cell label="value" value="—" />;
+  const evaluation = makePointEvaluation(active, parameters, functions);
+  if (evaluation === null) return <Cell label="value" value="—" />;
 
-  // The variables are bound exactly as the views bind them, so the number printed
-  // here is the value of the function at the point being pointed at.
-  const bindings = variableBindingsFor(entry);
-  const values = new Map<string, Complex>(
-    [...parameters].map(([name, value]) => [name, cx(value, 0)]),
-  );
-  for (const [name, binding] of bindings) {
-    values.set(name, binding.kind === 'complex' ? point : cx(binding.axis === 0 ? point.re : point.im, 0));
-  }
-
-  const result = evaluateScalar(body, makeEnvironment({ values, functions }));
+  const result = evaluation.evaluate(point);
 
   if (!result.ok) {
     return (
       <>
-        <Cell label="value" value="undefined" emphasis />
+        <Cell label="value" value={<NumberText value={{ kind: 'undefined' }} />} emphasis />
         <span className="readout__reason">{result.issue.message}</span>
       </>
     );
@@ -104,17 +96,25 @@ function ValueCells({
 
   const value = result.value;
   const color =
-    entry.type?.signature.codomain.kind === 'C'
+    active.entry.type?.signature.codomain.kind === 'C'
       ? domainColor(value, DEFAULT_DOMAIN_COLORING)
       : fieldColor(value, 'real', { min: value.re - 1, max: value.re + 1 });
 
   return (
     <>
-      <Cell label="value" value={formatComplex(value, { digits: 6 })} />
-      <Cell label="|w|" value={formatReal(cabs(value), { digits: 5 })} />
+      <Cell label="value" value={<ComplexText value={displayComplex(value, { digits: 6 })} />} />
+      <Cell label="|w|" value={<NumberText value={displayNumber(cabs(value), { digits: 5 })} />} />
       <Cell
         label="arg"
-        value={cabs(value) === 0 ? 'undefined' : formatReal(principalArg(value), { digits: 5 })}
+        value={
+          // The argument of zero has no value, and saying so is more honest than
+          // printing the zero that atan2 would return.
+          cabs(value) === 0 ? (
+            <NumberText value={{ kind: 'undefined' }} />
+          ) : (
+            <NumberText value={displayNumber(principalArg(value), { digits: 5 })} />
+          )
+        }
       />
       <span className="readout__swatch-cell">
         <span className="readout__swatch" style={{ background: rgbToCss(color) }} />
@@ -129,7 +129,7 @@ function Cell({
   emphasis = false,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   emphasis?: boolean;
 }): React.JSX.Element {
   return (

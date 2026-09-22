@@ -12,6 +12,7 @@
  * *expression* is a new program.
  */
 import type { GlslProgram } from '@mathviz/mathcore';
+import { linkProgram, ShaderCompilationError } from './shaderProgram';
 
 export interface RenderRequest {
   readonly centerX: number;
@@ -29,16 +30,6 @@ export interface RenderRequest {
   readonly modulusBands: boolean;
   /** Live values of the expression's parameters, by name. */
   readonly parameterValues: ReadonlyMap<string, number>;
-}
-
-export class ShaderCompilationError extends Error {
-  constructor(
-    message: string,
-    readonly log: string,
-  ) {
-    super(message);
-    this.name = 'ShaderCompilationError';
-  }
 }
 
 const VERTEX_COUNT = 4;
@@ -70,25 +61,11 @@ export class FieldRenderer {
   /** Compile a program from the lowering of an expression. */
   setProgram(program: GlslProgram): void {
     const gl = this.gl;
-    const vertexShader = this.compile(gl.VERTEX_SHADER, program.vertexSource);
-    const fragmentShader = this.compile(gl.FRAGMENT_SHADER, program.fragmentSource);
-
-    const linked = gl.createProgram();
-    if (linked === null) throw new ShaderCompilationError('could not create a program', '');
-    gl.attachShader(linked, vertexShader);
-    gl.attachShader(linked, fragmentShader);
-    gl.linkProgram(linked);
-    if (!gl.getProgramParameter(linked, gl.LINK_STATUS)) {
-      const log = gl.getProgramInfoLog(linked) ?? '';
-      gl.deleteProgram(linked);
-      throw new ShaderCompilationError('the shader program failed to link', log);
-    }
+    const linked = linkProgram(gl, program.vertexSource, program.fragmentSource);
 
     // Release the previous program only after the new one has linked, so a failed
     // compile leaves the previous picture on screen rather than a blank canvas.
     if (this.program !== null) gl.deleteProgram(this.program);
-    gl.deleteShader(vertexShader);
-    gl.deleteShader(fragmentShader);
     this.program = linked;
     this.locations.clear();
 
@@ -107,30 +84,11 @@ export class FieldRenderer {
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     // A quad covering the viewport, drawn as a triangle strip. The same geometry
     // is used for every expression; only the program changes.
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-      gl.STATIC_DRAW,
-    );
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
     gl.bindVertexArray(null);
 
     this.vertexArray = vertexArray;
     this.positionBuffer = buffer;
-  }
-
-  private compile(type: number, source: string): WebGLShader {
-    const gl = this.gl;
-    const shader = gl.createShader(type);
-    if (shader === null) throw new ShaderCompilationError('could not create a shader', '');
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      const log = gl.getShaderInfoLog(shader) ?? '';
-      gl.deleteShader(shader);
-      const stage = type === gl.VERTEX_SHADER ? 'vertex' : 'fragment';
-      throw new ShaderCompilationError(`the ${stage} shader failed to compile`, log);
-    }
-    return shader;
   }
 
   private uniform(name: string): WebGLUniformLocation | null {
@@ -197,16 +155,5 @@ export class FieldRenderer {
     this.vertexArray = null;
     this.positionBuffer = null;
     this.locations.clear();
-  }
-}
-
-/** Whether this browser can render the field views at all. */
-export function webgl2Available(): boolean {
-  if (typeof document === 'undefined') return false;
-  try {
-    const probe = document.createElement('canvas');
-    return probe.getContext('webgl2') !== null;
-  } catch {
-    return false;
   }
 }

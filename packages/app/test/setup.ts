@@ -130,6 +130,55 @@ if (!('ResizeObserver' in globalThis)) {
   });
 }
 
+if (typeof globalThis.localStorage === 'undefined') {
+  /**
+   * Node's own experimental `localStorage` is defined but unusable without
+   * `--localstorage-file`, so it wins the name over jsdom's and reads back
+   * undefined — `'localStorage' in window` is true and `typeof localStorage` is
+   * `'undefined'`. Node says so itself, in a warning, which is how this was
+   * tracked down rather than guessed at.
+   *
+   * The application guards on that `typeof` and correctly concludes it cannot
+   * persist, so without a stand-in the whole persistence layer would be skipped
+   * by its own tests. A memory-backed one is enough: the layer uses `getItem` and
+   * `setItem` and nothing else, and what needs testing is the *reading* — which
+   * versions are consulted, what a partly-unreadable record degrades to — rather
+   * than the browser's storage.
+   */
+  class MemoryStorage {
+    private readonly items = new Map<string, string>();
+
+    get length(): number {
+      return this.items.size;
+    }
+
+    clear(): void {
+      this.items.clear();
+    }
+
+    getItem(key: string): string | null {
+      return this.items.get(key) ?? null;
+    }
+
+    key(index: number): string | null {
+      return [...this.items.keys()][index] ?? null;
+    }
+
+    removeItem(key: string): void {
+      this.items.delete(key);
+    }
+
+    setItem(key: string, value: string): void {
+      this.items.set(key, String(value));
+    }
+  }
+
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: new MemoryStorage(),
+    writable: true,
+  });
+}
+
 if (typeof HTMLCanvasElement !== 'undefined') {
   // jsdom logs a "not implemented" error for canvas contexts. Returning null is the
   // honest answer here, and every view handles a missing context by showing its

@@ -26,7 +26,11 @@
  *   types.ts        spaces, signatures, and object classification
  *   infer.ts        type inference over the AST
  *   evaluator.ts    numerical evaluation, real and complex
+ *   display.ts      how a computed number is written, structurally
  *   format.ts       printing expressions and values as mathematics
+ *   ticks.ts        where axis ticks go, and what they say
+ *   surface.ts      sampling a scalar field into a mesh
+ *   surfaceGlsl.ts  the fixed shader a surface is drawn with
  *   workspace.ts    a document: many statements, analysed together
  *   coloring.ts     domain colouring, the CPU reference implementation
  *   glsl.ts         lowering the AST to a WebGL2 fragment shader
@@ -46,7 +50,11 @@ export * from './latex';
 export * from './types';
 export * from './infer';
 export * from './evaluator';
+export * from './display';
 export * from './format';
+export * from './ticks';
+export * from './surface';
+export * from './surfaceGlsl';
 export * from './workspace';
 export * from './coloring';
 export * from './glsl';

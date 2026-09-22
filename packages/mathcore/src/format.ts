@@ -1,20 +1,27 @@
 /**
  * Rendering mathematical objects as text.
  *
- * Two jobs:
+ * Two jobs, and they are different jobs:
  *
- * 1. `exprToText` prints an AST back as readable mathematics. It is
+ * 1. `exprToText` prints an *expression* back as readable mathematics. It is
  *    precedence-aware, so it only inserts parentheses that change the meaning:
- *    `a - (b + c)` keeps them, `(a * b) + c` does not.
- * 2. `formatComplex` prints a numerical value, distinguishing exact-looking
- *    short decimals from values that are only approximated.
- *
- * This is deliberately plain text, not LaTeX and not a typed-maths layout. The
- * expression panel's editor is a separate, later concern; what it needs from the
- * core is a faithful textual form of the tree, which is what this provides.
+ *    `a - (b + c)` keeps them, `(a * b) + c` does not. The output is source-like
+ *    on purpose — `*` and `^`, not LaTeX — because what the editor needs from
+ *    the core is a faithful textual form of the tree.
+ * 2. `formatReal` and `formatComplex` print a computed *value*. These are thin
+ *    projections of `display.ts`, which is where the decision about how a number
+ *    is written actually lives. There is one implementation of that decision, so
+ *    the same magnitude cannot be written two ways in two panes.
  */
 import type { Expr, Statement } from './ast';
-import { type Complex, isUndefined } from './complex';
+import type { Complex } from './complex';
+import {
+  displayComplex,
+  displayComplexToText,
+  displayNumber,
+  displayNumberToText,
+  type DisplayOptions,
+} from './display';
 
 const PRECEDENCE_ADDITIVE = 10;
 const PRECEDENCE_MULTIPLICATIVE = 20;
@@ -113,46 +120,22 @@ export function statementToText(statement: Statement): string {
   }
 }
 
-export interface NumberFormatOptions {
-  /** Significant digits to show. */
-  readonly digits?: number;
-}
-
 /**
- * Components smaller than this fraction of the largest one are shown as zero.
+ * The options the formatting entry points take.
  *
- * A display convention, and only that: nothing here changes a computed value.
- * The reason it is needed is that exact mathematics rarely survives double
- * precision intact. `(1 + i)^2` is exactly `2i`, but evaluating it numerically
- * leaves a real part of about 1e-16, and printing `1.11022e-15 + 2i` would
- * present rounding as if it were structure.
- *
- * The threshold is relative rather than absolute, so a value whose components are
- * all genuinely tiny is still printed in full.
+ * Kept as a name here because it is what the printer's callers already say; the
+ * decisions it carries are described at {@link DisplayOptions}.
  */
-export const DISPLAY_ZERO_THRESHOLD = 1e-12;
+export type NumberFormatOptions = DisplayOptions;
 
 /**
  * Print a real number.
  *
- * Values are rounded to `digits` significant digits for display, but the
- * rounding is explicitly a display concern: nothing here feeds back into
- * computation. Values far from unity switch to exponential form.
+ * Rounded for display only: nothing here feeds back into a computation, so an
+ * exact result and an approximate one stay distinguishable (GOAL.md section 13).
  */
 export function formatReal(value: number, options: NumberFormatOptions = {}): string {
-  const digits = options.digits ?? 6;
-
-  if (Number.isNaN(value)) return 'undefined';
-  if (value === Infinity) return '∞';
-  if (value === -Infinity) return '-∞';
-  if (value === 0) return '0';
-
-  const magnitude = Math.abs(value);
-  if (magnitude >= 1e-4 && magnitude < 1e7) {
-    const rounded = Number(value.toPrecision(digits));
-    return String(rounded);
-  }
-  return value.toExponential(Math.max(0, digits - 1));
+  return displayNumberToText(displayNumber(value, options));
 }
 
 /**
@@ -161,27 +144,9 @@ export function formatReal(value: number, options: NumberFormatOptions = {}): st
  * Real values print as a real number. Purely imaginary values print as `2i` or
  * `-1.5i`, not `0 + 2i`. Undefined values print as `undefined`, so that a
  * singularity in the readout is visibly a singularity rather than a number.
- *
- * Components at the level of rounding noise are dropped, for the reason given at
- * {@link DISPLAY_ZERO_THRESHOLD}.
+ * Components at the level of rounding noise are dropped, which is how `(1+i)^2`
+ * prints as `2i` rather than as `1.11022e-16 + 2i`.
  */
 export function formatComplex(value: Complex, options: NumberFormatOptions = {}): string {
-  if (isUndefined(value)) return 'undefined';
-
-  const scale = Math.max(Math.abs(value.re), Math.abs(value.im));
-  const threshold = scale * DISPLAY_ZERO_THRESHOLD;
-  const re = Math.abs(value.re) < threshold ? 0 : value.re;
-  const im = Math.abs(value.im) < threshold ? 0 : value.im;
-
-  if (im === 0) return formatReal(re, options);
-
-  const imaginary = formatReal(Math.abs(im), options);
-  const imaginaryText = imaginary === '1' ? 'i' : `${imaginary}i`;
-
-  if (re === 0) {
-    return im < 0 ? `-${imaginaryText}` : imaginaryText;
-  }
-
-  const realText = formatReal(re, options);
-  return im < 0 ? `${realText} - ${imaginaryText}` : `${realText} + ${imaginaryText}`;
+  return displayComplexToText(displayComplex(value, options));
 }

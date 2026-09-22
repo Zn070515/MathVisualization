@@ -30,8 +30,7 @@ import { fail, ok, type MathIssue, type Result } from './errors';
 
 /** How a variable of the expression maps onto the plane the shader rasterises. */
 export type VariableBinding =
-  | { readonly kind: 'complex' }
-  | { readonly kind: 'real'; readonly axis: 0 | 1 };
+  { readonly kind: 'complex' } | { readonly kind: 'real'; readonly axis: 0 | 1 };
 
 export interface GlslLoweringOptions {
   /** Parameters lowered to `float` uniforms, so changing one does not recompile. */
@@ -43,7 +42,15 @@ export interface GlslLoweringOptions {
 
 export interface GlslUniform {
   readonly name: string;
-  readonly kind: 'float' | 'vec2';
+  /**
+   * What the uniform is, so a renderer knows which call to bind it with.
+   *
+   * The wider kinds are here for the surface shader, which is transformed by
+   * matrices rather than rasterised in screen space. Adding them is inert: the
+   * fragment-shader renderer binds its uniforms by name and never reads this
+   * field, so nothing that already worked changed.
+   */
+  readonly kind: 'float' | 'vec2' | 'vec3' | 'vec4' | 'mat3' | 'mat4';
   /** What the uniform means, so the renderer can be written against this list. */
   readonly meaning: string;
 }
@@ -65,7 +72,11 @@ const FRAMING_UNIFORMS: readonly GlslUniform[] = [
     kind: 'vec2',
     meaning: 'Half-width and half-height of the view, in plane units',
   },
-  { name: 'uPhaseContours', kind: 'float', meaning: '1 to darken the phase contours, 0 to omit them' },
+  {
+    name: 'uPhaseContours',
+    kind: 'float',
+    meaning: '1 to darken the phase contours, 0 to omit them',
+  },
   {
     name: 'uModulusBands',
     kind: 'float',
@@ -88,16 +99,81 @@ const FRAMING_UNIFORMS: readonly GlslUniform[] = [
 
 /** GLSL ES keywords and reserved identifiers that a variable name must avoid. */
 const RESERVED_IDENTIFIERS = new Set([
-  'attribute', 'const', 'uniform', 'varying', 'buffer', 'shared', 'coherent', 'volatile',
-  'restrict', 'readonly', 'writeonly', 'layout', 'centroid', 'flat', 'smooth', 'noperspective',
-  'patch', 'sample', 'break', 'continue', 'do', 'for', 'while', 'switch', 'case', 'default',
-  'if', 'else', 'subroutine', 'in', 'out', 'inout', 'float', 'double', 'int', 'void', 'bool',
-  'true', 'false', 'invariant', 'precise', 'discard', 'return', 'mat2', 'mat3', 'mat4', 'vec2',
-  'vec3', 'vec4', 'ivec2', 'ivec3', 'ivec4', 'bvec2', 'bvec3', 'bvec4', 'uint', 'uvec2',
-  'uvec3', 'uvec4', 'lowp', 'mediump', 'highp', 'precision', 'sampler2D', 'samplerCube',
-  'struct', 'main',
+  'attribute',
+  'const',
+  'uniform',
+  'varying',
+  'buffer',
+  'shared',
+  'coherent',
+  'volatile',
+  'restrict',
+  'readonly',
+  'writeonly',
+  'layout',
+  'centroid',
+  'flat',
+  'smooth',
+  'noperspective',
+  'patch',
+  'sample',
+  'break',
+  'continue',
+  'do',
+  'for',
+  'while',
+  'switch',
+  'case',
+  'default',
+  'if',
+  'else',
+  'subroutine',
+  'in',
+  'out',
+  'inout',
+  'float',
+  'double',
+  'int',
+  'void',
+  'bool',
+  'true',
+  'false',
+  'invariant',
+  'precise',
+  'discard',
+  'return',
+  'mat2',
+  'mat3',
+  'mat4',
+  'vec2',
+  'vec3',
+  'vec4',
+  'ivec2',
+  'ivec3',
+  'ivec4',
+  'bvec2',
+  'bvec3',
+  'bvec4',
+  'uint',
+  'uvec2',
+  'uvec3',
+  'uvec4',
+  'lowp',
+  'mediump',
+  'highp',
+  'precision',
+  'sampler2D',
+  'samplerCube',
+  'struct',
+  'main',
   // Names in scope inside the generated function, which a variable must not shadow.
-  'point', 'value', 'color', 'magnitude', 'argument', 'hue', 'brightness',
+  'point',
+  'value',
+  'color',
+  'magnitude',
+  'argument',
+  'hue',
+  'brightness',
 ]);
 
 /** A GLSL float literal, always with a decimal point or an exponent. */
@@ -198,9 +274,7 @@ class Lowering {
     if (existing !== undefined) return existing;
 
     const legal =
-      /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) &&
-      !RESERVED_IDENTIFIERS.has(name) &&
-      name.length <= 20;
+      /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) && !RESERVED_IDENTIFIERS.has(name) && name.length <= 20;
     const identifier = legal ? `v_${name}` : `v${this.identifiers.size}`;
     this.identifiers.set(name, identifier);
     return identifier;
@@ -472,11 +546,40 @@ vec3 colorForValue(vec2 w) {
   return hsvToRgb(hue, 0.8, brightness);
 }
 
-// ---------------------------------------------------------------------------
-// Scalar field colouring. Mirror of the ramp in coloring.ts, generated from it.
-// ---------------------------------------------------------------------------
+// Scalar field colouring, shared with the 3D surface shader. See
+// scalarFieldColoringSource below.
+${scalarFieldColoringSource()}
 
-${rampTableSource()}
+vec3 colorForField(vec2 w) {
+  if (isnan(w.x) || isnan(w.y)) return vec3(0.5);
+  if (isinf(w.x) || isinf(w.y)) return vec3(1.0);
+
+  int mode = int(uMode + 0.5);
+  if (mode == 0) return colorForValue(w);
+
+  float scalar = mode == 1 ? cabsValue(w)
+               : mode == 2 ? carg(w)
+               : mode == 3 ? w.x
+               : w.y;
+  return scalarRamp(normalizeScalar(scalar, mode));
+}
+`;
+
+/**
+ * The scalar ramp, and the normalisation that feeds it, as GLSL.
+ *
+ * Extracted rather than inlined into the fragment shader because a second shader
+ * needs it: the 3D surface colours its vertices by the same rule, so that a
+ * surface of `f(x, y)` and a heatmap of `f(x, y)` are the same colours on the
+ * same values. Both read the ramp below, which is itself generated from
+ * `SCALAR_RAMP`, so there is one table and not three.
+ *
+ * A caller must declare `uniform vec2 uScalarRange`, which `normalizeScalar`
+ * reads, and a name for π and 2π. The surface shader passes the same range, which
+ * is how a surface of `f` and a heatmap of `f` come out the same colours.
+ */
+export function scalarFieldColoringSource(): string {
+  return `${rampTableSource()}
 
 vec3 scalarRamp(float t) {
   float position = clamp(t, 0.0, 1.0);
@@ -501,22 +604,8 @@ float normalizeScalar(float scalar, int mode) {
   float span = uScalarRange.y - uScalarRange.x;
   if (span <= 0.0) return 0.5;
   return clamp((scalar - uScalarRange.x) / span, 0.0, 1.0);
+}`;
 }
-
-vec3 colorForField(vec2 w) {
-  if (isnan(w.x) || isnan(w.y)) return vec3(0.5);
-  if (isinf(w.x) || isinf(w.y)) return vec3(1.0);
-
-  int mode = int(uMode + 0.5);
-  if (mode == 0) return colorForValue(w);
-
-  float scalar = mode == 1 ? cabsValue(w)
-               : mode == 2 ? carg(w)
-               : mode == 3 ? w.x
-               : w.y;
-  return scalarRamp(normalizeScalar(scalar, mode));
-}
-`;
 
 /**
  * The ramp stops, rendered as GLSL constants.
@@ -562,9 +651,7 @@ export function lowerToDomainColoringProgram(
   if (!body.ok) return body;
 
   const declarations = lowering.variableDeclarations();
-  const parameterUniforms = options.parameters
-    .map((name) => `uniform float p_${name};`)
-    .join('\n');
+  const parameterUniforms = options.parameters.map((name) => `uniform float p_${name};`).join('\n');
 
   const fragmentSource = `#version 300 es
 precision highp float;
@@ -625,13 +712,11 @@ void main() {
 
   const uniforms: GlslUniform[] = [
     ...FRAMING_UNIFORMS,
-    ...options.parameters.map(
-      (name): GlslUniform => ({
-        name: `p_${name}`,
-        kind: 'float',
-        meaning: `Value of the parameter ${name}`,
-      }),
-    ),
+    ...options.parameters.map((name): GlslUniform => ({
+      name: `p_${name}`,
+      kind: 'float',
+      meaning: `Value of the parameter ${name}`,
+    })),
   ];
 
   return ok({

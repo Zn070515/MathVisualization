@@ -7,7 +7,7 @@
  * tested here without a DOM, without rendering, and without timing.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { latex, makeStore } from './helpers';
+import { latex, makeStore, toLatex } from './helpers';
 import { cx } from '@mathviz/mathcore';
 import {
   DEFAULT_VIEWPORT,
@@ -15,11 +15,17 @@ import {
   parametersUsedBy,
   resetLineIds,
   variableBindingsFor,
+  type WorkspaceStore,
 } from '../src/state/workspaceStore';
 
 beforeEach(() => {
   resetLineIds();
 });
+
+/** The kinds of the open views, in order. */
+function kindsOf(store: WorkspaceStore): string[] {
+  return store.getState().views.map((view) => view.kind);
+}
 
 describe('expression updates', () => {
   it('re-analyses the workspace when a line is edited', () => {
@@ -30,9 +36,7 @@ describe('expression updates', () => {
 
     const id = store.getState().lines[0]?.id as string;
     store.setLineLatex(id, 'f(x)=x^2');
-    expect(store.getState().workspace.entries[0]?.type?.classification.kind).toBe(
-      'real-function',
-    );
+    expect(store.getState().workspace.entries[0]?.type?.classification.kind).toBe('real-function');
   });
 
   it('reports a parse error without discarding the other lines', () => {
@@ -130,10 +134,10 @@ describe('the shared cursor', () => {
 
   it('holds one hover point and one selection for every view', () => {
     const store = makeStore(['f(z)=z^2', 'g(z)=1/z'], 'complex');
-    // With two views open, both read these same two fields. There is no per-view
-    // cursor that could get out of step with the other.
+    // With three views open, all of them read these same two fields. There is no
+    // per-view cursor that could get out of step with the others.
     store.addView('mapped-grid', 'complex');
-    expect(store.getState().views).toHaveLength(2);
+    expect(store.getState().views).toHaveLength(3);
 
     const point = cx(0.75, -1.25);
     store.setHover(point);
@@ -219,15 +223,30 @@ describe('the viewport', () => {
 });
 
 describe('multiple views', () => {
-  it('opens as laid out by the caller', () => {
+  it('opens on the views the mathematical object calls for, not on the subsystem', () => {
+    // A complex function is a map of the plane: the plane itself, and then the
+    // colouring of the map on it. Neither of those is anything the *subsystem*
+    // decides — the subsystem is only where the examples come from.
+    expect(kindsOf(makeStore(['f(z)=z^2'], 'complex'))).toEqual([
+      'complex-plane',
+      'domain-coloring',
+    ]);
+    // A function of one real variable opens on a pair of axes.
+    expect(kindsOf(makeStore(['f(t)=exp(-t^2)'], 'transforms'))).toEqual(['cartesian-2d']);
+    // A scalar over the plane opens on a surface, not on the same numbers read
+    // from above.
+    expect(kindsOf(makeStore(['f(x,y)=x^2+y^2'], 'calculus'))).toEqual(['cartesian-3d']);
+  });
+
+  it('opens on a view that can explain itself when there is nothing to infer from', () => {
     const store = makeStore([], 'complex');
     expect(store.getState().views).toHaveLength(1);
-    expect(store.getState().views[0]?.kind).toBe('field');
+    expect(store.getState().views[0]?.kind).toBe('domain-coloring');
   });
 
   it('adds and removes views', () => {
     const store = makeStore([], 'complex');
-    const id = store.addView('plot', 'real');
+    const id = store.addView('mapped-grid', 'complex');
     expect(store.getState().views).toHaveLength(2);
 
     store.removeView(id);
@@ -243,13 +262,70 @@ describe('multiple views', () => {
 
   it('changes one view mode without touching the others', () => {
     const store = makeStore([], 'complex');
-    const second = store.addView('field', 'complex');
+    const second = store.addView('domain-coloring', 'complex');
     const [first] = store.getState().views;
 
     store.setViewMode(second, 'magnitude');
     const views = store.getState().views;
     expect(views.find((view) => view.id === second)?.mode).toBe('magnitude');
     expect(views.find((view) => view.id === first?.id)?.mode).toBe('complex');
+  });
+});
+
+describe('the views follow the expression until they are arranged', () => {
+  it('starts out following, because they were inferred', () => {
+    expect(makeStore(['f(z)=z^2'], 'complex').getState().viewsFollowInference).toBe(true);
+  });
+
+  it('re-derives when the object changes class', () => {
+    // Retyping a surface as a curve is a different object, and the panes follow.
+    const store = makeStore(['f(x,y)=x^2+y^2'], 'calculus');
+    expect(kindsOf(store)).toEqual(['cartesian-3d']);
+
+    const line = store.getState().lines[0];
+    if (line === undefined) throw new Error('expected a line');
+    store.setLineLatex(line.id, toLatex('f(x)=x^2'));
+
+    expect(kindsOf(store)).toEqual(['cartesian-2d']);
+  });
+
+  it('keeps the same view identities while nothing changes', () => {
+    // A rebuild happens on every keystroke. If it minted new identifiers the
+    // canvases would remount and lose their compiled shaders as you typed.
+    const store = makeStore(['f(z)=z^2'], 'complex');
+    const before = store.getState().views[0]?.id;
+
+    const line = store.getState().lines[0];
+    if (line === undefined) throw new Error('expected a line');
+    store.setLineLatex(line.id, toLatex('f(z)=z^3'));
+
+    expect(store.getState().views[0]?.id).toBe(before);
+  });
+
+  it('stops following the moment a view is arranged', () => {
+    const store = makeStore(['f(x,y)=x^2+y^2'], 'calculus');
+    const only = store.getState().views[0];
+    if (only === undefined) throw new Error('expected a view');
+
+    store.setViewMode(only.id, 'real');
+    expect(store.getState().viewsFollowInference).toBe(false);
+
+    const line = store.getState().lines[0];
+    if (line === undefined) throw new Error('expected a line');
+    store.setLineLatex(line.id, toLatex('f(x)=x^2'));
+
+    // The object changed class and the panes did not move: they are the user's.
+    expect(kindsOf(store)).toEqual(['cartesian-3d']);
+  });
+
+  it('does not start following again after that', () => {
+    const store = makeStore(['f(z)=z^2'], 'complex');
+    const only = store.getState().views[0];
+    if (only === undefined) throw new Error('expected a view');
+
+    store.addView('mapped-grid', 'complex');
+    store.removeView(only.id);
+    expect(store.getState().viewsFollowInference).toBe(false);
   });
 });
 

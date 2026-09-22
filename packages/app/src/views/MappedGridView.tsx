@@ -18,19 +18,18 @@
  * look identical if the frame silently rescales.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  type Complex,
-  type Expr,
-  cx,
-  evaluateScalar,
-  makeEnvironment,
-} from '@mathviz/mathcore';
+import type { Complex } from '@mathviz/mathcore';
+import { prepareCanvas2d } from '../render/canvasSurface';
+import { NumberText } from '../display/NumberText';
+import { viewNumber } from '../display/numbers';
 import { useStore } from '../state/store';
 import {
   selectActiveExpression,
   type ViewSpec,
   type WorkspaceStore,
 } from '../state/workspaceStore';
+import { makePointEvaluation } from './evaluation';
+import { useResizeVersion } from './useResizeVersion';
 
 /** Points sampled along each grid line before mapping. */
 const SAMPLES_PER_LINE = 160;
@@ -46,8 +45,15 @@ interface Bounds {
   maxIm: number;
 }
 
-export function MappedGridView({ store, view }: { store: WorkspaceStore; view: ViewSpec }): React.JSX.Element {
+export function MappedGridView({
+  store,
+  view,
+}: {
+  store: WorkspaceStore;
+  view: ViewSpec;
+}): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const resizeVersion = useResizeVersion(canvasRef);
   const state = useStore(store, (current) => current);
   const { workspace, focusedLineId } = state;
   const functions = workspace.functions;
@@ -56,53 +62,24 @@ export function MappedGridView({ store, view }: { store: WorkspaceStore; view: V
     [workspace, focusedLineId, store.drawableKinds],
   );
 
-  /** Map a plane point through the function, or null where it has no value. */
-  const mapPoint = useMemo(() => {
-    const body: Expr | undefined = active?.entry.statement?.body;
-    const bindings = active?.bindings;
-    if (body === undefined || bindings === undefined) return () => null;
+  // Only a function of one complex variable has a meaningful plane image; a
+  // scalar field of two real ones does not, and neither does a real signal.
+  const drawable = active?.signature.domain.kind === 'C';
+  const evaluation = useMemo(
+    () => (drawable ? makePointEvaluation(active, state.parameterValues, functions) : null),
+    [active, drawable, state.parameterValues, functions],
+  );
 
-    const environment = makeEnvironment({
-      values: [...state.parameterValues].map(([name, value]) => [name, cx(value, 0)] as const),
-      functions: [...functions],
-    });
-
-    return (point: Complex): Complex | null => {
-      const values = new Map(environment.values);
-      for (const [name, binding] of bindings) {
-        if (binding.kind === 'complex') values.set(name, point);
-      }
-      // Only a function of one complex variable has a meaningful plane image.
-      if (values.size === environment.values.size) return null;
-      const result = evaluateScalar(body, { values, functions: environment.functions });
-      return result.ok ? result.value : null;
-    };
-  }, [active, state.parameterValues, functions]);
-
-  const drawable = useMemo(() => active?.signature.domain.kind === 'C', [active]);
-
-  const [fit, setFit] = useState<{ bounds: Bounds; from: string } | null>(null);
+  const [fit, setFit] = useState<Bounds | null>(null);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (canvas === null) return;
-    const context = canvas.getContext('2d');
-    if (context === null) return;
+    const surface = prepareCanvas2d(canvas);
+    if (surface === null) return;
+    const { context, width, height, ratio } = surface;
 
-    const bounds = canvas.getBoundingClientRect();
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
-    const width = Math.max(1, Math.round(bounds.width * ratio));
-    const height = Math.max(1, Math.round(bounds.height * ratio));
-    if (canvas.width !== width || canvas.height !== height) {
-      canvas.width = width;
-      canvas.height = height;
-    }
-
-    context.setTransform(1, 0, 0, 1, 0, 0);
-    context.fillStyle = '#fdfcfa';
-    context.fillRect(0, 0, width, height);
-
-    if (!drawable) return;
+    if (!drawable || evaluation === null) return;
 
     // Build the image of the grid.
     const lines: { points: Complex[]; weight: number }[] = [];
@@ -111,8 +88,8 @@ export function MappedGridView({ store, view }: { store: WorkspaceStore; view: V
       const vertical: Complex[] = [];
       for (let step = 0; step <= SAMPLES_PER_LINE; step += 1) {
         const t = -LINES_EACH_SIDE + (step / SAMPLES_PER_LINE) * 2 * LINES_EACH_SIDE;
-        const alongReal = mapPoint(cx(t, index));
-        const alongImaginary = mapPoint(cx(index, t));
+        const alongReal = evaluation.valueAt({ re: t, im: index });
+        const alongImaginary = evaluation.valueAt({ re: index, im: t });
         if (alongReal !== null) horizontal.push(alongReal);
         if (alongImaginary !== null) vertical.push(alongImaginary);
       }
@@ -128,10 +105,12 @@ export function MappedGridView({ store, view }: { store: WorkspaceStore; view: V
 
     setFit((previous) =>
       previous !== null &&
-      previous.bounds.minRe === padded.minRe &&
-      previous.bounds.maxRe === padded.maxRe
+      previous.minRe === padded.minRe &&
+      previous.maxRe === padded.maxRe &&
+      previous.minIm === padded.minIm &&
+      previous.maxIm === padded.maxIm
         ? previous
-        : { bounds: padded, from: active?.entry.source ?? '' },
+        : padded,
     );
 
     const toScreen = (point: Complex): [number, number] => [
@@ -163,7 +142,7 @@ export function MappedGridView({ store, view }: { store: WorkspaceStore; view: V
     // The shared cursor, mapped, so the two planes are visibly linked.
     const cursor = state.hover ?? state.selection;
     if (cursor !== null) {
-      const image = mapPoint(cursor);
+      const image = evaluation.valueAt(cursor);
       if (image !== null) {
         const [x, y] = toScreen(image);
         if (Number.isFinite(x) && Number.isFinite(y)) {
@@ -174,27 +153,22 @@ export function MappedGridView({ store, view }: { store: WorkspaceStore; view: V
         }
       }
     }
-  }, [active, drawable, mapPoint, state.hover, state.selection]);
+  }, [drawable, evaluation, state.hover, state.selection]);
 
+  // The viewport is deliberately not a dependency: this view frames itself on the
+  // image of the grid, so panning or zooming the plane changes nothing here.
   useEffect(() => {
     draw();
-  }, [draw, state.viewport, state.parameterValues, view.id]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (canvas === null || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(() => {
-      draw();
-    });
-    observer.observe(canvas);
-    return () => {
-      observer.disconnect();
-    };
-  }, [draw]);
+  }, [draw, resizeVersion, view.id]);
 
   return (
     <div className="view">
-      <canvas ref={canvasRef} className="view__canvas view__canvas--paper" role="img" aria-label="Image of the coordinate grid under the function" />
+      <canvas
+        ref={canvasRef}
+        className="view__canvas view__canvas--paper"
+        role="img"
+        aria-label="Image of the coordinate grid under the function"
+      />
 
       {!drawable && (
         <div className="view__overlay">
@@ -208,7 +182,14 @@ export function MappedGridView({ store, view }: { store: WorkspaceStore; view: V
       {drawable && (
         <div className="legend legend--corner">
           <span className="legend__title">w-plane · image of the grid</span>
-          {fit !== null && <span className="legend__range">{formatBounds(fit.bounds)}</span>}
+          {fit !== null && (
+            <span className="legend__range">
+              Re <NumberText value={viewNumber(fit.minRe)} />…
+              <NumberText value={viewNumber(fit.maxRe)} />
+              {'  '}Im <NumberText value={viewNumber(fit.minIm)} />…
+              <NumberText value={viewNumber(fit.maxIm)} />
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -265,12 +246,4 @@ function padBounds(bounds: Bounds, fraction: number): Bounds {
     minIm: bounds.minIm - padIm,
     maxIm: bounds.maxIm + padIm,
   };
-}
-
-function formatBounds(bounds: Bounds): string {
-  const format = (value: number): string =>
-    Math.abs(value) >= 100 || (Math.abs(value) < 0.01 && value !== 0)
-      ? value.toExponential(1)
-      : value.toFixed(2);
-  return `Re ${format(bounds.minRe)}…${format(bounds.maxRe)}  Im ${format(bounds.minIm)}…${format(bounds.maxIm)}`;
 }

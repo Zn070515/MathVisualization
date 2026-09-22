@@ -21,19 +21,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   type Complex,
-  type Expr,
   type FieldMode,
   type GlslProgram,
   type ScalarRange,
   FIELD_MODE_INDEX,
   cx,
-  evaluateScalar,
   fieldColor,
   lowerToDomainColoringProgram,
-  makeEnvironment,
+  niceStep,
   rgbToCss,
 } from '@mathviz/mathcore';
-import { FieldRenderer, ShaderCompilationError, webgl2Available } from '../render/fieldRenderer';
+import { pixelSize } from '../render/canvasSurface';
+import { FieldRenderer } from '../render/fieldRenderer';
+import { ShaderCompilationError, webgl2Available } from '../render/shaderProgram';
+import { NumberText } from '../display/NumberText';
+import { viewNumber } from '../display/numbers';
 import { useStore } from '../state/store';
 import {
   loweringOptionsFor,
@@ -42,6 +44,10 @@ import {
   type Viewport,
   type WorkspaceStore,
 } from '../state/workspaceStore';
+import { handleCameraKey } from './cameraKeys';
+import { makePointEvaluation } from './evaluation';
+import { useResizeVersion } from './useResizeVersion';
+import { fromScreen, planeWindow } from './window2d';
 
 /** Samples per axis when measuring the range of a scalar field on the CPU. */
 const MEASUREMENT_RESOLUTION = 48;
@@ -55,6 +61,7 @@ export interface FieldViewProps {
 
 export function FieldView({ store, view }: FieldViewProps): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const resizeVersion = useResizeVersion(canvasRef);
   const rendererRef = useRef<FieldRenderer | null>(null);
   const dragging = useRef<{ x: number; y: number } | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -91,44 +98,16 @@ export function FieldView({ store, view }: FieldViewProps): React.JSX.Element {
     return result.ok ? result.value : null;
   }, [active]);
 
-  /**
-   * Evaluate the active expression at a plane point.
-   *
-   * The bindings decide what the plane coordinate means: for a complex function
-   * the variable *is* the point, while for a scalar field each real variable is one
-   * coordinate of it. Using the bindings rather than assuming keeps the two cases
-   * from being conflated.
-   */
-  const evaluateAt = useMemo(() => {
-    const body: Expr | undefined = active?.entry.statement?.body;
-    const bindings = active?.bindings;
-    if (body === undefined || bindings === undefined) return () => null;
-
-    const environment = makeEnvironment({
-      values: [...state.parameterValues].map(([name, value]) => [name, cx(value, 0)] as const),
-      functions: [...functions],
-    });
-
-    return (point: Complex): Complex | null => {
-      const values = new Map(environment.values);
-      for (const [name, binding] of bindings) {
-        values.set(
-          name,
-          binding.kind === 'complex'
-            ? point
-            : cx(binding.axis === 0 ? point.re : point.im, 0),
-        );
-      }
-      const result = evaluateScalar(body, { values, functions: environment.functions });
-      return result.ok ? result.value : null;
-    };
-  }, [active, state.parameterValues, functions]);
+  const evaluation = useMemo(
+    () => makePointEvaluation(active, state.parameterValues, functions),
+    [active, state.parameterValues, functions],
+  );
 
   const range = useMemo((): ScalarRange => {
     if (view.mode === 'phase') return { min: -Math.PI, max: Math.PI };
-    if (!drawable) return DEFAULT_RANGE;
-    return measureRange(evaluateAt, state.viewport, view.mode, halfHeight);
-  }, [drawable, evaluateAt, state.viewport, view.mode, halfHeight]);
+    if (!drawable || evaluation === null) return DEFAULT_RANGE;
+    return measureRange(evaluation.valueAt, state.viewport, view.mode, halfHeight);
+  }, [drawable, evaluation, state.viewport, view.mode, halfHeight]);
 
   // Compile once per expression.
   useEffect(() => {
@@ -174,17 +153,15 @@ export function FieldView({ store, view }: FieldViewProps): React.JSX.Element {
     };
   }, []);
 
-  // Draw whenever anything the picture depends on changes.
+  // Draw whenever anything the picture depends on changes — including the size of
+  // the canvas, which the renderer needs in order to size its backing store.
   useEffect(() => {
     const canvas = canvasRef.current;
     const renderer = rendererRef.current;
     if (canvas === null || renderer === null || program === null || failure !== null) return;
     if (!drawable) return;
 
-    const bounds = canvas.getBoundingClientRect();
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
-    const widthPixels = Math.max(1, Math.round(bounds.width * ratio));
-    const heightPixels = Math.max(1, Math.round(bounds.height * ratio));
+    const { width: widthPixels, height: heightPixels } = pixelSize(canvas);
     const nextHalfHeight = state.viewport.halfWidth * (heightPixels / widthPixels);
     if (Math.abs(nextHalfHeight - halfHeight) > 1e-9) setHalfHeight(nextHalfHeight);
 
@@ -200,7 +177,9 @@ export function FieldView({ store, view }: FieldViewProps): React.JSX.Element {
         scalarRange: [range.min, range.max],
         grid: true,
         axes: true,
-        gridSpacing: gridSpacingFor(state.viewport.halfWidth),
+        // The grid the shader draws and the ticks an axis would carry come from
+        // one ladder, so they cannot disagree about where a unit is.
+        gridSpacing: niceStep(state.viewport.halfWidth * 2),
         phaseContours: true,
         modulusBands: true,
         parameterValues: state.parameterValues,
@@ -217,6 +196,7 @@ export function FieldView({ store, view }: FieldViewProps): React.JSX.Element {
     state.parameterValues,
     view.mode,
     halfHeight,
+    resizeVersion,
   ]);
 
   const toPlane = useCallback(
@@ -225,12 +205,14 @@ export function FieldView({ store, view }: FieldViewProps): React.JSX.Element {
       if (canvas === null) return null;
       const bounds = canvas.getBoundingClientRect();
       if (bounds.width === 0 || bounds.height === 0) return null;
-      const unitsPerPixel = (2 * state.viewport.halfWidth) / bounds.width;
-      return cx(
-        state.viewport.centre.re + (event.clientX - bounds.left - bounds.width / 2) * unitsPerPixel,
-        // Screen y grows downward; the imaginary axis grows upward.
-        state.viewport.centre.im - (event.clientY - bounds.top - bounds.height / 2) * unitsPerPixel,
+      const window = planeWindow(state.viewport, bounds.width, bounds.height);
+      const point = fromScreen(
+        window,
+        { x: event.clientX - bounds.left, y: event.clientY - bounds.top },
+        bounds.width,
+        bounds.height,
       );
+      return cx(point.x, point.y);
     },
     [state.viewport],
   );
@@ -269,8 +251,7 @@ export function FieldView({ store, view }: FieldViewProps): React.JSX.Element {
           const start = dragging.current;
           dragging.current = null;
           if (start === null) return;
-          const travelled =
-            Math.abs(event.clientX - start.x) + Math.abs(event.clientY - start.y);
+          const travelled = Math.abs(event.clientX - start.x) + Math.abs(event.clientY - start.y);
           if (travelled > 3) return; // A pan, not a click.
           store.setSelection(toPlane(event));
         }}
@@ -282,16 +263,7 @@ export function FieldView({ store, view }: FieldViewProps): React.JSX.Element {
           store.zoomViewport(Math.exp(event.deltaY * 0.0015), toPlane(event) ?? undefined);
         }}
         onKeyDown={(event) => {
-          const step = state.viewport.halfWidth * 0.15;
-          if (event.key === 'ArrowLeft') store.panViewport(-step, 0);
-          else if (event.key === 'ArrowRight') store.panViewport(step, 0);
-          else if (event.key === 'ArrowUp') store.panViewport(0, step);
-          else if (event.key === 'ArrowDown') store.panViewport(0, -step);
-          else if (event.key === '+' || event.key === '=') store.zoomViewport(0.85);
-          else if (event.key === '-') store.zoomViewport(1.18);
-          else if (event.key === '0') store.resetViewport();
-          else return;
-          event.preventDefault();
+          handleCameraKey(event, store);
         }}
       />
 
@@ -311,8 +283,7 @@ export function FieldView({ store, view }: FieldViewProps): React.JSX.Element {
         <div className="view__overlay">
           <p>
             <span className="view__mono">{active.entry.source}</span> is a function of one real
-            variable. A field view shows a function of the plane; this one belongs in the plot
-            view.
+            variable. A field view shows a function of the plane; this one belongs in the plot view.
           </p>
         </div>
       )}
@@ -334,7 +305,7 @@ export function FieldView({ store, view }: FieldViewProps): React.JSX.Element {
  * state rather than an artefact of the shader.
  */
 function measureRange(
-  evaluateAt: (point: Complex) => Complex | null,
+  valueAt: (point: Complex) => Complex | null,
   viewport: Viewport,
   mode: FieldMode,
   halfHeight: number,
@@ -347,10 +318,9 @@ function measureRange(
       const point = cx(
         viewport.centre.re +
           ((column + 0.5) / MEASUREMENT_RESOLUTION - 0.5) * 2 * viewport.halfWidth,
-        viewport.centre.im +
-          ((row + 0.5) / MEASUREMENT_RESOLUTION - 0.5) * 2 * halfHeight,
+        viewport.centre.im + ((row + 0.5) / MEASUREMENT_RESOLUTION - 0.5) * 2 * halfHeight,
       );
-      const value = evaluateAt(point);
+      const value = valueAt(point);
       if (value === null) continue;
 
       const scalar = project(value, mode);
@@ -428,32 +398,20 @@ function Legend({ mode, range }: { mode: FieldMode; range: ScalarRange }): React
               ? cx(Math.exp(t * Math.log(1 + Math.max(0, range.max))) - 1, 0)
               : cx(range.min + t * (range.max - range.min), 0);
           return (
-            <span
-              key={index}
-              style={{ background: rgbToCss(fieldColor(probe, mode, range)) }}
-            />
+            <span key={index} style={{ background: rgbToCss(fieldColor(probe, mode, range)) }} />
           );
         })}
       </span>
       <span className="legend__range">
-        {mode === 'phase' ? '−π … π' : `${formatRange(range.min)} … ${formatRange(range.max)}`}
+        {mode === 'phase' ? (
+          '−π … π'
+        ) : (
+          <>
+            <NumberText value={viewNumber(range.min)} /> …{' '}
+            <NumberText value={viewNumber(range.max)} />
+          </>
+        )}
       </span>
     </div>
   );
-}
-
-function formatRange(value: number): string {
-  if (!Number.isFinite(value)) return '—';
-  if (value === 0) return '0';
-  if (Math.abs(value) >= 1000 || Math.abs(value) < 0.01) return value.toExponential(2);
-  return value.toFixed(2);
-}
-
-/** A round grid spacing near a fifth of the visible half-width. */
-function gridSpacingFor(halfWidth: number): number {
-  const target = halfWidth / 5;
-  const magnitude = 10 ** Math.floor(Math.log10(target));
-  const normalized = target / magnitude;
-  const step = normalized < 1.5 ? 1 : normalized < 3.5 ? 2 : 5;
-  return step * magnitude;
 }

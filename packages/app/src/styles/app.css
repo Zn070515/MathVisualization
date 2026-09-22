@@ -1118,13 +1118,36 @@ math-field::part(virtual-keyboard-toggle) {
   display: block;
   width: 100%;
   height: 100%;
-  outline: none;
   cursor: crosshair;
   touch-action: none;
 }
 
+/* A canvas takes focus so that the arrow keys move the camera, and the default
+   ring on a 900-pixel-wide element is ugly enough that it was switched off — which
+   left a keyboard user with no way to tell which of several views was about to
+   receive their keypress. The ring is back, for keyboard focus only, drawn inside
+   the canvas so it does not shift the grid it surrounds. */
+.view__canvas:focus {
+  outline: none;
+}
+
+.view__canvas:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .view__canvas--paper {
   cursor: default;
+}
+
+/* The labels of the 3D view float over the surface: only text is drawn here, so
+   the occlusion between the surface and the grid underneath it is still the depth
+   buffer's business, and the text itself stays as sharp as the browser can set it
+   at any pixel ratio. */
+.view__canvas--overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
 .view__overlay {
@@ -1226,6 +1249,25 @@ math-field::part(virtual-keyboard-toggle) {
 
 .legend__range {
   color: var(--ink-faint);
+}
+
+/* Sits inside the range it acts on, because that is what it frames. Styled as
+   text rather than as a button: it is one more thing the legend says, and a
+   control that looked like a control here would outweigh the number beside it. */
+.legend__action {
+  margin-left: var(--space-2);
+  padding: 0 var(--space-1);
+  border: 0;
+  border-bottom: 1px solid var(--rule-strong);
+  background: none;
+  font: inherit;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.legend__action:hover {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 
 /* ---------------------------------------------------------------- readout -- */

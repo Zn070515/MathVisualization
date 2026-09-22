@@ -6,22 +6,27 @@
  * which is also a quiet check that the conversion works on every expression the tests
  * use.
  */
-import { plainToLatex, type MathObjectKind } from '@mathviz/mathcore';
+import { plainToLatex } from '@mathviz/mathcore';
 import { WorkspaceStore, resetLineIds } from '../src/state/workspaceStore';
-import type { SubsystemId } from '../src/subsystems';
-
-const DRAWABLE_KINDS: Readonly<Record<SubsystemId, readonly MathObjectKind[]>> = {
-  complex: ['complex-function', 'complex-path', 'real-function'],
-  transforms: ['real-function', 'complex-path'],
-  calculus: ['scalar-field', 'real-function'],
-};
+import { subsystemById, type SubsystemId } from '../src/subsystems';
 
 /** Convert readable plain-text expressions into the LaTeX the editor stores. */
 export function latex(...expressions: readonly string[]): string[] {
   return expressions.map(plainToLatex);
 }
 
-/** A store seeded with expressions written in the plain syntax. */
+/** The same conversion for a single expression, which is what an edit needs. */
+export function toLatex(expression: string): string {
+  return plainToLatex(expression);
+}
+
+/**
+ * A store seeded with expressions written in the plain syntax.
+ *
+ * The drawable kinds come from the subsystem definition rather than from a second
+ * copy here: they decide what every view can draw, and a copy that drifted would
+ * make the tests agree with themselves and disagree with the application.
+ */
 export function makeStore(
   initialExpressions: readonly string[] = [],
   subsystem: SubsystemId = 'complex',
@@ -30,7 +35,7 @@ export function makeStore(
   return new WorkspaceStore({
     subsystem,
     initialLines: latex(...initialExpressions),
-    drawableKinds: DRAWABLE_KINDS[subsystem],
+    drawableKinds: subsystemById(subsystem).drawableKinds,
   });
 }
 

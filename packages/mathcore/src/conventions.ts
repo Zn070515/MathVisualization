@@ -85,6 +85,17 @@ export const CONVENTIONS = {
     definition: 'Undefined results are reported as a mathematical issue, never as NaN reaching the UI',
     note: 'The numerical evaluator returns a discriminated result carrying a reason (division by zero, logarithm of zero, unbound symbol, ...). The GPU path cannot do this, so the shader marks undefined pixels explicitly and the CPU path is the reference.',
   },
+  numberDisplay: {
+    name: 'Writing a number',
+    definition:
+      'Plain decimals in [1e-4, 1e6); scientific notation as m×10^e outside that window; at most 6 significant digits',
+    note: 'One policy for every surface that shows a number: the readout, axis labels, view ranges, legends and sliders. A magnitude is stated rather than spelled out when spelling it out stops helping — 200000000 is written 2×10^8, and 0.0000234 is written 2.34×10^-5. Rounding here is display only and never feeds back into a computation. The thresholds live in NUMBER_DISPLAY.',
+  },
+  tickPlacement: {
+    name: 'Axis tick placement',
+    definition: 'Major ticks at 1, 2 or 5 times a power of ten, about ten across an axis',
+    note: 'Steps a reader can do arithmetic with. A step of 2×10ⁿ subdivides into four minor intervals rather than five, so the minor ticks land on 0.5×10ⁿ and not on 0.4×10ⁿ. Tick values are computed as index × step rather than by repeated addition, so the tick labelled 0.3 is exactly where 0.3 belongs and not one rounding step away. The numbers live in TICK_STEP.',
+  },
 } as const satisfies Record<string, ConventionEntry>;
 
 export type ConventionName = keyof typeof CONVENTIONS;
@@ -214,3 +225,63 @@ export const DEFAULT_DOMAIN_COLORING: DomainColoringOptions = {
   phaseContours: true,
   modulusBands: true,
 };
+
+/**
+ * How a computed number is written for a reader.
+ *
+ * The single policy for every surface that shows a number. It lives here rather
+ * than in the display module for the reason this file exists: three views had
+ * each grown their own copy of this policy, and the copies disagreed both on
+ * where to switch to exponential form (1000 versus 100) and on how many digits
+ * to keep (two versus one). A user could see the same magnitude written two
+ * ways in two panes.
+ *
+ * Inside the decimal window a value is written with its digits, because that is
+ * how it is read: `2000`, `0.5`, `-12.34`. Outside it a value is written as
+ * `m×10^e`, because `200000000` and `0.0000234` stop being readable long before
+ * they stop being writable.
+ */
+export const NUMBER_DISPLAY = {
+  /** Significant digits kept when no explicit decimal count is asked for. */
+  significantDigits: 6,
+  /** Below this magnitude, a value is written in scientific notation. */
+  decimalFrom: 1e-4,
+  /** At or above this magnitude, a value is written in scientific notation. */
+  decimalUntil: 1e6,
+  /**
+   * Components smaller than this fraction of the largest one are shown as zero.
+   *
+   * A display convention, and only that: nothing here changes a computed value.
+   * The reason it is needed is that exact mathematics rarely survives double
+   * precision intact. `(1 + i)^2` is exactly `2i`, but evaluating it numerically
+   * leaves a real part of about 1e-16, and printing `1.11022e-15 + 2i` would
+   * present rounding as if it were structure.
+   *
+   * The threshold is relative rather than absolute, so a value whose components
+   * are all genuinely tiny is still printed in full.
+   */
+  zeroThreshold: 1e-12,
+} as const;
+
+/**
+ * Where the ticks on an axis go.
+ *
+ * Recorded as numbers because two implementations read it: the CPU axis drawing
+ * and the grid spacing the fragment shader receives as a uniform. They must
+ * agree, or the grid lines and the numbered ticks would disagree about where a
+ * unit is.
+ */
+export const TICK_STEP = {
+  /** Roughly how many major ticks a full axis should carry. */
+  targetMajorTicks: 10,
+  /** A target step below this multiple of a power of ten snaps down to 1. */
+  snapToTwoBelow: 1.5,
+  /** ... and below this one snaps down to 2 rather than 5. */
+  snapToFiveBelow: 3.5,
+  /** Minor subdivisions of a 1×10ⁿ or 5×10ⁿ step. */
+  minorDivisionsForOneOrFive: 5,
+  /** Minor subdivisions of a 2×10ⁿ step, whose fifths would land on 0.4×10ⁿ. */
+  minorDivisionsForTwo: 4,
+  /** A guard on how many ticks a single axis may carry, so a bad step cannot hang a render. */
+  maxTicks: 512,
+} as const;

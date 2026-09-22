@@ -11,6 +11,7 @@
  * often the point of the parameter.
  */
 import { useEffect, useState } from 'react';
+import { parameterInputText } from '../display/numbers';
 
 export interface ParameterSliderProps {
   readonly name: string;
@@ -37,12 +38,14 @@ export function ParameterSlider({
   onReset,
 }: ParameterSliderProps): React.JSX.Element {
   const bounds = sliderBounds(value, defined);
-  const [draft, setDraft] = useState(String(value));
+  // Not `String(value)`: that is the shortest round-tripping form of the double,
+  // which for a value that came out of arithmetic is `0.30000000000000004`.
+  const [draft, setDraft] = useState(parameterInputText(value));
 
   // Follow the value when it changes from elsewhere, but leave the field alone
   // while the user is typing in it.
   useEffect(() => {
-    setDraft(String(value));
+    setDraft(parameterInputText(value));
   }, [value]);
 
   const commitDraft = (): void => {
@@ -50,7 +53,7 @@ export function ParameterSlider({
     if (Number.isFinite(parsed)) {
       onChange(parsed);
     } else {
-      setDraft(String(value));
+      setDraft(parameterInputText(value));
     }
   };
 
@@ -91,7 +94,7 @@ export function ParameterSlider({
         className="parameter__reset"
         onClick={onReset}
         disabled={value === defined}
-        title={`Reset to ${defined}`}
+        title={`Reset to ${parameterInputText(defined)}`}
         aria-label={`Reset ${name} to its defined value`}
       >
         ↺

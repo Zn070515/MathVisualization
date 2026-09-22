@@ -174,6 +174,39 @@ uses the same form so that the two agree.
 In every mode, an undefined value is grey and an infinite one is white, so a
 singularity never looks like a large finite number.
 
+### The three-dimensional view
+
+```
+right-handed      +x right, +y up, +z toward the viewer
+looking down -z   the camera's own forward direction
+column-major      element (row, column) sits at index column * 4 + row
+clip space        x, y, z ∈ [-1, 1], with -1 at the near plane
+```
+
+Four things a scene can be silently wrong about, so they are fixed in one place
+(`app/src/render/matrix.ts`) and each is asserted against a value worked out by
+hand rather than against whatever the implementation produces. A sign error in any
+of them yields a picture that still looks like a picture — mirrored, inside out, or
+behind the camera — and none of them announces itself.
+
+The surface's own conventions:
+
+- **A height is the real part of the value.** Correct for a scalar field
+  `R² → R`, which is the only thing a surface is. Which expressions *are* surfaces
+  is decided by the type system a level up, rather than guessed at here.
+- **A singularity is a hole.** A sample where the function has no value is marked
+  undefined, and every cell of the mesh touching it is dropped, so `1/(x² + y²)`
+  has a hole at the origin rather than a surface that passes smoothly over a point
+  where the function is not defined. A hole is the truth.
+- **Normals point outward**, by central differences over the sampled grid,
+  continuing the `surfaceNormal` convention above.
+- **Back faces are drawn, with the normal flipped.** A surface can legitimately be
+  looked at from underneath, and hiding the underside would be the picture refusing
+  to show what is there.
+- **The colour is the heatmap's ramp.** One `SCALAR_RAMP`, generated into both
+  shaders, so a surface of `f` and a heatmap of `f` cannot come out different
+  colours on the same value.
+
 ---
 
 ## Numerical behaviour
@@ -205,16 +238,91 @@ The distinction is only possible because numeric literals survive parsing as exa
 rationals (`rational.ts`), and because the symbolic lowering folds literal
 arithmetic exactly rather than letting Python's float division destroy it.
 
+### How a number is written
+
+```
+plain digits    in [1e-4, 1e6)
+m × 10^e        outside that window
+at most 6 significant digits
+```
+
+One policy for every surface that shows a number: the readout, axis labels, view
+ranges, legends and parameter sliders. No view formats its own numbers — this
+policy previously existed in four places at once, and the copies disagreed about
+both the threshold (`1000` versus `100`) and the digits (`2` versus `1`), so the
+same magnitude could be written two ways in two panes.
+
+A magnitude is **stated** rather than spelled out once spelling it out stops
+helping:
+
+```
+2000        →  2000
+200000000   →  2×10⁸
+0.0000234   →  2.34×10⁻⁵
+```
+
+Note that this is not "exponential for small, decimal for large". `200000000` is
+not hard to compute with; it is hard to *read*, and `2×10⁸` states the same
+magnitude in three characters.
+
+The core returns this **structurally** — `{ kind: 'scientific', mantissa: 2,
+exponent: 8 }` — rather than as a string, because the exponent is set in smaller
+type and a string cannot say which characters those are. One function renders the
+plain text (`2×10^8`), for tooltips, ARIA labels, canvas fallback and tests. The
+numbers live in `NUMBER_DISPLAY`; the structure is in `display.ts`.
+
+Rounding here is a display concern and never feeds back into a computation.
+
+### Axis tick placement
+
+```
+major ticks at 1, 2 or 5 × 10ⁿ    about ten across an axis
+minor ticks at a fifth of that    a quarter, for a step of 2×10ⁿ
+```
+
+Steps a reader can do arithmetic with. A step of `2×10ⁿ` subdivides into **four**
+rather than five, so the minor lines land on `0.5×10ⁿ` and not on `0.4×10ⁿ`: a
+grid drawn at `0.4` does not help anyone read a grid drawn at `2`.
+
+Every tick is computed as `index × step`, never by adding the step repeatedly. The
+difference is invisible for the first few ticks and then is not: a running total
+puts the tick that should be at `0.3` at `0.30000000000000004`, and prints it that
+way. Because the index form is exact, the label and the line cannot disagree —
+which is the one failure an axis must never have. Both properties are asserted in
+`packages/mathcore/test/ticks.test.ts`.
+
+The same step is handed to the fragment shader as its grid spacing, so the GPU
+grid and the numbered ticks agree about where a unit is by construction rather
+than by coincidence. The numbers live in `TICK_STEP`.
+
 ### Display of tiny components
 
-A displayed complex value whose component is smaller than `1e-12` of the largest
-component is shown as zero. This is a **display** convention and changes no
-computed value. Its purpose: `(1 + i)^2` is exactly `2i`, but evaluating it in
-double precision leaves a real part of about `1e-16`, and printing
-`1.11022e-15 + 2i` would present rounding as if it were structure.
+A displayed complex value whose component is smaller than a fraction of the
+largest component is shown as zero — the fraction is
+`NUMBER_DISPLAY.zeroThreshold`, `1e-12`. This is a **display** convention and
+changes no computed value. Its purpose: `(1 + i)^2` is exactly `2i`, but
+evaluating it in double precision leaves a real part of about `1e-16`, and
+printing `1.11022e-15 + 2i` would present rounding as if it were structure.
 
 The threshold is relative, so a value whose components are all genuinely tiny is
-still printed in full.
+still printed in full — and relative also means a part far below the scale of the
+other really is noise:
+
+```
+2×10^8 + 3×10^-5 i   →  2×10⁸         the imaginary part is 1.5e-13 relative
+1.2×10^-5 + 3.4×10^6 i                  both parts survive, both stated
+```
+
+The second line is what the structure buys: both components are written as
+magnitudes with an exponent set in smaller type, which a single formatted string
+could not express.
+
+Note also which numbers are deliberately *not* routed through this layer. The
+symbolic panel prints what the symbolic engine returned, verbatim. That engine
+works in exact rationals and prints its own syntax; re-formatting its output as a
+decimal would report `Rational(1, 3)` as `0.333333`, destroying exactly the
+distinction the product is built to preserve (see *Exact versed approximate*
+above).
 
 ### Undefined values
 

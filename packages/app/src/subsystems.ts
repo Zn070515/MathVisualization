@@ -52,6 +52,12 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
     drawableKinds: ['complex-function', 'complex-path', 'real-function'],
     capabilities: [
       {
+        name: 'The complex plane',
+        summary:
+          'Real and imaginary axes with a numbered grid, panning, and zooming about the pointer. Shows the shared point z and, for a map of the plane, its image f(z) joined to z so the correspondence is visible.',
+        status: 'implemented',
+      },
+      {
         name: 'Domain colouring',
         summary: 'Argument as hue, modulus as brightness, with modulus bands and phase contours.',
         status: 'implemented',
@@ -99,7 +105,8 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
       },
       {
         name: 'Contour integrals and residues',
-        summary: 'A path as an expression, the accumulated integral traced in the plane, the residue theorem checked.',
+        summary:
+          'A path as an expression, the accumulated integral traced in the plane, the residue theorem checked.',
         status: 'planned',
       },
       {
@@ -124,8 +131,9 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
         status: 'implemented',
       },
       {
-        name: 'Time-domain plot',
-        summary: 'The signal drawn against t, with the real and imaginary parts separated when the signal is complex.',
+        name: 'Time-domain graph',
+        summary:
+          'The signal drawn on a pair of axes with a graduated, numbered grid, the real and imaginary parts separated when the signal is complex, panning, zooming about the pointer, and a Fit control that frames the measured range.',
         status: 'implemented',
       },
       {
@@ -135,7 +143,8 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
       },
       {
         name: 'Fourier transform',
-        summary: 'The transform in closed form, with magnitude and phase spectra, and the convention stated.',
+        summary:
+          'The transform in closed form, with magnitude and phase spectra, and the convention stated.',
         status: 'planned',
       },
       {
@@ -150,12 +159,14 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
       },
       {
         name: 'Convolution',
-        summary: 'The reflected and shifted kernel, the pointwise product and the accumulated area, animated in t.',
+        summary:
+          'The reflected and shifted kernel, the pointwise product and the accumulated area, animated in t.',
         status: 'planned',
       },
       {
         name: 'Laplace transform and the s-plane',
-        summary: 'F(s) over the complex plane, with poles, zeros and the region of convergence shaded.',
+        summary:
+          'F(s) over the complex plane, with poles, zeros and the region of convergence shaded.',
         status: 'planned',
       },
       {
@@ -180,8 +191,15 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
     drawableKinds: ['scalar-field', 'real-function'],
     capabilities: [
       {
+        name: 'Surface of z = f(x, y)',
+        summary:
+          'The field drawn as a surface over the plane, coloured by its height with the same ramp the heatmap uses, on a camera of its own with orbit, pan and zoom. A point where the function has no value is a hole in the surface rather than a bridge across it.',
+        status: 'implemented',
+      },
+      {
         name: 'Scalar fields as a heatmap',
-        summary: 'f(x, y) shaded over the plane, with the value range stated.',
+        summary:
+          'The same field read from above: f(x, y) shaded over the plane, with the value range stated.',
         status: 'implemented',
       },
       {
@@ -206,7 +224,8 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
       },
       {
         name: 'Gradient and directional derivatives',
-        summary: 'The gradient field, its relation to the level sets, and the rate of change along a chosen direction.',
+        summary:
+          'The gradient field, its relation to the level sets, and the rate of change along a chosen direction.',
         status: 'planned',
       },
       {
@@ -226,22 +245,26 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
       },
       {
         name: 'Coordinate changes and Jacobians',
-        summary: 'Polar, cylindrical and spherical coordinates, with the Jacobian determinant as an area or volume factor.',
+        summary:
+          'Polar, cylindrical and spherical coordinates, with the Jacobian determinant as an area or volume factor.',
         status: 'planned',
       },
       {
         name: 'Vector fields, divergence and curl',
-        summary: 'Arrows, streamlines, divergence as a source density and curl as a local rotation.',
+        summary:
+          'Arrows, streamlines, divergence as a source density and curl as a local rotation.',
         status: 'planned',
       },
       {
         name: 'Line and surface integrals',
-        summary: 'Work along a path, flux through a surface, and the orientation conventions that fix their signs.',
+        summary:
+          'Work along a path, flux through a surface, and the orientation conventions that fix their signs.',
         status: 'planned',
       },
       {
         name: 'Green, divergence and Stokes theorems',
-        summary: 'Both sides of each theorem computed and shown against each other on the same picture.',
+        summary:
+          'Both sides of each theorem computed and shown against each other on the same picture.',
         status: 'planned',
       },
     ],

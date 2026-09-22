@@ -20,7 +20,6 @@ import {
   type ParseError,
   type ScalarRange,
   type Signature,
-  type Space,
   type VariableBinding,
   type Workspace,
   type WorkspaceEntry,
@@ -31,6 +30,8 @@ import {
   walk,
 } from '@mathviz/mathcore';
 import { MutableStore } from './store';
+import { defaultModeFor, defaultViewKinds, nominalViewKind } from './viewKinds';
+import { DEFAULT_CAMERA_3D, dolly, orbit, panTarget, type Camera3d } from '../render/camera3d';
 import type { SubsystemId } from '../subsystems';
 
 /**
@@ -63,8 +64,18 @@ export const DEFAULT_VIEWPORT: Viewport = {
   halfWidth: 2.4,
 };
 
-/** What a canvas pane is showing. */
-export type ViewKind = 'field' | 'mapped-grid' | 'plot';
+/**
+ * What a canvas pane is showing.
+ *
+ * Named for the mathematical object and the space it lives in rather than for the
+ * renderer that happens to draw it. `complex-plane` is the plane itself;
+ * `domain-coloring` is one representation of a map *on* that plane. Conflating
+ * those two — one kind called `field` doing every job — is the confusion this
+ * taxonomy exists to undo, because it made the plane and a picture of a function
+ * on the plane the same choice.
+ */
+export type ViewKind =
+  'cartesian-2d' | 'cartesian-3d' | 'complex-plane' | 'domain-coloring' | 'mapped-grid';
 
 /**
  * A view without an identity: what kind it is and what it shows.
@@ -82,10 +93,16 @@ export interface ViewSpec extends ViewBlueprint {
   readonly id: string;
 }
 
-/** Which mode is the natural default for a codomain. */
-export function defaultModeFor(codomain: Space | undefined): FieldMode {
-  if (codomain === undefined) return 'complex';
-  return codomain.kind === 'C' ? 'complex' : 'real';
+/**
+ * What every view component is given.
+ *
+ * One shape for all of them, so that the dispatch in the canvas can be exhaustive
+ * over `ViewKind`. A kind with no renderer is then a compile error; it used to be
+ * a blank frame, because the switch that chose one had no exhaustiveness check.
+ */
+export interface ViewRendererProps {
+  readonly store: WorkspaceStore;
+  readonly view: ViewSpec;
 }
 
 export interface WorkspaceState {
@@ -98,7 +115,26 @@ export interface WorkspaceState {
   readonly hover: Complex | null;
   readonly selection: Complex | null;
   readonly viewport: Viewport;
+  /**
+   * Where a three-dimensional view is looking from.
+   *
+   * A second camera rather than a meaning given to the first: a plane window and
+   * an orbit position are different objects, and pretending an orbit is a plane
+   * rectangle is the kind of lie this project refuses elsewhere. The 2D kinds
+   * share `viewport`; only the surface uses this.
+   */
+  readonly camera3d: Camera3d;
   readonly views: readonly ViewSpec[];
+  /**
+   * Whether the views are still the ones inferred from the expression.
+   *
+   * True until the user touches the layout — adding, removing or reconfiguring a
+   * view — and false for ever after. While it is true, changing the expression can
+   * change which views are open, which is what makes `f(x, y)` turning into `f(x)`
+   * turn a surface back into a curve. Once a user has arranged their own panes,
+   * nothing re-derives over them.
+   */
+  readonly viewsFollowInference: boolean;
   readonly focusedLineId: string | null;
 }
 
@@ -182,19 +218,30 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
       latex,
     }));
 
+    // Built once. The workspace has to exist before an opening view can be
+    // inferred from it — the signature it carries is a better answer to "what is
+    // this?" than the name of the subsystem is.
+    const workspace = buildWorkspace(lines.map(workspaceInput));
+    const drawableKinds = new Set(options.drawableKinds);
+    const focusedLineId = lines[0]?.id ?? null;
+
     super({
       subsystem: options.subsystem,
       lines,
-      workspace: buildWorkspace(lines.map(workspaceInput)),
-      parameterValues: collectSliderValues(buildWorkspace(lines.map(workspaceInput))),
+      workspace,
+      parameterValues: collectSliderValues(workspace),
       hover: null,
       selection: null,
       viewport: DEFAULT_VIEWPORT,
-      views: [{ id: nextViewId(), kind: 'field', mode: 'complex' }],
-      focusedLineId: lines[0]?.id ?? null,
+      camera3d: DEFAULT_CAMERA_3D,
+      views: withFreshIds(
+        planOpeningViews(workspace, focusedLineId, drawableKinds, options.subsystem),
+      ),
+      viewsFollowInference: true,
+      focusedLineId,
     });
 
-    this.drawableKinds = new Set(options.drawableKinds);
+    this.drawableKinds = drawableKinds;
   }
 
   // -------------------------------------------------------------- restoration
@@ -210,6 +257,7 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
   restore(parts: {
     parameterValues?: ReadonlyMap<string, number>;
     viewport?: Viewport;
+    camera3d?: Camera3d;
     views?: readonly ViewBlueprint[];
   }): void {
     this.update((state) => ({
@@ -219,10 +267,13 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
           ? state.parameterValues
           : reconcileParameters(state.workspace, parts.parameterValues),
       viewport: parts.viewport ?? state.viewport,
-      views:
-        parts.views === undefined
-          ? state.views
-          : parts.views.map((view) => ({ id: nextViewId(), kind: view.kind, mode: view.mode })),
+      camera3d: parts.camera3d ?? state.camera3d,
+      views: parts.views === undefined ? state.views : withFreshIds(parts.views),
+      // Restoring somebody's arrangement settles the question: from here on the
+      // views are theirs, and nothing re-derives over them. When there was
+      // nothing to restore the inferred views stand, and keep following the
+      // expression.
+      viewsFollowInference: parts.views === undefined && state.viewsFollowInference,
     }));
   }
 
@@ -351,18 +402,59 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
     this.setViewport(DEFAULT_VIEWPORT);
   }
 
+  // ---------------------------------------------------------------- camera3d
+
+  /**
+   * The three-dimensional camera, moved the same way anything else is.
+   *
+   * Every operation goes through the store rather than being kept in the view, so
+   * that a second surface view — if there were one — would be looking at the same
+   * scene, and so that the moves can be tested without a canvas at all.
+   */
+  setCamera3d(camera: Camera3d): void {
+    this.update((state) => ({ ...state, camera3d: camera }));
+  }
+
+  orbitCamera(deltaAzimuth: number, deltaElevation: number): void {
+    this.update((state) => ({
+      ...state,
+      camera3d: orbit(state.camera3d, deltaAzimuth, deltaElevation),
+    }));
+  }
+
+  dollyCamera(factor: number): void {
+    this.update((state) => ({ ...state, camera3d: dolly(state.camera3d, factor) }));
+  }
+
+  /** Slide the scene by a drag, in screen pixels at this canvas height. */
+  panCamera(deltaX: number, deltaY: number, height: number): void {
+    this.update((state) => ({
+      ...state,
+      camera3d: panTarget(state.camera3d, deltaX, deltaY, height),
+    }));
+  }
+
+  resetCamera3d(): void {
+    this.update((state) => ({ ...state, camera3d: DEFAULT_CAMERA_3D }));
+  }
+
   // ------------------------------------------------------------------ views
 
   setViewMode(viewId: string, mode: FieldMode): void {
     this.update((state) => ({
       ...state,
       views: state.views.map((view) => (view.id === viewId ? { ...view, mode } : view)),
+      viewsFollowInference: false,
     }));
   }
 
   addView(kind: ViewKind, mode: FieldMode): string {
     const id = nextViewId();
-    this.update((state) => ({ ...state, views: [...state.views, { id, kind, mode }] }));
+    this.update((state) => ({
+      ...state,
+      views: [...state.views, { id, kind, mode }],
+      viewsFollowInference: false,
+    }));
     return id;
   }
 
@@ -370,7 +462,11 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
     this.update((state) => {
       // Always leave one view: an empty canvas has no useful state.
       if (state.views.length <= 1) return state;
-      return { ...state, views: state.views.filter((view) => view.id !== id) };
+      return {
+        ...state,
+        views: state.views.filter((view) => view.id !== id),
+        viewsFollowInference: false,
+      };
     });
   }
 
@@ -402,6 +498,13 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
     this.update((state) => {
       const lines = transform(state.lines);
       const workspace = buildWorkspace(lines.map(workspaceInput));
+      const focusedLineId =
+        extra.focusedLineId !== undefined && lines.some((line) => line.id === extra.focusedLineId)
+          ? extra.focusedLineId
+          : focusedStillExists(state.focusedLineId, lines)
+            ? state.focusedLineId
+            : (lines[lines.length - 1]?.id ?? null);
+
       return {
         ...state,
         ...extra,
@@ -411,16 +514,70 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
         // exists keeps the value the user dragged it to, and a new one starts at
         // the value its definition gives.
         parameterValues: reconcileParameters(workspace, state.parameterValues),
-        focusedLineId:
-          extra.focusedLineId !== undefined &&
-          lines.some((line) => line.id === extra.focusedLineId)
-            ? extra.focusedLineId
-            : focusedStillExists(state.focusedLineId, lines)
-              ? state.focusedLineId
-              : (lines[lines.length - 1]?.id ?? null),
+        views: state.viewsFollowInference
+          ? reInferViews(state, workspace, focusedLineId, this.drawableKinds)
+          : state.views,
+        focusedLineId,
       };
     });
   }
+}
+
+/**
+ * The views a workspace should open with, as a plan.
+ *
+ * Separate from turning the plan into views because a plan costs nothing to
+ * compare and a view costs an identifier: rebuilding on every keystroke must not
+ * churn identities, or every view would remount and lose its canvas.
+ */
+function planOpeningViews(
+  workspace: Workspace,
+  focusedLineId: string | null,
+  drawableKinds: ReadonlySet<MathObjectKind>,
+  subsystem: SubsystemId,
+): readonly ViewBlueprint[] {
+  const active = selectActiveExpression(workspace, focusedLineId, drawableKinds);
+  const blueprints = defaultViewKinds(active?.signature);
+  if (blueprints.length > 0) return blueprints;
+  // Nothing drawable to infer from: open on a pane that can explain itself.
+  return [{ kind: nominalViewKind(subsystem), mode: defaultModeFor(active?.signature.codomain) }];
+}
+
+/** Give a plan its identities. The only place a view identifier is minted. */
+function withFreshIds(blueprints: readonly ViewBlueprint[]): ViewSpec[] {
+  return blueprints.map((blueprint) => ({
+    id: nextViewId(),
+    kind: blueprint.kind,
+    mode: blueprint.mode,
+  }));
+}
+
+/**
+ * Follow the expression, but only when doing so would change something.
+ *
+ * The comparison is on kinds and modes rather than on identity, so a rebuild that
+ * leaves the views where they are keeps the same ones — which is the difference
+ * between a shader that keeps its compiled program and one that is rebuilt on
+ * every keystroke.
+ */
+function reInferViews(
+  state: WorkspaceState,
+  workspace: Workspace,
+  focusedLineId: string | null,
+  drawableKinds: ReadonlySet<MathObjectKind>,
+): readonly ViewSpec[] {
+  const plan = planOpeningViews(workspace, focusedLineId, drawableKinds, state.subsystem);
+  const unchanged =
+    plan.length === state.views.length &&
+    plan.every((blueprint, index) => {
+      const existing = state.views[index];
+      return (
+        existing !== undefined &&
+        existing.kind === blueprint.kind &&
+        existing.mode === blueprint.mode
+      );
+    });
+  return unchanged ? state.views : withFreshIds(plan);
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

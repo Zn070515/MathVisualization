@@ -1,0 +1,39 @@
+# The merge gate.
+#
+# `pnpm verify` (root package.json) is the whole check: lint, typecheck, test and
+# build, in that order. It is the same command run locally, so a green run here
+# means the same thing it means on a developer's machine.
+#
+# Versions come from the repository rather than being repeated here: pnpm from
+# `packageManager`, Node from `engines.node`. Bumping either is then a one-line
+# change in package.json instead of a change in two places that can disagree.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Before setup-node, because `cache: pnpm` needs pnpm on PATH to locate
+      # the store it is going to cache.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm verify

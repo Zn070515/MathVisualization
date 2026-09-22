@@ -290,27 +290,102 @@ is verified in a browser, not assumed — see section 11.
 **Parameters become uniforms.** Dragging a slider updates a uniform and does not
 recompile the shader. Only an expression change produces a new program.
 
-### 7.2 The CPU path
+### 7.2 The CPU paths
 
-`MappedGridView` and `PlotView` run on the CPU, through the same evaluator. This
-is not a shortcut: a mapped grid needs a *polyline* — a curve followed through the
-map — and a fragment shader cannot do that. Having both paths also means the CPU
-evaluator is an independent check on the shader.
+`MappedGridView`, `CartesianView`, `ComplexPlaneView` and `Cartesian3DView` all
+evaluate on the CPU, through the same evaluator. For the first three this is not a
+shortcut: a mapped grid needs a *polyline* — a curve followed through the map — and
+a fragment shader cannot do that. Having both paths also means the CPU evaluator is
+an independent check on the shader.
 
 The **scalar range** for the magnitude, phase, real and imaginary modes is
 measured on the CPU by sampling the visible region through the evaluator. That is
 what keeps the colour a pixel gets and the number the readout prints coming from
 one piece of mathematics.
 
-### 7.3 The renderer
+The three two-dimensional views share their scaffolding, because a plane and a pair
+of axes are one object seen from two directions:
 
-`packages/app/src/render/fieldRenderer.ts` owns a WebGL2 context, a compiled
-program and the uniform plumbing, and nothing else. It receives a shader the core
-produced and values to bind; it does not know what the expression means.
+| module | what it owns |
+|---|---|
+| `views/window2d.ts` | the pixel ↔ plane conversion, and its inverse, and framing a range |
+| `render/axes2d.ts` | the grid, the axes, the tick marks and the numbers on them |
+| `render/canvasText.ts` | drawing a structured number on a canvas, exponent and all |
+| `render/canvasSurface.ts` | sizing a canvas from its CSS box, and the colours the canvases draw with |
+
+`axes2d.ts` draws an axis only when it is in view, keeps the numbers on the frame
+edge when it is not, and drops a label that would collide with the one before it —
+decided from *measured* text widths. That last rule is a pure function
+(`readableLabels`) so that it can be tested without a canvas, which jsdom does not
+have.
+
+### 7.3 The renderers
+
+Two WebGL2 renderers, deliberately siblings rather than one generalised class:
+
+| | `fieldRenderer.ts` | `surfaceRenderer.ts` |
+|---|---|---|
+| geometry | one full-screen quad | a sampled mesh, indexed |
+| where the maths happens | in the fragment shader, per pixel | on the CPU, once per mesh |
+| depth buffer | off | on |
+| program | the AST, lowered | fixed, and takes no part of the AST |
+| uniforms | floats and `vec2`s | matrices and vectors too |
+
+Neither receives a shader it has to understand; the field renderer receives one the
+core produced, and the surface renderer's is a constant. Sharing the
+compile-and-link step (`shaderProgram.ts`) is the whole of what they have in
+common, and merging them would mean a class with two vertex layouts and a flag that
+changes how it draws.
+
+The surface program is **not** a `GlslProgram`. That type means "the expression,
+compiled", and it has exactly one producer; a 3D surface evaluates the AST sixteen
+thousand times to build its geometry and then hands the GPU a fixed program that
+places vertices and colours them. What the two *do* share is the colouring:
+`scalarFieldColoringSource()` in the core is generated from `SCALAR_RAMP` and
+interpolated into both shaders, so a surface of `f(x, y)` and a heatmap of
+`f(x, y)` cannot come out different colours.
+
+**The camera is data.** `render/matrix.ts` and `render/camera3d.ts` are pure
+functions — orbit, dolly, pan, and the matrices they produce — with the four
+conventions that a scene can be silently wrong about stated once at the top of
+`matrix.ts`: right-handed, looking down `-z`, column-major, and a clip space of
+`[-1, 1]` on all three axes. Each is pinned by a value worked out by hand rather
+than by agreement with the implementation, because a sign error in any of them
+produces a picture that still looks like a picture.
+
+The 3D view draws on **two stacked canvases**: the surface and its scaffolding in
+WebGL, and the numbers — tick labels, axis names, the cursor — on a transparent 2D
+canvas above it. WebGL has no text and building one is a tar pit; keeping only the
+text floating also means the occlusion between the surface and the grid underneath
+it is still the depth buffer's business.
+
+### 7.4 The number display layer
+
+Every number a reader sees — the readout, a tick label, a legend range, a slider's
+value — comes from `mathcore/src/display.ts`, via `app/src/display/`. It exists
+because the policy had grown into four copies that disagreed about both where to
+switch to exponential form (`1000` versus `100`) and how many digits to keep.
+
+The core returns a **structured** number, not a string:
+
+```ts
+{ kind: 'scientific', mantissa: 2, exponent: 8 }
+```
+
+because the exponent of `2×10⁸` belongs in smaller type, and a string cannot say
+which characters those are. `NumberText` renders it in the document with a real
+`<sup>`; `canvasText.ts` renders it in a canvas by positioning the exponent by
+hand. One function produces the plain text (`2×10^8`) for tooltips, ARIA labels
+and tests.
+
+One consequence is worth knowing rather than discovering: a superscript is a
+*layout*, not a character, so the text content of the rendered element is
+`2×108`. The value is carried on the element's label as well, and a test asserts
+both halves so that the trade-off stays deliberate.
 
 ---
 
-## 7.4 The expression editor
+## 7.5 The expression editor
 
 `packages/app/src/expression/`
 
@@ -378,7 +453,7 @@ exposes, because this application supplies the keypad and the editor's menu is e
 Two icon buttons inside every row would be precisely the chrome this round set out to
 remove.
 
-## 7.5 The keypad
+## 7.6 The keypad
 
 `packages/app/src/expression/keypad/`
 
@@ -415,7 +490,7 @@ parameter update, linked cursor, linked selection, multi-view synchronization",
 and keeping this state in plain TypeScript outside React means those tests need no
 DOM and no rendering. `packages/app/test/workspaceStore.test.ts` is that test.
 
-Two design points worth naming:
+Four design points worth naming:
 
 - **`selectActiveExpression` is a pure function**, not a method reading mutable
   state. Views memoise against exactly `(workspace, focusedLineId, drawableKinds)`,
@@ -423,6 +498,16 @@ Two design points worth naming:
 - **View identities are assigned by the store** (`ViewBlueprint` → `ViewSpec`), so
   a view restored from storage, opened with a subsystem, or added from the toolbar
   cannot collide with another.
+- **The cursor is a point of the *domain*.** Not a value, and not a triple: the
+  shared state is the plane coordinate `(x, y)`, and every view derives what it
+  shows from that. That is why a 3D surface's readout has a `z` without `z` being
+  stored anywhere — it is `f(x, y)`, computed by the same evaluator the picture was
+  drawn from.
+- **The camera is a second piece of state, not a meaning given to the first.** The
+  two-dimensional views share one `viewport`, a plane rectangle. An orbit position
+  is not a plane rectangle, so pretending otherwise would be the kind of lie this
+  project avoids elsewhere; `camera3d` is its own field, moved through the same
+  store and therefore testable without a canvas.
 
 ---
 
@@ -443,8 +528,21 @@ Three structural rules keep them peers rather than three applications:
    the capability panel are built by iterating the same array, so the three
    cannot drift into a main feature and two secondary ones.
 
-The subsystems differ only in: which object kinds they draw, which views they open
-with, and which capabilities are implemented. Everything else is shared.
+The subsystems differ only in which object kinds they accept and which capabilities
+are implemented. Everything else is shared — **including which views they open
+with**, which is not the subsystem's decision at all. `state/viewKinds.ts` derives
+it from the expression's inferred signature, so `f(x, y) = x² − y²` opens on a
+surface wherever it is typed.
+
+4. **The view taxonomy is a statement about mathematics, not about renderers.**
+   `ViewKind` names the *space and the representation*: `complex-plane` is the
+   plane itself, and `domain-coloring` is one way of drawing a map on that plane.
+   Conflating the two — one kind called `field` doing every job — is the confusion
+   the taxonomy exists to undo, because it made the plane and a picture of a
+   function on the plane the same choice. A single table maps a signature to the
+   views that suit it, most natural first; a kind with no renderer is `planned`,
+   and a planned kind is never offered and never chosen as a default, because a
+   button that opens a blank frame is worse than no button.
 
 ---
 
@@ -466,6 +564,10 @@ behaviour. The most consequential:
 | Domain colouring | hue from `arg`, brightness from `log₂|w|` per octave |
 | Scalar ramp | the viridis palette, monotone in lightness |
 | Undefined values | reported as a mathematical issue, never as `NaN` reaching the UI |
+| Writing a number | plain decimals in `[1e-4, 1e6)`, `m×10^e` outside it, and one policy for every surface |
+| Axis ticks | 1-2-5 steps, each tick computed as `index × step`, a quarter subdivision for a step of `2×10ⁿ` |
+| Surface normals | outward, by central differences over the sampled grid; a singularity is a hole, not a bridge |
+| 3D camera | right-handed, looking down `-z`, column-major, clip space `[-1, 1]` on all three axes |
 | Editor interchange format | LaTeX, parsed by `latex.ts` into the same canonical AST the plain syntax produces |
 | Unfinished input | reported as `incomplete`, and shown as nothing rather than as an error |
 
@@ -477,9 +579,10 @@ There is one convention per row and one place it is written down.
 
 Four levels, all of them runnable:
 
-1. **`pnpm test`** — 339 tests. Parser, AST, type inference, complex arithmetic,
+1. **`pnpm test`** — 617 tests. Parser, AST, type inference, complex arithmetic,
    numerical evaluation, workspace behaviour, GLSL lowering, SymPy lowering,
-   colouring, and the mathematical reference identities. The identity suite
+   colouring, surface sampling, how a number is written, where the axis ticks go,
+   and the mathematical reference identities. The identity suite
    (`identities.test.ts`) evaluates source text and compares against mathematics:
    `d/dz exp(z) = exp(z)` by central differences, `∮ 1/z dz = 2πi` around the unit
    circle by the trapezoidal rule, Cauchy's theorem for entire functions,
@@ -487,7 +590,17 @@ Four levels, all of them runnable:
 2. **`pnpm lint`, `pnpm typecheck`, `pnpm build`** — clean.
 3. **The symbolic engine** — `services/symbolic/server.py`, exercised against a
    running instance: `d/dz exp(z) = exp(z)` comes back exact.
-4. **The editor and the keypad** — driven in a real browser, because a TeX engine
+4. **The number display layer** — the policy is asserted against the three
+   formatters it replaced, kept verbatim in `numbers.test.ts` as the reference, so
+   that every change to what is on screen is stated in one place rather than
+   discovered in a legend. The rule that decides which axis labels fit is a pure
+   function tested without a canvas — which is the only way it can be tested at all,
+   because jsdom has no 2D context.
+5. **Persistence** — tested as a table: every historical shape of stored record,
+   including one that is partly unreadable, the old view vocabulary translated rather
+   than discarded, and the wiring that decides whether a layout which did not come
+   back should be replaced by an inferred one.
+6. **The editor and the keypad** — driven in a real browser, because a TeX engine
    cannot be exercised in jsdom. Verified there: `f(z)=sin(z)/(z^2+1)` typesets as a
    two-dimensional quotient; the fraction key builds `rac{\placeholder{}}{\placeholder{}}`
    with the caret in the numerator; `ArrowDown` inside a fraction moves to the
@@ -496,7 +609,7 @@ Four levels, all of them runnable:
    caret follows it, so typing lands in the new formula; the three subsystem URLs share
    one input system with per-subsystem function keys; and the editor's own menu and
    virtual-keyboard buttons are absent.
-5. **The GPU against the CPU** — verified in a real browser by reading pixels out
+7. **The GPU against the CPU** — verified in a real browser by reading pixels out
    of the framebuffer and checking them against the convention. For `f(z) = z²`:
 
    | Point | Expected | Measured |
@@ -508,6 +621,29 @@ Four levels, all of them runnable:
 
    The subtle predictions — which of `g` and `b` is larger — are the ones that
    make this a real check rather than a smoke test.
+
+   For the 3D surface, three checks that no CPU test can make:
+
+   - **The depth buffer is doing work.** With the camera deliberately left
+     unchanged, disabling `DEPTH_TEST` and forcing a single redraw changes the
+     framebuffer — a hash over the pixels goes from `1235388183` to `1830031926`.
+     A scene that merely *had* a depth buffer, and did not depend on it, would
+     produce the same image either way.
+   - **Picking is exact.** Hovering a pixel reports the domain point
+     `-1.9875 - 0.075i`, and the readout's value is `3.94453`, which is `x² − y²` at
+     that point to every digit shown. The surface therefore participates in the
+     shared cursor, and the cursor is still a domain point: `z` is computed, not
+     stored.
+   - **The context is configured as intended** — `DEPTH_TEST` on, `depthFunc`
+     `LEQUAL`, `CULL_FACE` off so that looking at a surface from underneath shows it
+     rather than hiding it, and `getError()` zero after a frame.
+
+   Two bugs were found by these checks and by nothing else in the suite, which is
+   the argument for making a browser check a gate rather than a follow-up: the
+   vertical axis came out with a single number on it, because the label-thinning
+   pass assumed positions ascend in iteration order — true for a horizontal axis,
+   and backwards for a vertical one; and the projection's width-over-height ratio
+   was passed inverted, which a square test canvas cannot distinguish.
 
 ---
 
@@ -523,26 +659,31 @@ MathVisualization/
 │   ├── mathcore/               the shared mathematical core. No runtime deps.
 │   │   ├── src/
 │   │   │   errors.ts  rational.ts  complex.ts  conventions.ts  builtins.ts
-│   │   │   ast.ts  lexer.ts  parser.ts  types.ts  infer.ts
-│   │   │   evaluator.ts  format.ts  workspace.ts
-│   │   │   coloring.ts  glsl.ts  sympy.ts  cas.ts  index.ts
-│   │   └── test/               280 tests
+│   │   │   ast.ts  lexer.ts  parser.ts  latex.ts  types.ts  infer.ts
+│   │   │   evaluator.ts  format.ts  display.ts  ticks.ts  workspace.ts
+│   │   │   coloring.ts  surface.ts  glsl.ts  surfaceGlsl.ts  sympy.ts  cas.ts
+│   │   └── test/               409 tests
 │   └── app/                    the interface. React, Vite.
 │       ├── src/
 │       │   ├── subsystems.ts   the three subsystems, one description
 │       │   ├── shell/          AppShell
 │       │   ├── routes/         HomePage, SubsystemPage
-│       │   ├── state/          store, workspaceStore, persistence, viewKinds
+│       │   ├── state/          store, workspaceStore, persistence, viewKinds,
+│       │   │                   StoreProvider
 │       │   ├── expression/     MathExpressionField, ExpressionRow, ExpressionPanel
-│       │   │                   MathKeypad, mathInputAdapter,
+│       │   │                   MathKeypad, ParameterSlider, mathInputAdapter,
 │       │   │                   keypad/{types,common,complex,transforms,calculus}
-│       │   ├── views/          FieldView, MappedGridView, PlotView, ViewCanvas
-│       │   ├── render/         fieldRenderer (WebGL2)
+│       │   ├── display/        NumberText, numbers,   the number display layer
+│       │   ├── views/          ViewCanvas, CartesianView, Cartesian3DView,
+│       │   │                   ComplexPlaneView, FieldView, MappedGridView,
+│       │   │                   evaluation, window2d, cameraKeys, useResizeVersion
+│       │   ├── render/         matrix, camera3d, shaderProgram, fieldRenderer,
+│       │   │                   surfaceRenderer, axes2d, canvasText, canvasSurface
 │       │   ├── readout/        ReadoutBar
 │       │   ├── symbolic/       the HTTP adapter and its panel
 │       │   ├── analysis/       CapabilityList
 │       │   └── styles/         tokens.css, app.css
-│       └── test/               59 tests
+│       └── test/               208 tests
 └── services/
     └── symbolic/               SymPy behind an adapter, stdlib only
 ```
@@ -559,11 +700,12 @@ what exists now:
 
 | Next feature | Where it goes |
 |---|---|
-| Zeros, poles and their orders | A new module in `mathcore` (numerical detection through the evaluator), a new view in `app`. The type system and AST do not change. |
-| Contour integrals and residues | A `ComplexPath` already has a signature (`R → C`). Add path sampling to `mathcore` and a view that draws the accumulated integral. The evaluator is reused unchanged. |
-| Cauchy–Riemann residuals | Already expressible: `re`/`im` of a complex function are scalar fields of `x` and `y`. A scalar-field view of `u_x - v_y` needs no new mathematics, only a way to express the partial derivative. |
-| Fourier and Laplace | New `mathcore` modules with their conventions added to `conventions.ts`, plus a transform-domain view. The `s-plane` view is the existing field view with `s` bound as the complex variable. |
-| Contours, gradients, divergence | The existing field view already draws `R² → R`. Gradients and vector fields need a vector-valued rendering path, which is the one place the current shader design needs extending. |
+| Zeros, poles and their orders | A new module in `mathcore` (numerical detection through the evaluator), drawn on the existing `complex-plane` view. The type system and AST do not change. |
+| Contour integrals and residues | A `ComplexPath` already has a signature (`R → C`) and `complex-plane` already draws one. Add path sampling and the accumulated integral to `mathcore`. The evaluator is reused unchanged. |
+| Cauchy–Riemann residuals | Already expressible: `re`/`im` of a complex function are scalar fields of `x` and `y`. A view of `u_x - v_y` needs no new mathematics, only a way to express the partial derivative. |
+| Fourier and Laplace | New `mathcore` modules with their conventions added to `conventions.ts`, plus a transform-domain view. The `s-plane` is `complex-plane` with `s` bound as the complex variable, which is what the view already does. |
+| Gradients and divergence | `surface.ts` already samples a scalar field into a mesh, so a gradient can be shown as arrows over the existing surface or heatmap. Vector fields are the one case the current rendering design does not cover: a `vec2` per point is not a scalar, so `scalarRamp` does not apply to it. |
+| Contours and level sets | A two-dimensional representation of `R² → R`, alongside the surface and the heatmap, using the same `axisTicks` ladder the grid already uses. |
 
 The recurring pattern: a new mathematical concept becomes a new module in
 `mathcore` that consumes the existing AST, and a view in `app` that consumes the
