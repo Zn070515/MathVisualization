@@ -17,6 +17,7 @@ import {
   PARAMETER_INPUT_DIGITS,
   parameterInputText,
   parseNumberText,
+  roundForScale,
   viewNumber,
 } from '../src/display/numbers';
 
@@ -92,6 +93,51 @@ describe('what the three views disagreed about', () => {
   it('forced trailing zeros onto whole numbers', () => {
     expect(legacyFieldOrPlot(2)).toBe('2.00');
     expect(written(2)).toBe('2');
+  });
+});
+
+describe('a located point, as a label writes it', () => {
+  // Spans taken from the two pictures this is used on: the cartesian graph of
+  // `exp(-t²)` on a wide canvas, where the axes carry different spans.
+  const SPAN_X = 4.8;
+  const SPAN_Y = 1.95;
+
+  it('writes a found extremum as the number it is', () => {
+    // The refinement lands a hair under one. Rounding the height by the *horizontal*
+    // span — one span for both coordinates — turns this into 0.9984, which is not
+    // this function's maximum and is visibly not one.
+    const located = 0.9999999999999999;
+    expect(roundForScale(located, SPAN_Y)).toBe(1);
+    expect(written(roundForScale(located, SPAN_Y))).toBe('1');
+  });
+
+  it('writes a found zero as zero', () => {
+    expect(roundForScale(-1.06e-16, SPAN_X)).toBe(0);
+  });
+
+  it('leaves a round number round', () => {
+    // A grid of multiples of `span/1000` is anchored at the origin and does not have
+    // `2` on it, so a crossing found at exactly 2 would come out as `2.002`.
+    const onAGrid = Math.round(2.0000001 / (SPAN_X / 1000)) * (SPAN_X / 1000);
+    expect(onAGrid).toBeCloseTo(2.0016, 10);
+    expect(roundForScale(2.0000001, SPAN_X)).toBe(2);
+  });
+
+  it('keeps more of the number as the picture zooms in', () => {
+    // Rounding to the visible scale rather than to a fixed number of places is the
+    // whole point: zooming in is asking for the digits.
+    expect(roundForScale(0.1234567, SPAN_X)).toBe(0.123);
+    expect(roundForScale(0.1234567, 0.001)).toBe(0.123457);
+  });
+
+  it('rounds to whole numbers when the span is large', () => {
+    expect(roundForScale(1234567.8, 1e6)).toBe(1234568);
+    expect(roundForScale(500.4, 1e7)).toBe(500);
+  });
+
+  it('passes a value it cannot round straight through', () => {
+    expect(roundForScale(Infinity, SPAN_X)).toBe(Infinity);
+    expect(Number.isNaN(roundForScale(NaN, SPAN_X))).toBe(true);
   });
 });
 

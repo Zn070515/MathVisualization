@@ -31,7 +31,7 @@ import {
 import { drawGridAndAxes } from '../render/axes2d';
 import { CANVAS_COLORS, prepareCanvas2d } from '../render/canvasSurface';
 import { TICK_FONT } from '../render/canvasText';
-import { viewNumber } from '../display/numbers';
+import { roundForScale, viewNumber } from '../display/numbers';
 import { useStore } from '../state/store';
 import { selectActiveExpression, type ViewRendererProps } from '../state/workspaceStore';
 import { handleCameraKey } from './cameraKeys';
@@ -54,30 +54,31 @@ const SNAP_RADIUS = 14;
 const MARK_RADIUS = 4;
 
 /**
- * A zero of order `k` is written out; order one is left unsaid.
+ * A marked point, written as its coordinate and nothing else.
  *
- * The coordinate is rounded to about a thousandth of what is on screen before it is
- * written. The search *located* this point rather than solving for it, so the digit
- * that matters is the one a reader could point at: `z²` has its zero at the origin,
- * and the refinement puts it at `-1.06×10⁻¹⁶`, which is not a coordinate anyone
- * wants to read and is not more true than `0`.
+ * Whether it is a zero or a pole is not in the text. It is in the shape of the mark —
+ * filled for a zero, open for a pole — which is where a reader looks for it anyway,
+ * and which leaves the label to say the one thing the picture cannot: which numbers
+ * these are.
  *
- * Rounding to the visible scale rather than to a fixed number of places also means
- * that zooming in keeps showing the detail that zooming in was for.
+ * The order is the one exception, because no other part of the picture carries it: a
+ * zero of order two is written `(0, 0) ×2`. It is three characters against the
+ * `zero of order 2 at` it replaces, and it is how a multiplicity is written in the
+ * mathematics, so it costs a reader nothing to read.
+ *
+ * The coordinate is rounded to the place the picture can support before it is written,
+ * because the search *located* this point rather than solving for it: `z²` has its
+ * zero at the origin, and the refinement puts it at `-1.06×10⁻¹⁶`, which is not a
+ * coordinate anyone wants to read and is not more true than `0`.
  */
-function describe(point: Singularity, span: number): string {
-  const step = Math.max(span, 1e-12) / 1000;
+function describe(point: Singularity, spanX: number, spanY: number): string {
   const where = displayComplexToText(
     displayComplex(
-      {
-        re: Math.round(point.z.re / step) * step,
-        im: Math.round(point.z.im / step) * step,
-      },
+      { re: roundForScale(point.z.re, spanX), im: roundForScale(point.z.im, spanY) },
       { digits: 4 },
     ),
   );
-  if (point.order === 1) return `${point.kind} at ${where}`;
-  return `${point.kind} of order ${point.order} at ${where}`;
+  return point.order === 1 ? where : `${where} ×${point.order}`;
 }
 
 export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Element {
@@ -141,6 +142,8 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
 
   const zeros = singularities.filter((point) => point.kind === 'zero').length;
   const poles = singularities.length - zeros;
+  /** Whether any mark carries an order a reader would have to be told about. */
+  const repeated = singularities.some((point) => point.order > 1);
 
   /**
    * Let go of a taken point when the set of them changes.
@@ -215,7 +218,7 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
     if (snapped !== null) {
       const at = toScreen(window, { x: snapped.z.re, y: snapped.z.im }, width, height);
       if (Number.isFinite(at.x)) {
-        const text = describe(snapped, window.xMax - window.xMin);
+        const text = describe(snapped, window.xMax - window.xMin, window.yMax - window.yMin);
         context.font = `${TICK_FONT.size}px ${TICK_FONT.family}`;
         const textWidth = context.measureText(text).width;
         // Beside the point, and inside the frame: flipped to the other side when
@@ -294,19 +297,28 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
   };
 
   /**
-   * The marked point under the pointer, if there is one.
+   * The cursor a marked point under the pointer would set, if there is one.
    *
-   * Taking the point exactly is what makes the mark readable rather than merely
-   * visible: the readout prints the coordinate and the order the argument principle
-   * found, not the nearest pixel's.
+   * Taking the point is what makes the mark readable rather than merely visible: the
+   * readout prints the coordinate the argument principle found, not the nearest pixel's.
+   *
+   * The coordinate comes back stated to the place the picture can support, and it is
+   * stated *here* rather than at each place that writes it down, because there are two
+   * of those — the label beside the mark and the shared cursor the readout follows — and
+   * two statements of the same point that round differently are two different answers.
    */
-  const markedNear = (event: { clientX: number; clientY: number }): Singularity | null => {
+  const snappedCursor = (event: {
+    clientX: number;
+    clientY: number;
+  }): { z: Complex; point: Singularity } | null => {
     const canvas = canvasRef.current;
     if (canvas === null || singularities.length === 0) return null;
     const bounds = canvas.getBoundingClientRect();
     if (bounds.width === 0 || bounds.height === 0) return null;
 
     const window = planeWindow(state.viewport, bounds.width, bounds.height);
+    const spanX = window.xMax - window.xMin;
+    const spanY = window.yMax - window.yMin;
     const pointerX = event.clientX - bounds.left;
     const pointerY = event.clientY - bounds.top;
 
@@ -322,7 +334,12 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
         best = point;
       }
     }
-    return best;
+    return best === null
+      ? null
+      : {
+          z: cx(roundForScale(best.z.re, spanX), roundForScale(best.z.im, spanY)),
+          point: best,
+        };
   };
 
   return (
@@ -340,13 +357,18 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId);
           dragStart.current = { x: event.clientX, y: event.clientY };
-          store.setSelection(planeAt(event));
+          // Holding takes the same point a hover would have: a marked point if one is
+          // under the pointer, and otherwise the point of the plane it is at.
+          const taken = snappedCursor(event);
+          store.setSelection(taken === null ? planeAt(event) : taken.z);
         }}
         onPointerMove={(event) => {
-          // Snapping comes first: on a marked point the cursor takes *that* point.
-          const near = markedNear(event);
-          setSnapped(near);
-          store.setHover(near === null ? planeAt(event) : near.z);
+          // Snapping comes first: on a marked point the cursor takes *that* point, so
+          // the readout prints the coordinate the argument principle found rather than
+          // the nearest pixel's.
+          const taken = snappedCursor(event);
+          setSnapped(taken === null ? null : taken.point);
+          store.setHover(taken === null ? planeAt(event) : taken.z);
 
           const start = dragStart.current;
           if (start === null) return;
@@ -386,6 +408,7 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
             ● {zeros} zero{zeros === 1 ? '' : 's'} · ○ {poles} pole{poles === 1 ? '' : 's'}
           </span>
         )}
+        {repeated && <span className="legend__range">×n marks a point of order n</span>}
       </div>
     </div>
   );

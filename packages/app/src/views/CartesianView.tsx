@@ -24,7 +24,7 @@ import { drawGridAndAxes } from '../render/axes2d';
 import { CANVAS_COLORS, prepareCanvas2d } from '../render/canvasSurface';
 import { TICK_FONT } from '../render/canvasText';
 import { NumberText } from '../display/NumberText';
-import { viewNumber } from '../display/numbers';
+import { roundForScale, viewNumber } from '../display/numbers';
 import { useStore } from '../state/store';
 import { selectActiveExpression, type ViewRendererProps } from '../state/workspaceStore';
 import { handleCameraKey } from './cameraKeys';
@@ -38,29 +38,53 @@ const SAMPLES = 900;
 /** How near a marked point the pointer has to be for the cursor to take it. */
 const SNAP_RADIUS = 14;
 
+/** How near the curve the pointer has to be for the curve to be marked at all. */
+const NEAR_CURVE = 26;
+
+/** The radius a marked point is drawn at, before the pixel ratio scales it. */
+const MARK_RADIUS = 3.5;
+
 /** The height a marked point sits at: an axis crossing is on the axis. */
 function heightOf(point: PointOfInterest): number {
   return point.kind === 'crossing' ? 0 : point.value;
 }
 
 /**
- * How a marked point is written.
+ * A point on the graph, written as its coordinate and nothing else.
  *
- * A crossing is a coordinate and nothing else; a turn says which kind it is. That
- * is the whole distinction the analysis makes, made visible: a minimum that sits
- * on the axis reads `min (0, 0)`, and never `(0, 0)`, so it is not passed off as a
- * crossing.
+ * The *kind* is deliberately not in the text. It is in the shape of the mark —
+ * filled for a crossing, open for a turn — which is where a reader looks for it
+ * anyway, and which leaves the label to say the one thing the picture cannot: which
+ * numbers these are. `min (0, 0)` and `(0, 0)` name the same coordinate, and the
+ * coordinate is what is wanted.
+ *
+ * Each coordinate is rounded to the place its *own* axis can support. One span for
+ * both would be wrong in a way a reader can see: the vertical span of `exp(-t²)` on a
+ * wide canvas is under two units against a horizontal span of nearly five, so
+ * rounding the height to a thousandth of the *width* turns the maximum at 1 into
+ * `0.9984`, which is not this function's maximum.
  */
-function labelOf(point: PointOfInterest): string {
-  const t = displayNumberToText(viewNumber(point.t));
-  if (point.kind === 'crossing') return `(${t}, 0)`;
-  const value = displayNumberToText(viewNumber(point.value));
-  return `${point.kind === 'maximum' ? 'max' : 'min'} (${t}, ${value})`;
+function formatPoint(t: number, value: number, spanX: number, spanY: number): string {
+  return `(${displayNumberToText(viewNumber(roundForScale(t, spanX)))}, ${displayNumberToText(
+    viewNumber(roundForScale(value, spanY)),
+  )})`;
 }
 
 interface Range {
   readonly min: number;
   readonly max: number;
+}
+
+/**
+ * A point on the curve the picture marks, and the analysed point it has taken if any.
+ *
+ * `point` is set when the mark has taken one of the analysed points and null when it is
+ * simply a place on the curve, which is what decides how the mark is ringed.
+ */
+interface OnCurve {
+  readonly t: number;
+  readonly value: number;
+  readonly point: PointOfInterest | null;
 }
 
 export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
@@ -107,8 +131,9 @@ export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
   )}`;
 
   const [measured, setMeasured] = useState<Range | null>(null);
-  /** The marked point the cursor has taken, if any. Labelled; the rest are dots. */
-  const [snapped, setSnapped] = useState<PointOfInterest | null>(null);
+
+  /** Where the pointer is on the curve, or null when it is nowhere near one. */
+  const [onCurve, setOnCurve] = useState<OnCurve | null>(null);
 
   /**
    * Where the curve crosses the axis, and where it turns round.
@@ -124,6 +149,22 @@ export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
       tMax: visible.max,
     });
   }, [drawable, evaluation, isComplexValued, visible]);
+
+  /**
+   * Let go of the mark when the picture becomes a picture of something else.
+   *
+   * A mark taken a moment ago belonged to the *previous* function: editing the
+   * expression, focusing another line, or moving a parameter changes what is being
+   * drawn, and the mark would go on labelling a curve that is no longer there.
+   *
+   * Keyed on the evaluation and not on the marked points, because those are recomputed
+   * when the window moves as well — and panning does not change what the function is,
+   * only where it is being looked at. Keying on them would drop the mark on every frame
+   * of a drag.
+   */
+  useEffect(() => {
+    setOnCurve(null);
+  }, [evaluation]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -207,61 +248,87 @@ export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
     strokeCurve((value) => value.re, CANVAS_COLORS.curve);
     if (isComplexValued) strokeCurve((value) => value.im, CANVAS_COLORS.curveSecondary);
 
-    // The points worth naming: marked always, labelled only for the one the cursor
+    // The points worth naming: marked always, labelled only for the one the pointer
     // has taken. That is how a reader finds them without the picture disappearing
     // under numbers.
+    //
+    // A crossing is filled and a turn is open, because the two say opposite things —
+    // the curve reaching zero, and the curve turning round — and the shape of the mark
+    // is where a reader looks for that. It leaves the label to say the one thing the
+    // picture cannot, namely which numbers these are.
     for (const point of criticalPoints) {
       const at = toScreen(window, { x: point.t, y: heightOf(point) }, width, height);
       if (!Number.isFinite(at.x) || at.x < 0 || at.x > width) continue;
       context.beginPath();
-      context.arc(at.x, at.y, Math.max(2.5, ratio * 3), 0, Math.PI * 2);
-      // Filled with the paper and ringed with ink, so it reads as a mark *on* the
-      // curve rather than as part of it.
-      context.fillStyle = CANVAS_COLORS.paper;
-      context.fill();
-      context.strokeStyle = CANVAS_COLORS.curve;
+      context.arc(at.x, at.y, Math.max(2.5, ratio * MARK_RADIUS), 0, Math.PI * 2);
       context.lineWidth = Math.max(1.2, ratio * 1.4);
-      context.stroke();
+      if (point.kind === 'crossing') {
+        context.fillStyle = CANVAS_COLORS.curve;
+        context.fill();
+      } else {
+        // Filled with the paper and ringed with ink, so an open mark reads as a mark
+        // *on* the curve rather than as a gap in it.
+        context.fillStyle = CANVAS_COLORS.paper;
+        context.fill();
+        context.strokeStyle = CANVAS_COLORS.curve;
+        context.stroke();
+      }
     }
 
-    if (snapped !== null) {
-      const at = toScreen(window, { x: snapped.t, y: heightOf(snapped) }, width, height);
-      if (Number.isFinite(at.x)) {
-        const text = labelOf(snapped);
+    // The point to mark: where the pointer is on the curve, or — the pointer having
+    // left the canvas altogether — the point that was held. A click marks a point, and
+    // the readout goes on saying it is held; the picture has to say so too, or the value
+    // in the readout belongs to nothing a reader can see.
+    //
+    // The condition on the hover is the point: the readout reads `hover ?? selection`,
+    // so a mark picked on any other rule would sooner or later point at a different
+    // place from the one the readout is describing. Held points sit on the real part,
+    // which is the curve drawn in the primary ink.
+    const held = state.hover === null ? state.selection : null;
+    let mark = onCurve;
+    if (mark === null && held !== null && evaluation !== null) {
+      const value = evaluation.valueAt(cx(held.re, 0));
+      if (value !== null && Number.isFinite(value.re)) {
+        mark = { t: held.re, value: value.re, point: null };
+      }
+    }
+
+    // Only when there is a curve there to mark: a mark that followed the pointer
+    // across empty space would assert a value at a place there is no curve.
+    //
+    // Ringed in the ink of the curve when it has taken a marked point, and in the
+    // secondary ink when it is simply where the pointer meets the curve, so which one
+    // it is can be seen without reading the label.
+    if (mark !== null) {
+      const at = toScreen(window, { x: mark.t, y: mark.value }, width, height);
+      if (Number.isFinite(at.x) && Number.isFinite(at.y) && at.x >= 0 && at.x <= width) {
+        context.beginPath();
+        context.arc(at.x, at.y, Math.max(2.5, ratio * MARK_RADIUS), 0, Math.PI * 2);
+        context.fillStyle = CANVAS_COLORS.paper;
+        context.fill();
+        context.strokeStyle =
+          mark.point === null ? CANVAS_COLORS.curveSecondary : CANVAS_COLORS.curve;
+        context.lineWidth = Math.max(1.4, ratio * 1.6);
+        context.stroke();
+
+        const text = formatPoint(
+          mark.t,
+          mark.value,
+          window.xMax - window.xMin,
+          window.yMax - window.yMin,
+        );
         context.font = `${TICK_FONT.size}px ${TICK_FONT.family}`;
         const textWidth = context.measureText(text).width;
         // Beside the point, and inside the frame — flipped to the other side rather
-        // than clipped when there is no room on the right.
-        const left = at.x + 10 + textWidth > width ? at.x - 10 - textWidth : at.x + 10;
+        // than clipped when there is no room on the right, and then clamped, because
+        // a label wider than the frame has no good side and sliding off the edge is
+        // worse than being pinned to it.
+        const preferred = at.x + 10 + textWidth > width - 4 ? at.x - 10 - textWidth : at.x + 10;
+        const left = Math.max(4, Math.min(preferred, width - textWidth - 4));
         context.fillStyle = CANVAS_COLORS.curve;
         context.textAlign = 'left';
         context.textBaseline = 'bottom';
         context.fillText(text, left, Math.max(TICK_FONT.size + 2, at.y - 8));
-      }
-    }
-
-    // The shared cursor: a rule at the chosen value of the variable, and a mark
-    // where the curve is there, so the readout has something on the picture to
-    // point at.
-    const cursor = state.hover ?? state.selection;
-    if (cursor !== null) {
-      const x = toScreen(window, { x: cursor.re, y: 0 }, width, height).x;
-      if (Number.isFinite(x) && x >= 0 && x <= width) {
-        context.strokeStyle = CANVAS_COLORS.cursor;
-        context.lineWidth = Math.max(1, ratio);
-        context.beginPath();
-        context.moveTo(x, 0);
-        context.lineTo(x, height);
-        context.stroke();
-
-        const onCurve = evaluation.valueAt(cx(cursor.re, 0));
-        if (onCurve !== null && Number.isFinite(onCurve.re)) {
-          const mark = toScreen(window, { x: cursor.re, y: onCurve.re }, width, height);
-          context.beginPath();
-          context.arc(mark.x, mark.y, Math.max(2, ratio * 2.5), 0, Math.PI * 2);
-          context.fillStyle = CANVAS_COLORS.curveSecondary;
-          context.fill();
-        }
       }
     }
   }, [
@@ -269,7 +336,7 @@ export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
     drawable,
     evaluation,
     isComplexValued,
-    snapped,
+    onCurve,
     state.hover,
     state.selection,
     state.viewport,
@@ -321,13 +388,23 @@ export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
   };
 
   /**
-   * The marked point under the pointer, if there is one.
+   * The value of the variable at which the cursor takes a marked point, if it does.
    *
-   * Snapping is what makes the marked points readable rather than merely visible:
-   * the cursor takes the exact value the analysis found, so the readout prints
-   * that value and not the nearest pixel's.
+   * Snapping is what makes the marked points readable rather than merely visible: the
+   * cursor takes the value the analysis found, so the readout prints that value and not
+   * the nearest pixel's.
+   *
+   * The value comes back stated to the place the picture can support, and it is stated
+   * *here* and not at each place that writes it down, because there are two of those —
+   * the label beside the mark and the shared cursor the readout follows — and two
+   * statements of the same point that round differently are two different answers. The
+   * search *located* this point rather than solving for it, so the last digits of the
+   * refinement are the method's artefact and belong in neither.
    */
-  const criticalNear = (event: { clientX: number; clientY: number }): PointOfInterest | null => {
+  const snappedCursor = (event: {
+    clientX: number;
+    clientY: number;
+  }): { t: number; point: PointOfInterest } | null => {
     const canvas = canvasRef.current;
     if (canvas === null || criticalPoints.length === 0) return null;
     const bounds = canvas.getBoundingClientRect();
@@ -349,6 +426,49 @@ export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
         best = point;
       }
     }
+    return best === null
+      ? null
+      : { t: roundForScale(best.t, window.xMax - window.xMin), point: best };
+  };
+
+  /**
+   * The point on the curve nearest the pointer, when the pointer is near the curve.
+   *
+   * The variable comes from the pointer's x, exactly as the shared cursor's does; the
+   * value is then read off the function there, so the mark sits *on* the curve rather
+   * than under the pointer. For a signal drawn as its real and imaginary parts,
+   * whichever of the two curves passes nearer the pointer is the one marked, because
+   * that is the one being pointed at.
+   *
+   * Null when no curve passes within `NEAR_CURVE` pixels of the pointer: there is no
+   * value at a place where there is no curve.
+   */
+  const curveUnder = (event: { clientX: number; clientY: number }): OnCurve | null => {
+    const canvas = canvasRef.current;
+    const variable = variableAt(event);
+    if (canvas === null || evaluation === null || variable === null) return null;
+    const bounds = canvas.getBoundingClientRect();
+    if (bounds.width === 0 || bounds.height === 0) return null;
+
+    const value = evaluation.valueAt(variable);
+    if (value === null) return null;
+
+    const window = planeWindow(state.viewport, bounds.width, bounds.height);
+    const pointerY = event.clientY - bounds.top;
+    const t = variable.re;
+
+    let best: OnCurve | null = null;
+    let bestDistance = NEAR_CURVE;
+    for (const component of isComplexValued ? [value.re, value.im] : [value.re]) {
+      if (!Number.isFinite(component)) continue;
+      const at = toScreen(window, { x: t, y: component }, bounds.width, bounds.height);
+      if (!Number.isFinite(at.y)) continue;
+      const distance = Math.abs(at.y - pointerY);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = { t, value: component, point: null };
+      }
+    }
     return best;
   };
 
@@ -365,19 +485,24 @@ export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId);
           dragStart.current = { x: event.clientX, y: event.clientY };
-          store.setSelection(variableAt(event));
+          // Holding takes the same point a hover would have: a marked point if one is
+          // under the pointer, and otherwise the variable it is at.
+          const taken = snappedCursor(event);
+          store.setSelection(taken === null ? variableAt(event) : cx(taken.t, 0));
         }}
         onPointerMove={(event) => {
-          // Snapping comes first: on a marked point the cursor takes *that* point,
-          // so the readout prints the value the analysis found rather than the
-          // coordinate under the pixel.
-          const near = criticalNear(event);
-          setSnapped(near);
-          if (near !== null) {
-            store.setHover(cx(near.t, 0));
-          } else {
+          // Snapping comes first: on a marked point the mark takes *that* point, so
+          // the readout prints the value the analysis found rather than the
+          // coordinate under the pixel. Failing that the mark goes on whichever curve
+          // passes nearest the pointer, and vanishes when none does.
+          const taken = snappedCursor(event);
+          if (taken === null) {
+            setOnCurve(curveUnder(event));
             const point = variableAt(event);
             if (point !== null) store.setHover(point);
+          } else {
+            setOnCurve({ t: taken.t, value: heightOf(taken.point), point: taken.point });
+            store.setHover(cx(taken.t, 0));
           }
 
           const start = dragStart.current;
@@ -398,7 +523,7 @@ export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
         }}
         onPointerLeave={() => {
           dragStart.current = null;
-          setSnapped(null);
+          setOnCurve(null);
           store.clearCursor();
         }}
         onWheel={(event) => {

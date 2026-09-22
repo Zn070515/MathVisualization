@@ -46,6 +46,42 @@ export function parameterInputText(value: number): string {
 }
 
 /**
+ * A located value rounded to the place the picture can support.
+ *
+ * A point the analysis *found* is not a point it *solved for*. The refinement that
+ * locates the zero of `z²` puts it at `-1.06×10⁻¹⁶`, and the maximum of `exp(-t²)`
+ * lands a hair under one; both are artefacts of the search, not facts about the
+ * function, and writing them out claims a precision the method does not have.
+ *
+ * The place is read off the span, so zooming in keeps showing the digits that
+ * zooming in was for. It is a number of decimal *places* and not a grid of multiples
+ * of `span/1000`, because a grid anchored at the origin has none of the round numbers
+ * on it: a crossing the analysis found at exactly `2` would come out of a grid as
+ * `2.002`.
+ */
+export function roundForScale(value: number, span: number): number {
+  if (!Number.isFinite(value)) return value;
+  const places = Math.min(
+    MAX_DECIMAL_PLACES,
+    Math.max(0, Math.ceil(Math.log10(SPAN_SUBDIVISIONS / Math.max(span, 1e-12)))),
+  );
+  const rounded = Number(value.toFixed(places));
+  // Rounding a negative number to zero leaves the sign behind, and a coordinate of
+  // `-0` is the coordinate `0`: the sign is an artefact of the arithmetic.
+  return rounded === 0 ? 0 : rounded;
+}
+
+/**
+ * How finely a located value is stated: to about a thousandth of the span it is drawn
+ * on. A thousandth of a picture is below what a reader can point at, so the digits kept
+ * are the ones the picture can actually tell apart, and no more.
+ */
+const SPAN_SUBDIVISIONS = 1000;
+
+/** Beyond this the places are past what a double carries, and `toFixed` stops being useful. */
+const MAX_DECIMAL_PLACES = 15;
+
+/**
  * Read a number back the way it may have been written.
  *
  * The other half of `parameterInputText`, and the half that was missing for a

@@ -325,9 +325,10 @@ cursor take them. It is worth stating what it does *not* claim, because the tool
 is modelled on gets this wrong and says so: intercepts and extrema are
 *approximations*, and a minimum at height 0.0001 looks exactly like a root until
 you zoom in. So a crossing and a touch are different variants of the result type,
-and the difference is visible on screen — a crossing is labelled with a coordinate,
-a turn is labelled `min` or `max` with its value. `(t − 2)² + 0.0001` therefore
-reports a minimum at 0.0001 and never a root.
+and the difference is on screen in the *shape of the mark* — a filled disc for a
+crossing, an open ring for a turn — which leaves the label to say the one thing the
+picture cannot, namely which numbers the point stands at. `(t − 2)² + 0.0001`
+therefore reports a minimum at 0.0001 and never a root.
 
 **It is deliberately not root analysis.** `t²` has a double zero at the origin, and
 this reports the *turn* rather than a crossing, because a crossing is a claim about a
@@ -335,9 +336,10 @@ sign change and there is none. The module is named after what it marks — point
 interest *on the picture* — rather than after what a caller might hope it computes,
 which is the difference between a name that guides and a name that invites the wrong
 use. Where the zeros of a function are, and with what multiplicity, is a different
-question needing different mathematics: exact factoring where the symbolic engine can
-manage it, and an order estimate from the derivatives where it cannot. That module
-does not exist yet, and until it does, nothing should call this one as if it were.
+question needing different mathematics. The complex plane has one — `zerosAndPoles.ts`,
+by the argument principle, which returns an integer order rather than an estimate, and
+is called only there, on a function of a complex variable. A real signal's roots are
+still not computed, and nothing should call this module as if they were.
 
 Two numerical decisions carry that:
 
@@ -378,10 +380,12 @@ the edge of a window walks straight out of it and must not be reported.
 
 The complex plane draws them: a filled disc for a zero and an open ring for a pole,
 because the two are opposites of each other in the mathematics and the drawing should
-not have to be read twice to say so. Taking one with the cursor labels it — `zero of
-order 2 at 0` is what `z²` reports — and the coordinate is rounded to about a
-thousandth of what is on screen first, since the search *located* the point rather
-than solving for it and `-1.06×10⁻¹⁶` is not a better answer than `0`.
+not have to be read twice to say so. Taking one with the cursor labels it `(0, 0)`, or
+`(0, 0) ×2` where the order is above one: which of the two it is lives in the shape of
+the mark and in the legend, and the order is the single exception because nothing else
+in that picture carries it. The coordinate is rounded to the place the picture can
+support before it is written, since the search *located* the point rather than solving
+for it and `-1.06×10⁻¹⁶` is not a better answer than `0`.
 
 The capability flipped to `implemented` in the same commit as the drawing, which is
 the rule: a capability may not claim more than the interface shows.
@@ -562,7 +566,7 @@ parameter update, linked cursor, linked selection, multi-view synchronization",
 and keeping this state in plain TypeScript outside React means those tests need no
 DOM and no rendering. `packages/app/test/workspaceStore.test.ts` is that test.
 
-Four design points worth naming:
+Five design points worth naming:
 
 - **`selectActiveExpression` is a pure function**, not a method reading mutable
   state. Views memoise against exactly `(workspace, focusedLineId, drawableKinds)`,
@@ -580,6 +584,14 @@ Four design points worth naming:
   is not a plane rectangle, so pretending otherwise would be the kind of lie this
   project avoids elsewhere; `camera3d` is its own field, moved through the same
   store and therefore testable without a canvas.
+- **What the picture marks and what the readout states are the same point.** The
+  readout reads `hover ?? selection`, and the views mark on that same rule, so a mark
+  cannot point at a place the readout is not describing — which is why a held point
+  shows once the pointer has left the canvas and not while it is over it. Where a mark
+  takes one of the analysed points, the coordinate is stated to the place the picture
+  can support and is rounded *before* it reaches the shared cursor; rounding it in the
+  label while publishing the raw value would be two statements of one point, and two
+  statements that round differently are two different answers.
 
 ---
 
