@@ -31,7 +31,17 @@
  * two are used together — see GOAL.md section 7.17 — and never one in place of the
  * other.
  */
-import { CX_ZERO, type Complex, cabs, cadd, cmul, cscale, csub, isFiniteComplex } from './complex';
+import {
+  CX_ZERO,
+  type Complex,
+  cabs,
+  cadd,
+  cmul,
+  cscale,
+  csub,
+  cx,
+  isFiniteComplex,
+} from './complex';
 import { CONTOUR_INTEGRAL, NUMERICS } from './conventions';
 import { type MathIssue, type Result, fail, ok } from './errors';
 import { formatReal } from './format';
@@ -49,6 +59,16 @@ export interface ContourIntegralOptions {
 
 export interface ContourIntegralResult {
   readonly value: Complex;
+  /**
+   * The contour itself, at the points the rule sampled.
+   *
+   * Returned because a view has to draw the contour and the callbacks that produce it
+   * belong to the caller: sampling it again in the view would be a second evaluation of
+   * the same path at the same points, and the two could disagree about where the contour
+   * is. GOAL.md section 7.15 asks for the contour and its orientation to be visible, and
+   * this is that, at no extra cost.
+   */
+  readonly path: readonly Complex[];
   /**
    * The accumulated integral at each point of the grid — where `∫` has got to by the
    * time the parameter reaches `t`, starting at zero. GOAL.md section 7.15 calls this
@@ -85,9 +105,91 @@ export interface ContourIntegralResult {
  */
 export const CONTOUR_PARAMETER_TEXT = 't ∈ [0, 2π]';
 
+/** Radii a residue is measured at, as fractions of the largest one offered. */
+const RESIDUE_RADIUS_STEPS = [1, 1 / 2, 1 / 4, 1 / 8] as const;
+
+/** How closely two radii have to agree before their answer is kept. */
+const RESIDUE_AGREEMENT = 1e-8;
+
+/** Samples on a residue's circle. The integrand is periodic on it, so this is ample. */
+const RESIDUE_SAMPLES = 256;
+
+/**
+ * The residue of `f` at a pole — the coefficient of `1/(z − z₀)` in its Laurent series.
+ *
+ *     Res(f, z₀) = (1/2πi) ∮ f(z) dz   around a circle holding that pole and no other
+ *
+ * This is the definition, evaluated, and it reuses the contour integral above because
+ * that is literally what it is: the same rule, the same γ′, the same reported accuracy.
+ * Nothing here is a second implementation.
+ *
+ * **The radii have to agree, and that is the whole of the honesty.** A circle drawn too
+ * large holds other poles, and the integral around it is then the *sum* of their
+ * residues — a correct answer to a different question. So a ladder of radii is tried,
+ * descending from `maxRadius`, and the answer kept is the largest one whose neighbours
+ * agree with it. A circle that swallows a neighbour is therefore outvoted by the ones
+ * that do not, and a function for which no two radii agree gives `null` — no answer,
+ * rather than the sum of somebody else's residues.
+ *
+ * `maxRadius` is the caller's business, because only the caller knows the window it is
+ * looking at; the agreement rule is what makes an over-generous one safe.
+ */
+export function residueAt(
+  evaluate: (z: Complex) => Result<Complex, MathIssue>,
+  pole: Complex,
+  maxRadius: number,
+): Complex | null {
+  if (!Number.isFinite(maxRadius) || maxRadius <= 0) return null;
+
+  const measured: (Complex | null)[] = RESIDUE_RADIUS_STEPS.map((fraction) =>
+    aroundCircle(evaluate, pole, maxRadius * fraction),
+  );
+
+  // Largest first: the first radius whose answer the two below it agree with is the one
+  // kept, so the answer comes from as large a circle as still isolates the pole — which
+  // is the one least affected by the pole's own neighbours being partly resolved.
+  for (let index = 0; index + 2 < measured.length; index += 1) {
+    const here = measured[index] ?? null;
+    const next = measured[index + 1] ?? null;
+    const after = measured[index + 2] ?? null;
+    if (here === null || next === null || after === null) continue;
+    if (agrees(here, next) && agrees(here, after)) return here;
+  }
+
+  // The last two, if the ladder ran out before three in a row were available: still two
+  // independent measurements of the same coefficient.
+  const last = measured[measured.length - 1] ?? null;
+  const secondLast = measured[measured.length - 2] ?? null;
+  if (last !== null && secondLast !== null && agrees(last, secondLast)) return last;
+  return null;
+}
+
+/** (1/2πi) ∮ f dz around |z − centre| = radius, or null when the circle cannot be walked. */
+function aroundCircle(
+  evaluate: (z: Complex) => Result<Complex, MathIssue>,
+  centre: Complex,
+  radius: number,
+): Complex | null {
+  const integrated = contourIntegral({
+    path: (t) => ok(cx(centre.re + radius * Math.cos(t), centre.im + radius * Math.sin(t))),
+    integrand: evaluate,
+    samples: RESIDUE_SAMPLES,
+  });
+  if (!integrated.ok) return null;
+  // Divide by 2πi, which is the same as multiplying by −i/(2π).
+  return cmul(integrated.value.value, cx(0, -1 / (2 * Math.PI)));
+}
+
+/** Whether two measurements of the same residue are the same number. */
+function agrees(left: Complex, right: Complex): boolean {
+  const difference = cabs(csub(left, right));
+  return difference <= RESIDUE_AGREEMENT * Math.max(1, cabs(left), cabs(right));
+}
+
 /** One pass of the rule: the total, the running sum, and what the path did. */
 interface Pass {
   readonly total: Complex;
+  readonly path: readonly Complex[];
   readonly trajectory: readonly Complex[];
   readonly closureGap: number;
   /** The largest `|γ|` on the grid, which is the scale the closure test is judged at. */
@@ -130,6 +232,7 @@ export function contourIntegral(
 
   return ok({
     value: coarse.value.total,
+    path: coarse.value.path,
     trajectory: coarse.value.trajectory,
     closed: coarse.value.closureGap <= NUMERICS.contourClosureTolerance * (1 + coarse.value.extent),
     closureGap: coarse.value.closureGap,
@@ -156,6 +259,7 @@ function integrateAt(
   // closed contour meet to make the single full weight the periodic rule would have
   // used.
   let running: Complex = CX_ZERO;
+  const path: Complex[] = [];
   const trajectory: Complex[] = [running];
   let previous: Complex | null = null;
   let first: Complex | null = null;
@@ -173,6 +277,7 @@ function integrateAt(
     if (first === null) first = onPath;
     last = onPath;
     extent = Math.max(extent, cabs(onPath));
+    path.push(onPath);
 
     const value = options.integrand(onPath);
     if (!value.ok) {
@@ -202,7 +307,7 @@ function integrateAt(
   }
 
   const closureGap = first === null ? Number.POSITIVE_INFINITY : cabs(csub(last, first));
-  return ok({ total: running, trajectory, closureGap, extent });
+  return ok({ total: running, path, trajectory, closureGap, extent });
 }
 
 /**

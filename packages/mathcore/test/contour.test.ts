@@ -13,8 +13,8 @@
  * the error on a grid the estimate was not computed from.
  */
 import { describe, expect, it } from 'vitest';
-import { type Complex, cabs, cadd, csub, cx, cexp } from '../src/complex';
-import { contourIntegral, type ContourIntegralResult } from '../src/contour';
+import { type Complex, cabs, cadd, cdiv, cmul, csub, cx, cexp } from '../src/complex';
+import { contourIntegral, residueAt, type ContourIntegralResult } from '../src/contour';
 import { CONTOUR_INTEGRAL } from '../src/conventions';
 import { ok, type MathIssue, type Result } from '../src/errors';
 
@@ -48,6 +48,13 @@ function run(
 /** Relative difference, with a floor so that a value near zero is still comparable. */
 function relativeError(actual: Complex, expected: Complex): number {
   return cabs(csub(actual, expected)) / Math.max(1, cabs(expected));
+}
+
+/** Assert a result that may be `null`, so a missing answer fails loudly rather than quietly. */
+function expectNear(actual: Complex | null, expected: Complex, tolerance: number): void {
+  expect(actual).not.toBeNull();
+  if (actual === null) return;
+  expect(relativeError(actual, expected)).toBeLessThan(tolerance);
 }
 
 describe('what the integral is', () => {
@@ -196,6 +203,56 @@ describe('what the integral refuses to say', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.issue.kind).toBe('unsupported');
+  });
+});
+
+describe('the residue at a pole', () => {
+  /** `1/z²`, which has a double pole at the origin and therefore no residue there. */
+  const reciprocalSquared = (z: Complex): Result<Complex, MathIssue> => {
+    const once = reciprocal(z);
+    return once.ok ? ok(cmul(once.value, once.value)) : once;
+  };
+
+  /** `1/(z² − 1)`, whose residues at ±1 are both 1/2. */
+  const twoSimplePoles = (z: Complex): Result<Complex, MathIssue> => {
+    const denominator = csub(cmul(z, z), cx(1, 0));
+    if (cabs(denominator) === 0) {
+      return {
+        ok: false,
+        issue: { kind: 'division-by-zero', divisor: 'z^2-1', message: '"z^2-1" is zero here.' },
+      };
+    }
+    return ok(cdiv(cx(1, 0), denominator));
+  };
+
+  it('is the coefficient the Laurent series says it is', () => {
+    // Res(1/z, 0) = 1 — GOAL.md section 24's own example, read off the definition.
+    expectNear(residueAt(reciprocal, cx(0, 0), 1), cx(1, 0), 1e-9);
+
+    // A double pole has no 1/(z − z₀) term at all, so its residue is zero — and zero is
+    // an answer rather than a failure, which is why it is a number and not `null`.
+    const zero = residueAt(reciprocalSquared, cx(0, 0), 1);
+    expect(zero).not.toBeNull();
+    expect(cabs(zero as Complex)).toBeLessThan(1e-8);
+  });
+
+  it('does not depend on how large the circle is', () => {
+    for (const radius of [0.25, 0.5, 1, 2]) {
+      expectNear(residueAt(reciprocal, cx(0, 0), radius), cx(1, 0), 1e-8);
+    }
+  });
+
+  it('outvotes a circle that swallowed a neighbouring pole', () => {
+    // A circle of radius 4 about z = 1 holds *both* poles, and the integral around it is
+    // then 2πi·(1/2 + 1/2) — a correct answer to a different question. The ladder keeps
+    // the circles that hold one pole, so the answer stays 1/2.
+    expectNear(residueAt(twoSimplePoles, cx(1, 0), 4), cx(0.5, 0), 1e-6);
+  });
+
+  it('has no answer when the circle cannot be drawn', () => {
+    // A radius of zero, or one that is not a number, is not a circle.
+    expect(residueAt(reciprocal, cx(0, 0), 0)).toBeNull();
+    expect(residueAt(reciprocal, cx(0, 0), Number.NaN)).toBeNull();
   });
 });
 

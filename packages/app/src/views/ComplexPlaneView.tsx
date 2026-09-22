@@ -26,14 +26,20 @@ import {
   displayComplex,
   displayComplexToText,
   displayNumberToText,
+  evaluateContourDetails,
   findZerosAndPoles,
+  workspaceEnvironment,
 } from '@mathviz/mathcore';
 import { drawGridAndAxes } from '../render/axes2d';
 import { CANVAS_COLORS, prepareCanvas2d } from '../render/canvasSurface';
 import { TICK_FONT } from '../render/canvasText';
 import { roundForScale, viewNumber } from '../display/numbers';
 import { useStore } from '../state/store';
-import { selectActiveExpression, type ViewRendererProps } from '../state/workspaceStore';
+import {
+  selectActiveExpression,
+  selectContourLine,
+  type ViewRendererProps,
+} from '../state/workspaceStore';
 import { handleCameraKey } from './cameraKeys';
 import { makePointEvaluation } from './evaluation';
 import { useResizeVersion } from './useResizeVersion';
@@ -81,6 +87,41 @@ function describe(point: Singularity, spanX: number, spanY: number): string {
   return point.order === 1 ? where : `${where} ×${point.order}`;
 }
 
+/**
+ * Stroke a sampled curve of the plane, breaking wherever it leaves the finite plane.
+ *
+ * The break matters for the same reason the cartesian view has one: a path that runs off
+ * to infinity and comes back would otherwise be joined by a straight line across the
+ * picture, which claims the curve goes somewhere it does not.
+ */
+function strokePolyline(
+  context: CanvasRenderingContext2D,
+  window: Window2d,
+  points: readonly Complex[],
+  width: number,
+  height: number,
+  colour: string,
+  ratio: number,
+): void {
+  context.strokeStyle = colour;
+  context.lineWidth = Math.max(1.2, ratio * 1.4);
+  context.beginPath();
+  let started = false;
+  for (const point of points) {
+    if (!Number.isFinite(point.re) || !Number.isFinite(point.im)) {
+      started = false;
+      continue;
+    }
+    const at = toScreen(window, { x: point.re, y: point.im }, width, height);
+    if (started) context.lineTo(at.x, at.y);
+    else {
+      context.moveTo(at.x, at.y);
+      started = true;
+    }
+  }
+  context.stroke();
+}
+
 export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const resizeVersion = useResizeVersion(canvasRef);
@@ -103,6 +144,29 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
   /** A curve through the plane, parameterised by the variable on the real axis. */
   const drawsPath =
     signature?.domain.kind === 'R' && signature.domain.dim === 1 && signature.codomain.kind === 'C';
+
+  /**
+   * The contour of a `∮`, and where its integral has got to.
+   *
+   * Computed here rather than read off the active expression, because a contour integral
+   * is a *value*: it is never what a canvas is drawing as a function, and the picture it
+   * asks for is of two things a function-shaped view has no slot for. The evaluation is
+   * the evaluator's own, so the curve on screen and the number in the expression panel
+   * cannot come from two different integrations.
+   */
+  const contourNode = useMemo(
+    () => selectContourLine(workspace, focusedLineId),
+    [workspace, focusedLineId],
+  );
+
+  const contour = useMemo(() => {
+    if (contourNode === null) return null;
+    const details = evaluateContourDetails(
+      contourNode,
+      workspaceEnvironment(workspace, state.parameterValues),
+    );
+    return details !== null && details.ok ? details.value : null;
+  }, [contourNode, workspace, state.parameterValues]);
 
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   /** The marked point the cursor has taken, if any. Labelled; the rest are marks. */
@@ -195,6 +259,25 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
       context.stroke();
     }
 
+    // The contour of a `∮`, and where its integral has got to so far. Two curves rather
+    // than one because they answer different questions: the first is the path the
+    // integral is taken along, the second is its accumulated value, which is the thing a
+    // reader is actually curious about — for `1/z` around the circle it is a straight
+    // run up to `2πi`, and seeing that is seeing the answer while it is being worked out.
+    // GOAL.md section 7.15 asks for both.
+    if (contour !== null) {
+      strokePolyline(context, window, contour.path, width, height, CANVAS_COLORS.curve, ratio);
+      strokePolyline(
+        context,
+        window,
+        contour.trajectory,
+        width,
+        height,
+        CANVAS_COLORS.curveSecondary,
+        ratio,
+      );
+    }
+
     // Where the function vanishes and where it blows up. A zero is filled and a pole
     // is open, because the two are opposites of each other in the mathematics and the
     // drawing should not have to be read twice to say so.
@@ -267,6 +350,7 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
     context.fillStyle = CANVAS_COLORS.curveSecondary;
     context.fill();
   }, [
+    contour,
     drawsMap,
     drawsPath,
     evaluation,
@@ -403,6 +487,9 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
         <span className="legend__title">z-plane</span>
         {drawsMap && <span className="legend__range">z ↦ f(z)</span>}
         {drawsPath && <span className="legend__range">path of f(t)</span>}
+        {contourNode !== null && (
+          <span className="legend__range">∮ along {contourNode.path} · the integral so far</span>
+        )}
         {drawsMap && (zeros > 0 || poles > 0) && (
           <span className="legend__range">
             ● {zeros} zero{zeros === 1 ? '' : 's'} · ○ {poles} pole{poles === 1 ? '' : 's'}

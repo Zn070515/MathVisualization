@@ -13,6 +13,7 @@
  */
 import {
   type Complex,
+  type ContourIntegralNode,
   type FieldMode,
   type GlslLoweringOptions,
   type MathIssue,
@@ -165,6 +166,36 @@ export function nextViewId(): string {
 export function resetLineIds(): void {
   lineCounter = 0;
   viewCounter = 0;
+}
+
+/**
+ * The contour integral a canvas should draw the picture of, if there is one.
+ *
+ * A contour integral is a *value*, so it is never the active expression and no canvas
+ * draws it as a function. It is still the thing whose contour and accumulated integral
+ * GOAL.md section 7.15 asks to be visible, and a canvas can only draw it if it can find
+ * it — which is what this does, as a pure function for the same reason the selector
+ * below is one.
+ *
+ * The focused line wins, so a reader can look at one contour among several; failing
+ * that, the first one, so that editing the path or the integrand does not make the
+ * picture vanish while the three lines are being set up.
+ */
+export function selectContourLine(
+  workspace: Workspace,
+  focusedLineId: string | null,
+): ContourIntegralNode | null {
+  const bodies = workspace.entries
+    .map((entry) => entry.statement)
+    .map((statement) => (statement?.kind === 'expression' ? statement.body : null))
+    .filter((body): body is ContourIntegralNode => body?.kind === 'contour-integral');
+  if (bodies.length === 0) return null;
+
+  const focused = workspace.entries.find((entry) => entry.id === focusedLineId);
+  const focusedBody = focused?.statement?.kind === 'expression' ? focused.statement.body : null;
+  if (focusedBody?.kind === 'contour-integral') return focusedBody;
+
+  return bodies[0] as ContourIntegralNode;
 }
 
 /**
