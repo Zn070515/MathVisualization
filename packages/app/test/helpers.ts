@@ -39,6 +39,26 @@ export function makeStore(
   });
 }
 
+/**
+ * A store seeded with LaTeX, for the lines that cannot be written as plain text.
+ *
+ * `plainToLatex` is context-free — it parses one line at a time — so it reads `f(z)` as
+ * `f·z` unless `f` is a builtin. That is right for a converter and wrong for a line that
+ * refers to a function another line defines, which a contour integral always does. Such
+ * lines are given as the LaTeX the editor would have produced.
+ */
+export function makeStoreFromLatex(
+  initialLatex: readonly string[],
+  subsystem: SubsystemId = 'complex',
+): WorkspaceStore {
+  resetLineIds();
+  return new WorkspaceStore({
+    subsystem,
+    initialLines: [...initialLatex],
+    drawableKinds: subsystemById(subsystem).drawableKinds,
+  });
+}
+
 /** The LaTeX of every line, for assertions about what was typed. */
 export function lineSources(store: WorkspaceStore): string[] {
   return store.getState().lines.map((line) => line.latex);

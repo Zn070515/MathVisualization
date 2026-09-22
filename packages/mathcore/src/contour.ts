@@ -75,6 +75,16 @@ export interface ContourIntegralResult {
   readonly estimatedError: number;
 }
 
+/**
+ * The parameter interval, written the way mathematics writes it.
+ *
+ * `[0, 2π]` and not `[0, 6.283]`: it is a convention rather than a measurement, and a
+ * reader recognises the first instantly. One wording, here, so that every place stating
+ * the convention states the same thing — and a test holds it to `CONTOUR_INTEGRAL`, so
+ * it cannot drift from the numbers it describes.
+ */
+export const CONTOUR_PARAMETER_TEXT = 't ∈ [0, 2π]';
+
 /** One pass of the rule: the total, the running sum, and what the path did. */
 interface Pass {
   readonly total: Complex;

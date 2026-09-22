@@ -497,6 +497,39 @@ math-field::part(virtual-keyboard-toggle) {
 }
 
 /*
+ * The value of a line that is a value.
+ *
+ * Under the line that produced it, the way a working is written underneath the
+ * expression it belongs to — cause and result beside each other, rather than a number
+ * in a panel somewhere that has to be matched back up with its line.
+ */
+.expr-row__value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-3) var(--space-4);
+  font-family: var(--font-math);
+  font-size: var(--text-sm);
+  color: var(--ink);
+}
+
+/* The `=` is punctuation rather than mathematics, and should not compete with the
+   number; the interval is a qualifier, so it is quieter still. */
+.expr-row__value-equals,
+.expr-row__value-note {
+  color: var(--ink-faint);
+}
+
+/* The same ink as a problem, deliberately: a number whose contour did not close is
+   one a reader must not take at face value, which is what that ink already means. */
+.expr-row__value-warning,
+.expr-row__value--problem {
+  color: var(--accent-ink);
+}
+
+/*
  * Sliders sit directly under the expression that owns them, which is where someone
  * looks for the parameter they just wrote.
  */

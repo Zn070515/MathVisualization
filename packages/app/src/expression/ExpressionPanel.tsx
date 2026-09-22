@@ -26,9 +26,14 @@
  * to the canvas side, where it does not compete with input.
  */
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { parametersUsedBy, selectActiveExpression, type WorkspaceStore } from '../state/workspaceStore';
+import {
+  parametersUsedBy,
+  selectActiveExpression,
+  type WorkspaceStore,
+} from '../state/workspaceStore';
 import { useStore } from '../state/store';
 import { ExpressionRow } from './ExpressionRow';
+import { ValueLine } from './ValueLine';
 import { MathKeypad } from './MathKeypad';
 import type { MathFieldHandle, MoveOutDirection } from './mathInputAdapter';
 
@@ -49,13 +54,10 @@ export function ExpressionPanel({
 
   // One handle per line, so the keypad can insert into whichever line is focused.
   const handles = useRef(new Map<string, MathFieldHandle>());
-  const registerHandle = useCallback(
-    (lineId: string, handle: MathFieldHandle | null) => {
-      if (handle === null) handles.current.delete(lineId);
-      else handles.current.set(lineId, handle);
-    },
-    [],
-  );
+  const registerHandle = useCallback((lineId: string, handle: MathFieldHandle | null) => {
+    if (handle === null) handles.current.delete(lineId);
+    else handles.current.set(lineId, handle);
+  }, []);
 
   // Which line a canvas is drawing, marked on the row. Depends on exactly what decides
   // it — the workspace and the focus — so that moving the pointer does not recompute it.
@@ -144,7 +146,8 @@ export function ExpressionPanel({
         <ol className="panel__list">
           {lines.map((line, index) => {
             const entry = workspace.entries.find((candidate) => candidate.id === line.id);
-            const drawable = entry?.type != null && store.drawableKinds.has(entry.type.classification.kind);
+            const drawable =
+              entry?.type != null && store.drawableKinds.has(entry.type.classification.kind);
 
             const mentioned = entry === undefined ? [] : parametersUsedBy(entry, workspace);
             const parameters = workspace.parameters
@@ -160,6 +163,7 @@ export function ExpressionPanel({
                 key={line.id}
                 line={line}
                 entry={entry}
+                valueLine={<ValueLine store={store} entry={entry} />}
                 focused={line.id === focusedLineId}
                 drawn={line.id === drawnLineId}
                 drawable={drawable}
@@ -214,7 +218,9 @@ export function ExpressionPanel({
         </button>
         <button
           type="button"
-          className={keypadOpen ? 'panel__keypad-toggle panel__keypad-toggle--on' : 'panel__keypad-toggle'}
+          className={
+            keypadOpen ? 'panel__keypad-toggle panel__keypad-toggle--on' : 'panel__keypad-toggle'
+          }
           aria-expanded={keypadOpen}
           aria-controls="math-keypad"
           onClick={onKeypadToggle}
@@ -239,9 +245,7 @@ export function ExpressionPanel({
       )}
 
       {activeIndex === -1 && lines.length === 0 && (
-        <p className="panel__note">
-          Type mathematics directly, or use the keypad below.
-        </p>
+        <p className="panel__note">Type mathematics directly, or use the keypad below.</p>
       )}
     </section>
   );

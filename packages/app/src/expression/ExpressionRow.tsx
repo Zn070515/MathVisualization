@@ -16,7 +16,13 @@
  * What appears on hover or focus: the inferred type, and the delete control. What
  * is deliberately absent: an index numeral, and any control that would do nothing.
  */
-import { type MathObjectKind, type MathIssue, type ParseError, type WorkspaceEntry, signatureToString } from '@mathviz/mathcore';
+import {
+  type MathObjectKind,
+  type MathIssue,
+  type ParseError,
+  type WorkspaceEntry,
+  signatureToString,
+} from '@mathviz/mathcore';
 import type { MathFieldHandle, MoveOutDirection } from './mathInputAdapter';
 import { MathExpressionField } from './MathExpressionField';
 import { ParameterSlider } from './ParameterSlider';
@@ -44,6 +50,14 @@ export interface ExpressionRowProps {
   readonly onMoveOut: (direction: MoveOutDirection) => void;
   readonly onParameterChange: (name: string, value: number) => void;
   readonly onParameterReset: (name: string) => void;
+  /**
+   * The computed value of this line, when the line is a value.
+   *
+   * Passed in as an element rather than computed here: evaluating a line can mean
+   * integrating a contour, which is not something to do inside a row that re-renders on
+   * hover. Its own component owns that, and its own memo.
+   */
+  readonly valueLine?: React.ReactNode;
 }
 
 /** The kind of object, in words, for the tooltip rather than the row. */
@@ -86,6 +100,7 @@ export function ExpressionRow({
   onMoveOut,
   onParameterChange,
   onParameterReset,
+  valueLine,
 }: ExpressionRowProps): React.JSX.Element {
   const problem = entry?.parseError ?? entry?.typeIssue ?? null;
   const unfinished = isUnfinished(problem);
@@ -114,9 +129,7 @@ export function ExpressionRow({
           handleRef={handleRef}
           invalid={problem !== null && !unfinished}
           label={
-            signature === undefined
-              ? 'Expression'
-              : `Expression, ${KIND_LABELS[kind ?? 'unknown']}`
+            signature === undefined ? 'Expression' : `Expression, ${KIND_LABELS[kind ?? 'unknown']}`
           }
         />
 
@@ -130,10 +143,17 @@ export function ExpressionRow({
                   : `${KIND_LABELS[kind ?? 'unknown']}, which this subsystem does not draw`
               }
             >
-              {signatureToString(signature)}
+              {
+                // A value is not a function, and `R → C` is the placeholder signature
+                // inference gives it so that it has one at all. Printing that would
+                // describe the filler rather than the line.
+                kind === 'scalar' ? 'value' : signatureToString(signature)
+              }
             </span>
           )}
-          {drawn && <span className="expr-row__drawn-mark" title="This is the expression being drawn" />}
+          {drawn && (
+            <span className="expr-row__drawn-mark" title="This is the expression being drawn" />
+          )}
           <button
             type="button"
             className="expr-row__remove"
@@ -154,6 +174,8 @@ export function ExpressionRow({
           {problem.message}
         </p>
       )}
+
+      {valueLine}
 
       {parameters.length > 0 && (
         <div className="expr-row__parameters">

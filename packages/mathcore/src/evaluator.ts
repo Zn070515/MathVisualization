@@ -50,7 +50,7 @@ import {
   principalArg,
 } from './complex';
 import { builtinConstant } from './conventions';
-import { contourIntegral } from './contour';
+import { contourIntegral, type ContourIntegralResult } from './contour';
 import { fail, ok, type MathIssue, type Result } from './errors';
 import { exprToText } from './format';
 import { rationalToNumber } from './rational';
@@ -394,6 +394,38 @@ function evaluateContour(
   depth: number,
   contourDepth: number,
 ): Result<Value, MathIssue> {
+  const integrated = integrateContour(expr, environment, depth, contourDepth);
+  if (!integrated.ok) return integrated;
+  return ok(scalarValue(integrated.value.value));
+}
+
+/**
+ * Everything a contour integral reports, not only its number.
+ *
+ * `evaluate` returns the value, which is what arithmetic needs: `∮ f dz + 1` has no
+ * business knowing whether the contour closed. A line whose *whole content* is a
+ * contour integral is different — whether the path came back to where it started, and
+ * how much the grid moved the answer, are part of what the number claims, and they
+ * belong beside it rather than in a footnote.
+ *
+ * Returns null when the expression is not a contour integral, because then there is no
+ * single integral to describe and the caller has nothing to add to the value.
+ */
+export function evaluateContourDetails(
+  expr: Expr,
+  environment: EvaluationEnvironment = EMPTY_ENVIRONMENT,
+): Result<ContourIntegralResult, MathIssue> | null {
+  if (expr.kind !== 'contour-integral') return null;
+  return integrateContour(expr, environment, 0, 0);
+}
+
+/** Resolve the path and the integrand, and integrate. */
+function integrateContour(
+  expr: Extract<Expr, { kind: 'contour-integral' }>,
+  environment: EvaluationEnvironment,
+  depth: number,
+  contourDepth: number,
+): Result<ContourIntegralResult, MathIssue> {
   if (contourDepth >= MAXIMUM_CONTOUR_DEPTH) {
     return fail({
       kind: 'unsupported',
@@ -470,7 +502,7 @@ function evaluateContour(
 
   const integrated = contourIntegral({ path: atParameter, integrand: atPoint });
   if (!integrated.ok) return fail(integrated.issue);
-  return ok(scalarValue(integrated.value.value));
+  return integrated;
 }
 
 function evaluateCall(
