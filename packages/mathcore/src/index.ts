@@ -30,6 +30,7 @@
  *   format.ts       printing expressions and values as mathematics
  *   ticks.ts        where axis ticks go, and what they say
  *   pointsOfInterest.ts  the points on a curve worth naming
+ *   zerosAndPoles.ts  where a complex function vanishes, by the argument principle
  *   surface.ts      sampling a scalar field into a mesh
  *   surfaceGlsl.ts  the fixed shader a surface is drawn with
  *   workspace.ts    a document: many statements, analysed together
@@ -55,6 +56,7 @@ export * from './display';
 export * from './format';
 export * from './ticks';
 export * from './pointsOfInterest';
+export * from './zerosAndPoles';
 export * from './surface';
 export * from './surfaceGlsl';
 export * from './workspace';

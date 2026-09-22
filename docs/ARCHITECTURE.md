@@ -350,6 +350,37 @@ Two numerical decisions carry that:
   `|t|` both land their minimum exactly on a sample — the true statement is that
   the curve *touched*, and calling that a crossing is the mistake being avoided.
 
+**Zeros and poles.** `mathcore/src/zerosAndPoles.ts` answers where a complex
+function vanishes and where it blows up, and it answers the *count* exactly, which
+is what makes it worth having. The **argument principle** says that the change in
+the argument of `f` around a closed curve, divided by a full turn, is the number of
+zeros minus the number of poles inside — an integer. A small circle around a
+candidate therefore returns `+k` for a zero of order `k` and `−k` for a pole of
+order `k`, and that is a fact about the function rather than a threshold applied to
+`|f|`. A search for "where is `|f|` small" cannot tell a double zero from a single
+one; a contour can, and the test that says so asserts exactly 2.
+
+The division of labour is the same one used above, and it is deliberate:
+
+- **The kind and the order are facts**, from the winding number. They cannot be
+  changed by moving the point.
+- **The coordinates are a deduction.** A candidate comes from a local extremum of
+  `|f|` on a search grid and is then walked downhill, so the position is approximate
+  and is presented as a number like any other.
+
+Candidates that are neither a zero nor a pole are discarded by a winding of *zero*
+rather than by a tolerance: `sin(z)/z` at the origin has a removable singularity, and
+nothing is reported there. A contour that runs through a singularity has no value on
+it to take the argument of, and the answer is that there is no answer rather than a
+number that happens to be nearby. And the search reports only what is inside the
+region it was given — `tan` has a zero at every multiple of π, so a candidate near
+the edge of a window walks straight out of it and must not be reported.
+
+The mathematics is here; the marking is not. The capability that says zeros and
+poles are *marked in the plane* stays `planned` until the view draws them, because a
+capability that claims more than the interface shows is the thing this project's
+capability list exists to prevent.
+
 ### 7.3 The renderers
 
 Two WebGL2 renderers, deliberately siblings rather than one generalised class:
@@ -611,7 +642,7 @@ There is one convention per row and one place it is written down.
 
 Four levels, all of them runnable:
 
-1. **`pnpm test`** — 647 tests. Parser, AST, type inference, complex arithmetic,
+1. **`pnpm test`** — 663 tests. Parser, AST, type inference, complex arithmetic,
    numerical evaluation, workspace behaviour, GLSL lowering, SymPy lowering,
    colouring, surface sampling, how a number is written, where the axis ticks go,
    and the mathematical reference identities. The identity suite
@@ -693,8 +724,9 @@ MathVisualization/
 │   │   │   errors.ts  rational.ts  complex.ts  conventions.ts  builtins.ts
 │   │   │   ast.ts  lexer.ts  parser.ts  latex.ts  types.ts  infer.ts
 │   │   │   evaluator.ts  format.ts  display.ts  ticks.ts  workspace.ts
+│   │   │   pointsOfInterest.ts  zerosAndPoles.ts
 │   │   │   coloring.ts  surface.ts  glsl.ts  surfaceGlsl.ts  sympy.ts  cas.ts
-│   │   └── test/               427 tests
+│   │   └── test/               443 tests
 │   └── app/                    the interface. React, Vite.
 │       ├── src/
 │       │   ├── subsystems.ts   the three subsystems, one description
