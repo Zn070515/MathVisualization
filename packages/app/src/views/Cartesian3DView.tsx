@@ -133,30 +133,44 @@ export function Cartesian3DView({ store }: ViewRendererProps): React.JSX.Element
   const normals = useMemo(() => (mesh === null ? null : surfaceNormals(mesh)), [mesh]);
 
   /**
-   * The radius of the scene, which is what the camera has to fit.
+   * The scene: where its middle is, and how far out it reaches.
    *
-   * Taken from the bounding box including the height, because for a field like
-   * `x² − y²` the height is the largest dimension by far and framing only the
-   * domain would leave the camera inside the surface.
+   * The radius is the bounding box's half-diagonal, height included — for a field
+   * like `x² − y²` the height is the largest dimension by far, and framing only the
+   * domain would leave the camera inside the surface. The centre matters as much
+   * as the radius, because the domain follows the *shared* viewport: panning a
+   * plane view to `x ≈ 100` moves the region the surface covers, and a camera still
+   * orbiting the origin would frame the wrong part of the world.
    */
-  const sceneRadius = useMemo(() => {
-    if (mesh === null) return 1;
-    const halfX = Math.max(Math.abs(mesh.xMin), Math.abs(mesh.xMax));
-    const halfY = Math.max(Math.abs(mesh.yMin), Math.abs(mesh.yMax));
-    const halfZ = Math.max(Math.abs(mesh.zMin), Math.abs(mesh.zMax));
-    return Math.max(Math.hypot(halfX, halfY, halfZ), 1e-6);
+  const scene = useMemo(() => {
+    if (mesh === null) return { centre: { x: 0, y: 0, z: 0 }, radius: 1 };
+    return {
+      centre: {
+        x: (mesh.xMin + mesh.xMax) / 2,
+        y: (mesh.yMin + mesh.yMax) / 2,
+        z: (mesh.zMin + mesh.zMax) / 2,
+      },
+      radius: Math.max(
+        Math.hypot(
+          (mesh.xMax - mesh.xMin) / 2,
+          (mesh.yMax - mesh.yMin) / 2,
+          (mesh.zMax - mesh.zMin) / 2,
+        ),
+        1e-6,
+      ),
+    };
   }, [mesh]);
 
-  // Frame the scene when it changes size, and only then.
+  // Frame the scene when it changes, and only then.
   //
   // The camera is read from the store rather than from the render, so that it is
   // the *current* one at the moment the scene changed and so that the camera is
-  // not a dependency — which it must not be, or a deliberate dolly would be undone
-  // on the next render.
+  // not a dependency — which it must not be, or a deliberate dolly or orbit would
+  // be undone on the next render.
   useEffect(() => {
     if (mesh === null) return;
-    store.setCamera3d(frameScene(store.getState().camera3d, sceneRadius));
-  }, [mesh, sceneRadius, store]);
+    store.setCamera3d(frameScene(store.getState().camera3d, scene.centre, scene.radius));
+  }, [mesh, scene, store]);
 
   // The renderer exists once. The program is fixed, so nothing about it depends on
   // the expression.
@@ -313,17 +327,19 @@ export function Cartesian3DView({ store }: ViewRendererProps): React.JSX.Element
       context.fillText(name, at.x, at.y);
     }
 
-    // The shared cursor, as the sample it landed on. Marking the vertex rather
-    // than an interpolated point is honest about what is being pointed at: this is
-    // a sample of the surface, not a mathematical point on it.
+    // The shared cursor, marked *on* the surface rather than under it.
+    //
+    // The cursor is a domain point, so its height is `f(x, y)` — evaluated here
+    // rather than looked up in the mesh, so that a point which is not one of the
+    // samples (one that came from another view, or that falls between two
+    // vertices) still lands where the function actually is. Projecting it at
+    // `z = 0` would draw the marker on the plane beneath the surface, which is a
+    // different place from the one being pointed at.
     const cursor = state.hover ?? state.selection;
-    if (cursor !== null) {
-      const at = projectToScreen(
-        { x: cursor.re, y: cursor.im, z: 0 },
-        viewProjection,
-        width,
-        height,
-      );
+    if (cursor !== null && evaluation !== null) {
+      const value = evaluation.evaluate(cursor);
+      const z = value.ok ? value.value.re : Number.NaN;
+      const at = projectToScreen({ x: cursor.re, y: cursor.im, z }, viewProjection, width, height);
       if (at.visible) {
         context.beginPath();
         context.arc(at.x, at.y, Math.max(3, prepared.ratio * 3.5), 0, Math.PI * 2);
@@ -332,7 +348,7 @@ export function Cartesian3DView({ store }: ViewRendererProps): React.JSX.Element
         context.stroke();
       }
     }
-  }, [mesh, state.camera3d, state.hover, state.selection]);
+  }, [evaluation, mesh, state.camera3d, state.hover, state.selection]);
 
   useEffect(() => {
     draw();

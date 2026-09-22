@@ -117,17 +117,25 @@ function intendedDefaults(signature: Signature | undefined): readonly ViewKind[]
 }
 
 /**
- * A view that at least renders an honest "this belongs elsewhere" overlay.
+ * The pane a subsystem opens with when there is nothing to infer from.
  *
- * What a subsystem opens with when there is nothing drawable to infer from — an
- * empty workspace, or lines that have not parsed. Not a guess at what the user
- * wants, only a pane that can explain itself.
+ * An empty workspace, or lines that have not parsed — there is no signature to
+ * consult, so this is not a guess about the object. It is a guess about the
+ * *space*: the complex plane, or a pair of axes. Those are the worlds the
+ * mathematics happens in, and having one of them on screen while the first
+ * expression is being typed is what makes the surface feel like paper rather than
+ * like a form. A field renderer with nothing to render is the one answer that
+ * shows the user nothing at all.
+ *
+ * `calculus` gets the plane rather than the surface because with no function there
+ * is no height: two dimensions is the neutral world, and the surface arrives when
+ * there is something to be the height *of*.
  */
 export function nominalViewKind(subsystem: SubsystemId): ViewKind {
   const nominal: Readonly<Record<SubsystemId, ViewKind>> = {
-    complex: 'domain-coloring',
+    complex: 'complex-plane',
     transforms: 'cartesian-2d',
-    calculus: 'domain-coloring',
+    calculus: 'cartesian-2d',
   };
   return nominal[subsystem];
 }

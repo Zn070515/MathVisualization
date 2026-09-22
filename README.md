@@ -188,7 +188,7 @@ answer while the one you just started has quietly failed — `netstat -ano | fin
 ```bash
 pnpm lint          # ESLint, zero warnings
 pnpm typecheck     # tsc, both packages
-pnpm test          # 617 tests
+pnpm test          # 629 tests
 pnpm build         # production build of the application
 ```
 

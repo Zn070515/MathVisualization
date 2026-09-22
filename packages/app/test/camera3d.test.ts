@@ -10,28 +10,51 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_CAMERA_3D,
+  FIELD_OF_VIEW_Y,
   cameraBasis,
   cameraEye,
   cameraProjectionMatrix,
   cameraViewMatrix,
   cameraViewProjection,
   dolly,
+  frameScene,
   orbit,
   panTarget,
   worldPerPixel,
 } from '../src/render/camera3d';
-import { dot, projectToScreen, subtract, multiply } from '../src/render/matrix';
+import { dot, multiply, projectToScreen, subtract, vec3 } from '../src/render/matrix';
 
 const HEIGHT = 400;
 
 describe('the default view', () => {
   it('looks down at the surface from above and to one side', () => {
     const eye = cameraEye(DEFAULT_CAMERA_3D);
-    // A graph is read with z up, so the camera starts above the plane; starting
-    // level with it would hide half the surface behind the other half.
-    expect(eye.y).toBeGreaterThan(0);
-    expect(eye.x).toBeGreaterThan(0);
+    // Above the plane, and starting level with it would hide half the surface
+    // behind the other half.
     expect(eye.z).toBeGreaterThan(0);
+    expect(eye.x).toBeGreaterThan(0);
+  });
+
+  it('treats z as the world’s up axis, because that is how a graph is read', () => {
+    // The regression this exists for. The mesh is uploaded as `(x, y, f(x, y))`
+    // with nothing swapped, so a camera that lifted the eye in `y` would lay the
+    // graph on its side: the axis labelled `z` would run across the screen instead
+    // of up it.
+    //
+    // The discriminator is the camera's own up vector. With `y` up it points along
+    // `y` and has no `z` component at all, so this is not a value that happens to
+    // pass either way.
+    const { up } = cameraBasis(DEFAULT_CAMERA_3D);
+    expect(up.z).toBeGreaterThan(0.5);
+    expect(Math.abs(up.y)).toBeLessThan(0.5);
+  });
+
+  it('draws a taller point higher up the picture', () => {
+    // The same claim end to end: raising `z` moves the point up the screen.
+    const viewProjection = cameraViewProjection(DEFAULT_CAMERA_3D, 400, 300);
+    const onPlane = projectToScreen({ x: 0, y: 0, z: 0 }, viewProjection, 400, 300);
+    const above = projectToScreen({ x: 0, y: 0, z: 1 }, viewProjection, 400, 300);
+    expect(above.y).toBeLessThan(onPlane.y);
   });
 
   it('puts the point it is looking at at the centre of the canvas', () => {
@@ -143,6 +166,39 @@ describe('panning', () => {
     expect(moved.azimuth).toBe(DEFAULT_CAMERA_3D.azimuth);
     expect(moved.elevation).toBe(DEFAULT_CAMERA_3D.elevation);
     expect(moved.distance).toBe(DEFAULT_CAMERA_3D.distance);
+  });
+});
+
+describe('framing a scene', () => {
+  it('pulls back far enough to see all of it', () => {
+    // A camera at a fixed distance ends up inside a scene that is several times
+    // bigger, looking at the back of the surface. The distance that fits a sphere
+    // of radius r is r / sin(fov / 2).
+    const framed = frameScene(DEFAULT_CAMERA_3D, vec3(0, 0, 0), 7);
+    expect(framed.distance).toBeCloseTo(7 / Math.sin(FIELD_OF_VIEW_Y / 2), 6);
+    expect(framed.distance).toBeGreaterThan(DEFAULT_CAMERA_3D.distance);
+  });
+
+  it('moves the target to where the scene actually is', () => {
+    // The other half of the same problem, and the one that grows teeth once two
+    // views are open: the surface samples the *shared* viewport, so panning a
+    // plane view to x ≈ 100 moves the region the surface covers. A camera still
+    // orbiting the origin frames the wrong part of the world — the scene is in
+    // shot only because the radius happened to grow, and it sits off to one side.
+    const framed = frameScene(DEFAULT_CAMERA_3D, vec3(100, -4, 2), 7);
+    expect(framed.target).toEqual({ x: 100, y: -4, z: 2 });
+  });
+
+  it('leaves a camera alone when it is already framing that scene', () => {
+    // So that a re-frame cannot undo a deliberate dolly on the next render.
+    const framed = frameScene(DEFAULT_CAMERA_3D, vec3(1, 2, 3), 4);
+    expect(frameScene(framed, vec3(1, 2, 3), 4)).toBe(framed);
+  });
+
+  it('has an answer for a scene with no extent', () => {
+    const framed = frameScene(DEFAULT_CAMERA_3D, vec3(0, 0, 0), 0);
+    expect(Number.isFinite(framed.distance)).toBe(true);
+    expect(framed.distance).toBeGreaterThan(0);
   });
 });
 

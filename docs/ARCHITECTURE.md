@@ -568,6 +568,7 @@ behaviour. The most consequential:
 | Axis ticks | 1-2-5 steps, each tick computed as `index × step`, a quarter subdivision for a step of `2×10ⁿ` |
 | Surface normals | outward, by central differences over the sampled grid; a singularity is a hole, not a bridge |
 | 3D camera | right-handed, looking down `-z`, column-major, clip space `[-1, 1]` on all three axes |
+| The world's up axis | `+z` — `x` and `y` span the plane and `z` is the height, because that is how a graph is read |
 | Editor interchange format | LaTeX, parsed by `latex.ts` into the same canonical AST the plain syntax produces |
 | Unfinished input | reported as `incomplete`, and shown as nothing rather than as an error |
 
@@ -579,7 +580,7 @@ There is one convention per row and one place it is written down.
 
 Four levels, all of them runnable:
 
-1. **`pnpm test`** — 617 tests. Parser, AST, type inference, complex arithmetic,
+1. **`pnpm test`** — 629 tests. Parser, AST, type inference, complex arithmetic,
    numerical evaluation, workspace behaviour, GLSL lowering, SymPy lowering,
    colouring, surface sampling, how a number is written, where the axis ticks go,
    and the mathematical reference identities. The identity suite
@@ -683,7 +684,7 @@ MathVisualization/
 │       │   ├── symbolic/       the HTTP adapter and its panel
 │       │   ├── analysis/       CapabilityList
 │       │   └── styles/         tokens.css, app.css
-│       └── test/               208 tests
+│       └── test/               220 tests
 └── services/
     └── symbolic/               SymPy behind an adapter, stdlib only
 ```

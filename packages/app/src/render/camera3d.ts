@@ -43,7 +43,16 @@ const MAX_ELEVATION = Math.PI / 2 - 0.02;
 const MIN_DISTANCE = 0.5;
 const MAX_DISTANCE = 500;
 
-const WORLD_UP = vec3(0, 1, 0);
+/**
+ * The world's up axis is `+z`.
+ *
+ * This is the convention mathematics uses for a graph: `x` and `y` span the
+ * plane, and `z` is the height. It has to be `+z` here and not `+y`, because the
+ * mesh is uploaded as `(x, y, f(x, y))` with nothing swapped — a camera that
+ * treated `y` as up would lay the graph on its side, with the axis labelled `z`
+ * running across the screen instead of up it.
+ */
+const WORLD_UP = vec3(0, 0, 1);
 
 export interface Camera3d {
   /** Rotation about the vertical axis, in radians. */
@@ -70,13 +79,19 @@ export const DEFAULT_CAMERA_3D: Camera3d = {
   target: vec3(0, 0, 0),
 };
 
-/** Where the camera is, in world coordinates. */
+/**
+ * Where the camera is, in world coordinates.
+ *
+ * Azimuth turns about the vertical axis and elevation lifts away from the
+ * horizontal plane, so the eye rises in `z` — the height axis — and moves within
+ * `x` and `y`.
+ */
 export function cameraEye(camera: Camera3d): Vec3 {
   const horizontal = Math.cos(camera.elevation) * camera.distance;
   return vec3(
     camera.target.x + horizontal * Math.sin(camera.azimuth),
-    camera.target.y + Math.sin(camera.elevation) * camera.distance,
-    camera.target.z + horizontal * Math.cos(camera.azimuth),
+    camera.target.y + horizontal * Math.cos(camera.azimuth),
+    camera.target.z + Math.sin(camera.elevation) * camera.distance,
   );
 }
 
@@ -141,22 +156,32 @@ export function dolly(camera: Camera3d, factor: number): Camera3d {
 }
 
 /**
- * Pull back far enough to see something of this size.
+ * Point the camera at a scene, from far enough away to see all of it.
+ *
+ * Both halves matter, and for the same reason: the scene is not fixed. Its *size*
+ * is not — `f(x, y) = x² − y²` over `[-2.4, 2.4]` reaches nearly six units up, and
+ * a camera at a fixed distance ends up inside the surface looking at the back of
+ * it. And its *place* is not either: a surface samples the shared viewport, so
+ * panning a plane view to `x ≈ 100` moves the region the surface covers while a
+ * camera still orbiting the origin would be framing the wrong part of the world.
  *
  * The distance that puts a sphere of radius `r` inside the vertical field of view
- * is `r / sin(fov / 2)`, which is arithmetic rather than a constant chosen by
- * taste — so changing the field of view cannot leave the framing wrong by a
- * factor nobody notices until a surface is several times bigger than the last one.
+ * is `r / sin(fov / 2)` — arithmetic rather than a constant chosen by taste, so
+ * changing the field of view cannot leave the framing wrong by a factor nobody
+ * notices until the next surface is several times bigger.
  *
- * This exists because the scene's size is not fixed: `f(x, y) = x² − y²` over
- * `[-2.4, 2.4]` reaches nearly six units up, and a camera at a fixed distance ends
- * up *inside* the surface, looking at the back of it. Framing is applied when the
- * scene changes rather than every frame, so it never fights a deliberate dolly.
+ * Applied when the scene changes rather than every frame, so it never fights a
+ * deliberate dolly or orbit.
  */
-export function frameScene(camera: Camera3d, radius: number): Camera3d {
+export function frameScene(camera: Camera3d, centre: Vec3, radius: number): Camera3d {
   const wanted = Math.max(radius, 1e-6) / Math.sin(FIELD_OF_VIEW_Y / 2);
   const distance = Math.min(MAX_DISTANCE, Math.max(MIN_DISTANCE, wanted));
-  return distance === camera.distance ? camera : { ...camera, distance };
+  const unmoved =
+    distance === camera.distance &&
+    camera.target.x === centre.x &&
+    camera.target.y === centre.y &&
+    camera.target.z === centre.z;
+  return unmoved ? camera : { ...camera, distance, target: centre };
 }
 
 /**

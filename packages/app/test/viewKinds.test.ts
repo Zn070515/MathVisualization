@@ -54,7 +54,16 @@ describe('the taxonomy', () => {
     }
   });
 
-  it('has a fallback pane that can be drawn, whatever the subsystem', () => {
+  it('falls back to a space, not to a picture of nothing', () => {
+    // With no signature to consult there is nothing to draw — and a field renderer
+    // with nothing to render shows the user nothing at all. The complex plane and
+    // a pair of axes are the worlds the mathematics happens in, so one of them is
+    // on screen while the first expression is being typed. Calculus gets the plane
+    // rather than the surface because with no function there is no height.
+    expect(nominalViewKind('complex')).toBe('complex-plane');
+    expect(nominalViewKind('transforms')).toBe('cartesian-2d');
+    expect(nominalViewKind('calculus')).toBe('cartesian-2d');
+
     for (const subsystem of ['complex', 'transforms', 'calculus'] as const) {
       expect(VIEW_KIND_STATUS[nominalViewKind(subsystem)]).toBe('available');
     }

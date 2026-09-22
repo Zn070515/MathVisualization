@@ -11,7 +11,7 @@
  * often the point of the parameter.
  */
 import { useEffect, useState } from 'react';
-import { parameterInputText } from '../display/numbers';
+import { parameterInputText, parseNumberText } from '../display/numbers';
 
 export interface ParameterSliderProps {
   readonly name: string;
@@ -49,8 +49,11 @@ export function ParameterSlider({
   }, [value]);
 
   const commitDraft = (): void => {
-    const parsed = Number(draft);
-    if (Number.isFinite(parsed)) {
+    // `parseNumberText`, not `Number`: the field displays `2×10^8` for a large
+    // value, and `Number("2×10^8")` is `NaN` — so the box would reject the very
+    // number it is showing.
+    const parsed = parseNumberText(draft);
+    if (parsed !== null) {
       onChange(parsed);
     } else {
       setDraft(parameterInputText(value));

@@ -192,6 +192,30 @@ export function drawGridAndAxes(context: CanvasRenderingContext2D, options: Axes
   const labelRow = labelsAbove ? height - 2 : xAxisY + TICK_LENGTH + 2;
   const markDirection = labelsAbove ? -1 : 1;
 
+  /*
+   * Which side of the vertical axis its numbers go, decided once for the axis.
+   *
+   * The axis is *clamped* to the frame when the origin lies off to one side, and
+   * "just left of the axis, right-aligned" stops being inside the canvas at that
+   * point: with the window entirely at `x > 0` the axis is pinned to the left edge,
+   * and every number would be painted outside it. Panning would make the scale
+   * disappear, which is the one thing it must not do.
+   *
+   * The room needed is the widest label's, measured rather than assumed, and the
+   * decision is made for the whole axis so that the numbers do not swap sides from
+   * one end of it to the other.
+   */
+  const widestY = yLabels.reduce(
+    (widest, tick) => Math.max(widest, measureDisplayNumber(context, tick.label)),
+    0,
+  );
+  const yLabelsOnTheLeft = yAxisInView && yAxisX - TICK_LENGTH - 3 - widestY >= 0;
+  const yLabelX = yLabelsOnTheLeft ? yAxisX - TICK_LENGTH - 3 : yAxisX + TICK_LENGTH + 3;
+  const yLabelAlign: CanvasTextAlign = yLabelsOnTheLeft ? 'right' : 'left';
+  // Marks point away from the numbers, and inward when the axis is pinned to an
+  // edge and there is no room outside it.
+  const yMarkDirection = yAxisX <= 0 ? 1 : yAxisX >= width ? -1 : yLabelsOnTheLeft ? 1 : -1;
+
   context.strokeStyle = CANVAS_COLORS.axis;
   context.lineWidth = Math.max(1, ratio);
   context.beginPath();
@@ -203,7 +227,7 @@ export function drawGridAndAxes(context: CanvasRenderingContext2D, options: Axes
   for (const tick of yLabels) {
     const y = screenY(tick.value);
     context.moveTo(yAxisX, y);
-    context.lineTo(yAxisX + TICK_LENGTH, y);
+    context.lineTo(yAxisX + TICK_LENGTH * yMarkDirection, y);
   }
   context.stroke();
 
@@ -216,24 +240,31 @@ export function drawGridAndAxes(context: CanvasRenderingContext2D, options: Axes
     });
   }
   for (const tick of yLabels) {
-    drawDisplayNumber(context, tick.label, yAxisX - TICK_LENGTH - 3, screenY(tick.value), {
-      align: 'right',
+    drawDisplayNumber(context, tick.label, yLabelX, screenY(tick.value), {
+      align: yLabelAlign,
       baseline: 'middle',
       color: CANVAS_COLORS.tickLabel,
       font: TICK_FONT,
     });
   }
 
-  // The names, placed along their axes so that they read as part of them.
+  // The names, placed along their axes so that they read as part of them, and kept
+  // inside the frame: an axis scrolled to the edge of the picture still has a name.
   context.fillStyle = CANVAS_COLORS.axisName;
   context.font = `${AXIS_NAME_FONT.size}px ${AXIS_NAME_FONT.family}`;
+  const nameHeight = AXIS_NAME_FONT.size + 2;
+
   context.textAlign = 'right';
   context.textBaseline = 'bottom';
-  context.fillText(options.xName, width - 6, xAxisInView ? xAxisY - 4 : height - 4);
+  context.fillText(
+    options.xName,
+    width - 6,
+    xAxisInView ? Math.max(nameHeight, xAxisY - 4) : height - 4,
+  );
 
-  context.textAlign = 'left';
+  context.textAlign = yLabelsOnTheLeft ? 'right' : 'left';
   context.textBaseline = 'top';
-  context.fillText(options.yName, yAxisX + TICK_LENGTH + 4, 4);
+  context.fillText(options.yName, yLabelsOnTheLeft ? yLabelX : yAxisX + TICK_LENGTH + 4, 4);
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

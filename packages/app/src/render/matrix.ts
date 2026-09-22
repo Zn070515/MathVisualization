@@ -14,7 +14,10 @@
  * These are the four that a scene can be silently wrong about, so they are fixed
  * here and nowhere else:
  *
- * - **Right-handed.** `+x` right, `+y` up, `+z` toward the viewer.
+ * - **Right-handed**, so `x × y = z`. Which axis points *up* in the world is not
+ *   decided here: `lookAt` takes the up direction as an argument, and
+ *   `camera3d.ts` is where the world's vertical axis is chosen (it is `+z`, the
+ *   convention a graph is read with).
  * - **Looking down `-z`.** The camera's forward direction is negative z in its own
  *   frame, which is what `lookAt` and `perspective` below assume.
  * - **Column-major**, the layout OpenGL wants: element `(row, column)` is at

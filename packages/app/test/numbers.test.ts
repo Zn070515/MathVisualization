@@ -13,7 +13,12 @@
  */
 import { describe, expect, it } from 'vitest';
 import { displayNumberToText } from '@mathviz/mathcore';
-import { PARAMETER_INPUT_DIGITS, parameterInputText, viewNumber } from '../src/display/numbers';
+import {
+  PARAMETER_INPUT_DIGITS,
+  parameterInputText,
+  parseNumberText,
+  viewNumber,
+} from '../src/display/numbers';
 
 /** The field view's `formatRange`, and the plot view's `formatBound`: identical. */
 function legacyFieldOrPlot(value: number): string {
@@ -110,5 +115,74 @@ describe('the exact-value field of a parameter', () => {
 
   it('is what the reset control states, so a tooltip is not the only unformatted number', () => {
     expect(parameterInputText(0.1 + 0.2)).toBe('0.3');
+  });
+});
+
+describe('reading a number back', () => {
+  it('accepts the notation it writes', () => {
+    // The half that was missing for a while. The field *displays* `2×10^8`, and
+    // `Number("2×10^8")` is `NaN` — so the box rejected the very number it was
+    // showing, and an edit to it was silently discarded.
+    expect(parseNumberText('2×10^8')).toBe(2e8);
+    expect(parseNumberText('2.34×10^-5')).toBeCloseTo(2.34e-5, 18);
+    expect(parseNumberText('-1.5×10^3')).toBe(-1500);
+  });
+
+  it('accepts the notation people type', () => {
+    expect(parseNumberText('2*10^8')).toBe(2e8);
+    expect(parseNumberText('2x10^8')).toBe(2e8);
+    expect(parseNumberText('2e8')).toBe(2e8);
+    expect(parseNumberText('2E8')).toBe(2e8);
+    expect(parseNumberText(' 2e-8 ')).toBe(2e-8);
+  });
+
+  it('accepts a mathematical minus sign, which Number does not understand', () => {
+    // U+2212, which is what a mathematical keyboard produces.
+    expect(parseNumberText('−3.5')).toBe(-3.5);
+    expect(parseNumberText('−2×10^3')).toBe(-2000);
+  });
+
+  it('refuses what is not a number', () => {
+    expect(parseNumberText('')).toBeNull();
+    expect(parseNumberText('   ')).toBeNull();
+    expect(parseNumberText('two')).toBeNull();
+    expect(parseNumberText('2×10^')).toBeNull();
+    expect(parseNumberText('NaN')).toBeNull();
+    expect(parseNumberText('Infinity')).toBeNull();
+  });
+
+  it('refuses a value it cannot represent', () => {
+    // Ten to a large enough power overflows to Infinity, and a parameter that is
+    // Infinity is not a value anybody asked for.
+    expect(parseNumberText('2×10^400')).toBeNull();
+  });
+
+  it('round-trips every value the field writes', () => {
+    // The property that makes these two functions a pair rather than two
+    // functions. Anything the field can display, the field can read back.
+    const values = [
+      0,
+      1,
+      2,
+      -4,
+      0.3,
+      0.1 + 0.2,
+      1 / 3,
+      2.5,
+      -12.34,
+      1e-16,
+      2e8,
+      1.5e-12,
+      -3.25e7,
+      123456,
+    ];
+    for (const value of values) {
+      const read = parseNumberText(parameterInputText(value));
+      expect(read).not.toBeNull();
+      // Relative, with an absolute floor so that zero is comparable at all.
+      expect(Math.abs((read ?? NaN) - value)).toBeLessThanOrEqual(
+        Math.abs(value) * 1e-14 + Number.MIN_VALUE,
+      );
+    }
   });
 });

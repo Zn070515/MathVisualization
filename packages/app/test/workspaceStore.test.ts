@@ -238,10 +238,14 @@ describe('multiple views', () => {
     expect(kindsOf(makeStore(['f(x,y)=x^2+y^2'], 'calculus'))).toEqual(['cartesian-3d']);
   });
 
-  it('opens on a view that can explain itself when there is nothing to infer from', () => {
+  it('opens on a coordinate space when there is nothing to infer from', () => {
+    // Not on a field renderer: with no expression there is nothing for it to
+    // render, so the user would be looking at nothing while they type their first
+    // line. The plane is the world the mathematics happens in, and it is there
+    // whether or not anything is being drawn on it.
     const store = makeStore([], 'complex');
     expect(store.getState().views).toHaveLength(1);
-    expect(store.getState().views[0]?.kind).toBe('domain-coloring');
+    expect(store.getState().views[0]?.kind).toBe('complex-plane');
   });
 
   it('adds and removes views', () => {
