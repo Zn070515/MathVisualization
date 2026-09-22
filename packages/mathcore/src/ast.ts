@@ -84,6 +84,38 @@ export interface TupleNode {
   readonly span: SourceSpan;
 }
 
+/**
+ * A contour integral, `∮_γ f(z) dz`.
+ *
+ * It is an expression rather than a statement because it *is* a value: the result
+ * is a complex number, and `∮_γ f(z) dz + 1` is as meaningful as `2 + 1`. That
+ * also makes GOAL.md 7.17 — comparing the integral against `2πi Σ Res` — something
+ * that can be written down rather than something the interface has to do for you.
+ *
+ * `path` is a **name**, not a subtree, following `CallNode.callee`: this tree
+ * references functions by name everywhere, and a path is a function of one real
+ * parameter. The consequence is deliberate and worth stating, because it is a real
+ * limit: the path has to be defined in the document, so a contour written inline is
+ * not expressible.
+ *
+ * `variable` is the integration variable, and it is **bound by this node**. That is
+ * the first binding form inside an expression — `FunctionDefinition.parameters` binds,
+ * but it is a statement — and it is why `collectVariableNames` cannot simply walk the
+ * children: `∮_γ f(z) dz` mentions `z` and is still a constant.
+ */
+export interface ContourIntegralNode {
+  readonly kind: 'contour-integral';
+  /** Name of the path function, resolved like any other function name. */
+  readonly path: string;
+  /** Where the path was written, so an unknown path can be pointed at. */
+  readonly pathSpan: SourceSpan;
+  /** The integration variable, bound here rather than free. */
+  readonly variable: string;
+  /** The integrand, a function of `variable`. */
+  readonly integrand: Expr;
+  readonly span: SourceSpan;
+}
+
 export type Expr =
   | NumberLiteralNode
   | VariableNode
@@ -91,7 +123,8 @@ export type Expr =
   | UnaryNode
   | BinaryNode
   | CallNode
-  | TupleNode;
+  | TupleNode
+  | ContourIntegralNode;
 
 export type ExprKind = Expr['kind'];
 
@@ -148,6 +181,8 @@ export function childNodes(expr: Expr): readonly Expr[] {
       return expr.args;
     case 'tuple':
       return expr.items;
+    case 'contour-integral':
+      return [expr.integrand];
   }
 }
 
@@ -157,16 +192,39 @@ export function walk(expr: Expr, visit: (node: Expr) => void): void {
   for (const child of childNodes(expr)) walk(child, visit);
 }
 
-/** Names of every variable mentioned in the expression, in first-appearance order. */
+/**
+ * Names of every *free* variable mentioned in the expression, in first-appearance
+ * order.
+ *
+ * Not a `walk`, although it is a traversal of the same children. A contour integral
+ * binds its integration variable, and a walk visits children uniformly and cannot say
+ * "stop counting this one". Getting that wrong is not a small error: `∮_γ f(z) dz` is
+ * a number, and if `z` came back free the line would be typed as a *function of z*and
+ * the whole feature would be a function where a value belongs.
+ *
+ * `childNodes` and `walk` stay shape-only on purpose — the printers, the lowerings and
+ * the app's "which parameters does this line use" all want to see inside an integrand.
+ */
 export function collectVariableNames(expr: Expr): string[] {
   const seen = new Set<string>();
   const ordered: string[] = [];
-  walk(expr, (node) => {
-    if (node.kind === 'variable' && !seen.has(node.name)) {
-      seen.add(node.name);
-      ordered.push(node.name);
+
+  const visit = (node: Expr, bound: ReadonlySet<string>): void => {
+    if (node.kind === 'variable') {
+      if (!bound.has(node.name) && !seen.has(node.name)) {
+        seen.add(node.name);
+        ordered.push(node.name);
+      }
+      return;
     }
-  });
+    if (node.kind === 'contour-integral') {
+      visit(node.integrand, new Set([...bound, node.variable]));
+      return;
+    }
+    for (const child of childNodes(node)) visit(child, bound);
+  };
+
+  visit(expr, new Set());
   return ordered;
 }
 

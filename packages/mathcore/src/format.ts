@@ -53,6 +53,11 @@ function precedenceOf(expr: Expr): number {
       return PRECEDENCE_ATOM;
     case 'unary':
       return PRECEDENCE_UNARY;
+    // Written out rather than left to the default below. The `∮` is self-delimiting —
+    // nothing binds more tightly into it — but a reader of this switch should be able
+    // to see that a decision was made, not guess that one was forgotten.
+    case 'contour-integral':
+      return PRECEDENCE_ATOM;
     default:
       return PRECEDENCE_ATOM;
   }
@@ -99,6 +104,14 @@ function print(expr: Expr, minimumPrecedence: number): string {
     case 'tuple': {
       const items = expr.items.map((item) => print(item, 0)).join(', ');
       return `(${items})`;
+    }
+
+    case 'contour-integral': {
+      // The integrand is printed one level tighter than a product, so a sum inside it
+      // is bracketed — `∮_γ (a + b) dz` — while `f(z)` stays bare. Without that the
+      // printed form would read as `∮_γ a + b dz`, which is a different expression.
+      const integrand = print(expr.integrand, PRECEDENCE_MULTIPLICATIVE + 1);
+      return `∮_${expr.path} ${integrand} d${expr.variable}`;
     }
   }
 }

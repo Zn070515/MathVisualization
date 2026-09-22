@@ -57,13 +57,44 @@ import { rationalFromLiteralText } from './rational';
 
 /** Greek commands, and the name each stands for. */
 const GREEK_COMMANDS: Readonly<Record<string, string>> = {
-  alpha: 'alpha', beta: 'beta', gamma: 'gamma', delta: 'delta', epsilon: 'epsilon',
-  varepsilon: 'varepsilon', zeta: 'zeta', eta: 'eta', theta: 'theta', vartheta: 'vartheta',
-  iota: 'iota', kappa: 'kappa', lambda: 'lambda', mu: 'mu', nu: 'nu', xi: 'xi',
-  pi: 'pi', rho: 'rho', sigma: 'sigma', varsigma: 'varsigma', tau: 'tau',
-  upsilon: 'upsilon', phi: 'phi', varphi: 'varphi', chi: 'chi', psi: 'psi', omega: 'omega',
-  Gamma: 'Gamma', Delta: 'Delta', Theta: 'Theta', Lambda: 'Lambda', Xi: 'Xi', Pi: 'Pi',
-  Sigma: 'Sigma', Upsilon: 'Upsilon', Phi: 'Phi', Psi: 'Psi', Omega: 'Omega',
+  alpha: 'alpha',
+  beta: 'beta',
+  gamma: 'gamma',
+  delta: 'delta',
+  epsilon: 'epsilon',
+  varepsilon: 'varepsilon',
+  zeta: 'zeta',
+  eta: 'eta',
+  theta: 'theta',
+  vartheta: 'vartheta',
+  iota: 'iota',
+  kappa: 'kappa',
+  lambda: 'lambda',
+  mu: 'mu',
+  nu: 'nu',
+  xi: 'xi',
+  pi: 'pi',
+  rho: 'rho',
+  sigma: 'sigma',
+  varsigma: 'varsigma',
+  tau: 'tau',
+  upsilon: 'upsilon',
+  phi: 'phi',
+  varphi: 'varphi',
+  chi: 'chi',
+  psi: 'psi',
+  omega: 'omega',
+  Gamma: 'Gamma',
+  Delta: 'Delta',
+  Theta: 'Theta',
+  Lambda: 'Lambda',
+  Xi: 'Xi',
+  Pi: 'Pi',
+  Sigma: 'Sigma',
+  Upsilon: 'Upsilon',
+  Phi: 'Phi',
+  Psi: 'Psi',
+  Omega: 'Omega',
 };
 
 /** The inverse, for printing: a name that must be written as a command. */
@@ -73,9 +104,16 @@ const GREEK_BY_NAME: Readonly<Record<string, string>> = Object.fromEntries(
 
 /** Commands that name a function the AST already knows. */
 const FUNCTION_COMMANDS: Readonly<Record<string, string>> = {
-  sin: 'sin', cos: 'cos', tan: 'tan',
-  sinh: 'sinh', cosh: 'cosh', tanh: 'tanh',
-  exp: 'exp', log: 'log', ln: 'log', sqrt: 'sqrt',
+  sin: 'sin',
+  cos: 'cos',
+  tan: 'tan',
+  sinh: 'sinh',
+  cosh: 'cosh',
+  tanh: 'tanh',
+  exp: 'exp',
+  log: 'log',
+  ln: 'log',
+  sqrt: 'sqrt',
 };
 
 /**
@@ -85,20 +123,44 @@ const FUNCTION_COMMANDS: Readonly<Record<string, string>> = {
  * mathematics writes them, and the AST knows them as `re` and `im`.
  */
 const OPERATOR_NAMES: Readonly<Record<string, string>> = {
-  Re: 're', Im: 'im', arg: 'arg', Arg: 'arg', conj: 'conj', sgn: 'sgn',
+  Re: 're',
+  Im: 'im',
+  arg: 'arg',
+  Arg: 'arg',
+  conj: 'conj',
+  sgn: 'sgn',
 };
 
 /** Sizing and spacing commands carry no mathematical content. */
 const IGNORED_COMMANDS = new Set([
-  'left', 'right', 'displaystyle', 'textstyle', 'limits', 'nolimits', '!',
-  ',', ';', ':', 'quad', 'qquad', 'enspace', 'thinspace', 'medspace', 'thickspace',
+  'left',
+  'right',
+  'displaystyle',
+  'textstyle',
+  'limits',
+  'nolimits',
+  '!',
+  ',',
+  ';',
+  ':',
+  'quad',
+  'qquad',
+  'enspace',
+  'thinspace',
+  'medspace',
+  'thickspace',
 ]);
 
 /** Function name to LaTeX, for printing. */
 const LATEX_BY_FUNCTION: Readonly<Record<string, string>> = {
-  sin: '\\sin', cos: '\\cos', tan: '\\tan',
-  sinh: '\\sinh', cosh: '\\cosh', tanh: '\\tanh',
-  exp: '\\exp', log: '\\log',
+  sin: '\\sin',
+  cos: '\\cos',
+  tan: '\\tan',
+  sinh: '\\sinh',
+  cosh: '\\cosh',
+  tanh: '\\tanh',
+  exp: '\\exp',
+  log: '\\log',
 };
 
 /** Function name to `\operatorname{...}`, for the ones without their own command. */
@@ -189,7 +251,10 @@ function tokenizeLatex(latex: string): Result<readonly LatexToken[], ParseError>
       index += 1;
       if (index >= latex.length) {
         // A trailing backslash is someone mid-typing a command.
-        return { ok: false, issue: incomplete({ start, end: index }, 'That command is unfinished.') };
+        return {
+          ok: false,
+          issue: incomplete({ start, end: index }, 'That command is unfinished.'),
+        };
       }
       let name = '';
       if (COMMAND_NAME.test(latex[index] as string)) {
@@ -214,7 +279,11 @@ function tokenizeLatex(latex: string): Result<readonly LatexToken[], ParseError>
         index += 1;
       }
       // A decimal point only belongs to the number when a digit follows.
-      if (latex[index] === '.' && index + 1 < latex.length && DIGIT.test(latex[index + 1] as string)) {
+      if (
+        latex[index] === '.' &&
+        index + 1 < latex.length &&
+        DIGIT.test(latex[index + 1] as string)
+      ) {
         text += '.';
         index += 1;
         while (index < latex.length && DIGIT.test(latex[index] as string)) {
@@ -326,7 +395,13 @@ class LatexParser {
     }
     return {
       ok: true,
-      value: { kind: 'function-definition', name, parameters, body: right.value, span } satisfies FunctionDefinition,
+      value: {
+        kind: 'function-definition',
+        name,
+        parameters,
+        body: right.value,
+        span,
+      } satisfies FunctionDefinition,
     };
   }
 
@@ -449,7 +524,10 @@ class LatexParser {
           ),
         };
       }
-      return { ok: true, value: { name: name.value.name, parameters: null, span: name.value.span } };
+      return {
+        ok: true,
+        value: { name: name.value.name, parameters: null, span: name.value.span },
+      };
     }
 
     parser.advance(); // (
@@ -457,7 +535,10 @@ class LatexParser {
     if (parser.peek()?.kind === 'parenClose') {
       return {
         ok: false,
-        issue: wrong(parser.peek()?.span ?? name.value.span, 'A definition needs at least one parameter.'),
+        issue: wrong(
+          parser.peek()?.span ?? name.value.span,
+          'A definition needs at least one parameter.',
+        ),
       };
     }
     for (;;) {
@@ -492,7 +573,11 @@ class LatexParser {
 
     return {
       ok: true,
-      value: { name: name.value.name, parameters, span: { start: name.value.span.start, end: parser.lastSpan().end } },
+      value: {
+        name: name.value.name,
+        parameters,
+        span: { start: name.value.span.start, end: parser.lastSpan().end },
+      },
     };
   }
 
@@ -528,14 +613,20 @@ class LatexParser {
     const subscript = this.readSubscript();
     if (!subscript.ok) return subscript;
     const name = subscript.value === null ? base : `${base}_${subscript.value}`;
-    return { ok: true, value: { name, span: { start: token.span.start, end: this.lastSpan().end } } };
+    return {
+      ok: true,
+      value: { name, span: { start: token.span.start, end: this.lastSpan().end } },
+    };
   }
 
   /** The `{...}` inside `\operatorname{...}`. */
   private readOperatorName(): Result<string, ParseError> {
     const open = this.peek();
     if (open?.kind !== 'braceOpen') {
-      return { ok: false, issue: incomplete(open?.span ?? this.lastSpan(), '\\operatorname needs a name.') };
+      return {
+        ok: false,
+        issue: incomplete(open?.span ?? this.lastSpan(), '\\operatorname needs a name.'),
+      };
     }
     this.advance();
 
@@ -543,7 +634,10 @@ class LatexParser {
     for (;;) {
       const token = this.peek();
       if (token === undefined) {
-        return { ok: false, issue: incomplete(open.span, '\\operatorname is missing its closing brace.') };
+        return {
+          ok: false,
+          issue: incomplete(open.span, '\\operatorname is missing its closing brace.'),
+        };
       }
       if (token.kind === 'braceClose') {
         this.advance();
@@ -585,7 +679,10 @@ class LatexParser {
       for (;;) {
         const token = this.peek();
         if (token === undefined) {
-          return { ok: false, issue: incomplete(marker.span, 'That subscript is missing its closing brace.') };
+          return {
+            ok: false,
+            issue: incomplete(marker.span, 'That subscript is missing its closing brace.'),
+          };
         }
         if (token.kind === 'braceClose') {
           this.advance();
@@ -628,6 +725,11 @@ class LatexParser {
         return '-';
       case 'slash':
         return '/';
+      case 'underscore':
+        // A subscript inside a subscript: `\gamma_1` is a name, and printing that name
+        // gives `\gamma_1` back, so refusing the inner `_` would make the printer
+        // produce LaTeX this parser cannot read.
+        return '_';
       case 'command': {
         const greek = GREEK_COMMANDS[token.text];
         return greek === undefined ? null : greek;
@@ -663,7 +765,10 @@ class LatexParser {
         if (right.issue.incomplete === true) {
           return {
             ok: false,
-            issue: incomplete({ start: token.span.start, end: this.lastSpan().end }, 'Waiting for the right-hand side.'),
+            issue: incomplete(
+              { start: token.span.start, end: this.lastSpan().end },
+              'Waiting for the right-hand side.',
+            ),
           };
         }
         return right;
@@ -726,6 +831,10 @@ class LatexParser {
           GREEK_COMMANDS[token.text] !== undefined ||
           FUNCTION_COMMANDS[token.text] !== undefined ||
           OPERATOR_NAMES[token.text] !== undefined ||
+          // Without this, `2\oint_...` does not multiply and the expression silently
+          // ends at the `2`, which reports as a trailing-token error pointing at the
+          // wrong thing.
+          token.text === 'oint' ||
           token.text === 'frac' ||
           token.text === 'sqrt' ||
           token.text === 'operatorname' ||
@@ -793,7 +902,10 @@ class LatexParser {
     if (token === undefined) {
       return {
         ok: false,
-        issue: incomplete({ start: this.lastSpan().end, end: this.lastSpan().end }, 'An expression was expected here.'),
+        issue: incomplete(
+          { start: this.lastSpan().end, end: this.lastSpan().end },
+          'An expression was expected here.',
+        ),
       };
     }
 
@@ -802,7 +914,10 @@ class LatexParser {
         this.advance();
         const value = rationalFromLiteralText(token.text);
         if (value === null) {
-          return { ok: false, issue: wrong(token.span, `The number ${token.text} is out of range.`) };
+          return {
+            ok: false,
+            issue: wrong(token.span, `The number ${token.text} is out of range.`),
+          };
         }
         return { ok: true, value: { kind: 'number', value, raw: token.text, span: token.span } };
       }
@@ -819,10 +934,16 @@ class LatexParser {
         if (!inner.ok) return inner;
         const close = this.peek();
         if (close?.kind !== 'braceClose') {
-          return { ok: false, issue: incomplete(token.span, 'That group is missing its closing brace.') };
+          return {
+            ok: false,
+            issue: incomplete(token.span, 'That group is missing its closing brace.'),
+          };
         }
         this.advance();
-        return { ok: true, value: { ...inner.value, span: { start: token.span.start, end: close.span.end } } };
+        return {
+          ok: true,
+          value: { ...inner.value, span: { start: token.span.start, end: close.span.end } },
+        };
       }
 
       case 'parenOpen':
@@ -836,7 +957,10 @@ class LatexParser {
         if (!inner.ok) return inner;
         const close = this.peek();
         if (close?.kind !== 'bar') {
-          return { ok: false, issue: incomplete(token.span, 'That absolute value is missing its closing bar.') };
+          return {
+            ok: false,
+            issue: incomplete(token.span, 'That absolute value is missing its closing bar.'),
+          };
         }
         this.advance();
         return {
@@ -872,7 +996,8 @@ class LatexParser {
 
     const name = named.value.name;
     const asConstant = BUILTIN_CONSTANT_NAMES.has(name);
-    const knownFunction = builtinFunction(name) !== undefined || this.context.knownFunctions.has(name);
+    const knownFunction =
+      builtinFunction(name) !== undefined || this.context.knownFunctions.has(name);
 
     if (knownFunction && this.peek()?.kind === 'parenOpen') {
       return this.parseCall(name, named.value.span);
@@ -892,6 +1017,128 @@ class LatexParser {
     };
   }
 
+  /**
+   * `\oint_{\gamma} f(z)\,dz`.
+   *
+   * The differential is found before the integrand is parsed, by a scan at brace
+   * depth zero over the tokens to come, and the integrand is then read by a second
+   * parser bounded at that point — the same mechanism `parseHead` uses for a
+   * definition. Order matters for the same reason it does on the plain-text side:
+   * parsed as an ordinary expression, `f(z)dz` would juxtapose-multiply into
+   * `f(z)·d·z` and the differential would be gone from the tree.
+   */
+  private parseContourIntegral(sign: LatexToken): Result<Expr, ParseError> {
+    this.advance();
+
+    const subscript = this.readSubscript();
+    if (!subscript.ok) return subscript;
+    if (subscript.value === null) {
+      return {
+        ok: false,
+        issue: wrong(
+          sign.span,
+          'A contour integral names its path, as in \\oint_{\\gamma} f(z)\\,dz.',
+        ),
+      };
+    }
+    const path = unwrapSubscript(subscript.value);
+
+    const differential = this.findDifferential();
+    if (!differential.ok) return differential;
+    if (differential.value === null) {
+      return {
+        ok: false,
+        issue: wrong(
+          this.peek()?.span ?? sign.span,
+          'A contour integral needs a differential saying what is integrated, as in \\oint_{\\gamma} f(z)\\,dz.',
+        ),
+      };
+    }
+
+    // A parser over the integrand's *own* tokens, and not over this one's bounded at
+    // that point: `end` limits where a parser stops, not where it starts, so a bounded
+    // parser would begin again at the `\oint` and read the whole integral as its own
+    // integrand. Slicing keeps the token spans absolute, so error positions are still
+    // positions in the source the user wrote.
+    const integrandTokens = this.tokens.slice(this.index, differential.value.index);
+    const inner = new LatexParser(integrandTokens, integrandTokens.length, this.context);
+    const integrand = inner.parseExpressionOnly();
+    if (!integrand.ok) {
+      return {
+        ok: false,
+        issue: wrong(
+          sign.span,
+          `The integrand of a contour integral is an expression in ${differential.value.variable}: ${integrand.issue.message}`,
+        ),
+      };
+    }
+
+    // `d` and its variable: two tokens, whichever way the space fell.
+    this.index = differential.value.index + 2;
+    const last = this.tokens[this.index - 1];
+    return {
+      ok: true,
+      value: {
+        kind: 'contour-integral',
+        path,
+        pathSpan: sign.span,
+        variable: differential.value.variable,
+        integrand: integrand.value,
+        span: { start: sign.span.start, end: last?.span.end ?? sign.span.end },
+      },
+    };
+  }
+
+  /**
+   * The `d` that ends the integrand, found by shape and brace depth.
+   *
+   * LaTeX writes the differential as two letters, `d` and the variable, so this is a
+   * two-token shape. A `\cdot` before it is caught and named: `f(z)\cdot dz` is a
+   * product its author meant, and saying so is better than a confusing failure inside
+   * the bounded integrand parse. `\mathrm{d}` is not read — `mathrm` is not part of
+   * this parser at all — so a document written that way gets "needs a differential",
+   * which is true and points at the right place.
+   */
+  private findDifferential(): Result<{ index: number; variable: string } | null, ParseError> {
+    let depth = 0;
+    for (let at = this.index; at < this.end; at += 1) {
+      const token = this.tokens[at] as LatexToken;
+      if (token.kind === 'braceOpen' || token.kind === 'parenOpen') {
+        depth += 1;
+        continue;
+      }
+      if (token.kind === 'braceClose' || token.kind === 'parenClose') {
+        depth -= 1;
+        if (depth < 0) break;
+        continue;
+      }
+      if (depth !== 0) continue;
+      if (token.kind !== 'letter' || token.text !== 'd') continue;
+
+      const next = this.tokens[at + 1];
+      if (next === undefined || next.kind !== 'letter') continue;
+
+      // The three multiplication commands, spelled out because `bindingFor` spells them
+      // out too: `\cdot` is not in `OPERATOR_NAMES`, since it is written rather than
+      // named.
+      const before = this.tokens[at - 1];
+      const multiplied =
+        before?.kind === 'command' &&
+        (before.text === 'cdot' || before.text === 'times' || before.text === 'ast');
+      if (multiplied && before !== undefined) {
+        return {
+          ok: false,
+          issue: wrong(
+            before.span,
+            `"d" multiplied by "${before.text}" is a product, not a differential. In a contour integral the differential stands beside the integrand: \\oint_{\\gamma} f(z)\\,dz.`,
+          ),
+        };
+      }
+      return { ok: true, value: { index: at, variable: canonicalName(next.text) } };
+    }
+    return { ok: true, value: null };
+  }
+
   private parseCommandAtom(): Result<Expr, ParseError> {
     const token = this.peek();
     if (token?.kind !== 'command') {
@@ -899,6 +1146,10 @@ class LatexParser {
     }
 
     const name = token.text;
+
+    if (name === 'oint') {
+      return this.parseContourIntegral(token);
+    }
 
     if (name === 'frac') {
       this.advance();
@@ -928,7 +1179,10 @@ class LatexParser {
         if (!inner.ok) return inner;
         const close = this.peek();
         if (close?.kind !== 'bracketClose') {
-          return { ok: false, issue: incomplete(open.span, 'That root index is missing its closing bracket.') };
+          return {
+            ok: false,
+            issue: incomplete(open.span, 'That root index is missing its closing bracket.'),
+          };
         }
         this.advance();
         degree = inner.value;
@@ -986,7 +1240,8 @@ class LatexParser {
       this.advance();
       const operatorName = this.readOperatorName();
       if (!operatorName.ok) return operatorName;
-      const mapped = OPERATOR_NAMES[operatorName.value] ?? canonicalName(operatorName.value.toLowerCase());
+      const mapped =
+        OPERATOR_NAMES[operatorName.value] ?? canonicalName(operatorName.value.toLowerCase());
       const span: SourceSpan = { start: token.span.start, end: this.lastSpan().end };
       if (this.peek()?.kind === 'parenOpen') return this.parseCall(mapped, span);
       return { ok: true, value: { kind: 'variable', name: mapped, span } };
@@ -1005,7 +1260,10 @@ class LatexParser {
       this.advance();
       const subscript = this.readSubscript();
       if (!subscript.ok) return subscript;
-      const full = subscript.value === null ? canonicalName(greek) : `${canonicalName(greek)}_${subscript.value}`;
+      const full =
+        subscript.value === null
+          ? canonicalName(greek)
+          : `${canonicalName(greek)}_${subscript.value}`;
       const span: SourceSpan = { start: token.span.start, end: this.lastSpan().end };
       return {
         ok: true,
@@ -1105,7 +1363,10 @@ class LatexParser {
   private parseRequiredGroup(what: string): Result<Expr, ParseError> {
     const open = this.peek();
     if (open?.kind !== 'braceOpen') {
-      return { ok: false, issue: incomplete(open?.span ?? this.lastSpan(), `That needs a ${what}.`) };
+      return {
+        ok: false,
+        issue: incomplete(open?.span ?? this.lastSpan(), `That needs a ${what}.`),
+      };
     }
     this.advance();
     const inner = this.parseExpression(0);
@@ -1117,7 +1378,10 @@ class LatexParser {
     }
     const close = this.peek();
     if (close?.kind !== 'braceClose') {
-      return { ok: false, issue: incomplete(open.span, `That ${what} is missing its closing brace.`) };
+      return {
+        ok: false,
+        issue: incomplete(open.span, `That ${what} is missing its closing brace.`),
+      };
     }
     this.advance();
     return { ok: true, value: inner.value };
@@ -1133,7 +1397,10 @@ class LatexParser {
   private parseParenthesisedResult(): Result<Expr, ParseError> {
     const open = this.peek();
     if (open?.kind !== 'parenOpen') {
-      return { ok: false, issue: wrong(open?.span ?? this.lastSpan(), 'Expected an opening parenthesis.') };
+      return {
+        ok: false,
+        issue: wrong(open?.span ?? this.lastSpan(), 'Expected an opening parenthesis.'),
+      };
     }
     this.advance();
 
@@ -1150,7 +1417,10 @@ class LatexParser {
 
     const close = this.peek();
     if (close?.kind !== 'parenClose') {
-      return { ok: false, issue: incomplete(open.span, 'That parenthesis is missing its closing partner.') };
+      return {
+        ok: false,
+        issue: incomplete(open.span, 'That parenthesis is missing its closing partner.'),
+      };
     }
     this.advance();
 
@@ -1177,7 +1447,10 @@ export function parseLatexStatement(
   const tokens = tokenizeLatex(latex);
   if (!tokens.ok) return tokens;
   if (tokens.value.length === 0) {
-    return { ok: false, issue: incomplete({ start: 0, end: latex.length }, 'Nothing has been written yet.') };
+    return {
+      ok: false,
+      issue: incomplete({ start: 0, end: latex.length }, 'Nothing has been written yet.'),
+    };
   }
   return new LatexParser(tokens.value, tokens.value.length, {
     knownFunctions: options.knownFunctions ?? new Set(),
@@ -1192,7 +1465,10 @@ export function parseLatexExpression(
   const tokens = tokenizeLatex(latex);
   if (!tokens.ok) return tokens;
   if (tokens.value.length === 0) {
-    return { ok: false, issue: incomplete({ start: 0, end: latex.length }, 'Nothing has been written yet.') };
+    return {
+      ok: false,
+      issue: incomplete({ start: 0, end: latex.length }, 'Nothing has been written yet.'),
+    };
   }
   return new LatexParser(tokens.value, tokens.value.length, {
     knownFunctions: options.knownFunctions ?? new Set(),
@@ -1249,6 +1525,10 @@ function latexPrecedenceOf(expr: Expr): number {
       return 100;
     case 'unary':
       return LATEX_PRECEDENCE_UNARY;
+    // Written out rather than left to the default below, so that a reader can see the
+    // decision rather than guess that it was forgotten.
+    case 'contour-integral':
+      return 100;
     default:
       return 100;
   }
@@ -1265,6 +1545,19 @@ function wrapSubscript(text: string): string {
   return /^[A-Za-z0-9]+$/.test(text) ? text : `{${text}}`;
 }
 
+/**
+ * The reverse, for the one subscript that is not part of a name.
+ *
+ * A subscript on an operator is a *whole* name rather than a suffix: `\oint_{\gamma}`
+ * is the contour `gamma`, not a name `gamma` with something attached. `readSubscript`
+ * returns the braced form a name wants, so it is unwrapped here — which is what makes
+ * `\oint_{\gamma}` and `∮_gamma` produce the same path, and what makes
+ * `nameToLatex('gamma')` print `\gamma` back.
+ */
+function unwrapSubscript(text: string): string {
+  return text.startsWith('{') && text.endsWith('}') ? text.slice(1, -1) : text;
+}
+
 /** A variable name as LaTeX: Greek names become commands, subscripts get braces. */
 function nameToLatex(name: string): string {
   const underscore = name.indexOf('_');
@@ -1277,9 +1570,7 @@ function nameToLatex(name: string): string {
   if (subscript === null) return renderedBase;
   // Already braced, and a single character needs none.
   if (subscript.startsWith('{') && subscript.endsWith('}')) return `${renderedBase}_${subscript}`;
-  return subscript.length === 1
-    ? `${renderedBase}_${subscript}`
-    : `${renderedBase}_{${subscript}}`;
+  return subscript.length === 1 ? `${renderedBase}_${subscript}` : `${renderedBase}_{${subscript}}`;
 }
 
 function printLatex(expr: Expr, minimumPrecedence: number): string {
@@ -1368,6 +1659,14 @@ function printLatex(expr: Expr, minimumPrecedence: number): string {
 
     case 'tuple':
       return `\\left(${expr.items.map((item) => printLatex(item, 0)).join(', ')}\\right)`;
+
+    case 'contour-integral': {
+      // `\,` between the integrand and the differential is the conventional thin space,
+      // and it is what stops `dz` reading as part of the integrand. The integrand is
+      // printed at minimum precedence so that a sum inside it is braced.
+      const integrand = printLatex(expr.integrand, 1);
+      return `\\oint_{${nameToLatex(expr.path)}}${integrand}\\,d${nameToLatex(expr.variable)}`;
+    }
   }
 }
 
@@ -1436,6 +1735,7 @@ export const LATEX_KNOWN_COMMANDS: ReadonlySet<string> = new Set([
   ...Object.keys(OPERATOR_NAMES),
   ...IGNORED_COMMANDS,
   // Structural commands.
+  'oint',
   'frac',
   'sqrt',
   'overline',

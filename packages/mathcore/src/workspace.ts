@@ -21,20 +21,10 @@
  *   documented naming table. This is what lets the expression-first interaction
  *   work: the user writes mathematics and the system works out what it is.
  */
-import {
-  type Expr,
-  type Statement,
-  collectVariableNames,
-} from './ast';
+import { type Expr, type Statement, collectVariableNames } from './ast';
 import { type Complex, cx, isZero } from './complex';
 import { spaceNameForVariable } from './conventions';
-import {
-  type MathIssue,
-  type ParseError,
-  type Result,
-  fail,
-  ok,
-} from './errors';
+import { type MathIssue, type ParseError, type Result, fail, ok } from './errors';
 import {
   type EvaluationEnvironment,
   type UserFunctionDefinition,
@@ -427,7 +417,10 @@ function analyzeStatement(
     // The signature was already resolved; report the definition's own type.
     const signature = signatures.get(statement.name);
     if (signature === undefined) {
-      return { type: null, issue: unresolvedDefinitionIssue(statement, failures.get(statement.name)) };
+      return {
+        type: null,
+        issue: unresolvedDefinitionIssue(statement, failures.get(statement.name)),
+      };
     }
     const context: InferenceContext = {
       variables: new Map([
@@ -448,7 +441,16 @@ function analyzeStatement(
   }
 
   // A bare expression: it is a function of its free variables.
-  const freeNames = collectVariableNames(statement.body);
+  //
+  // A name bound as a parameter is not free. Until this filter the two were the same,
+  // and a line such as `a*z` with `a = 2` came out as a function of a real *and* a
+  // complex variable, failing as a mixed domain — which is what it looks like and not
+  // what it is. It matters more now that `∮_γ a*z dz` is a value whose only dependence
+  // on `a` is through the parameter: without the filter that line would be typed as a
+  // function of `a`, and a value would be presented as something to plot.
+  const freeNames = collectVariableNames(statement.body).filter(
+    (name) => !parameterValues.has(name),
+  );
   const context: InferenceContext = {
     variables: new Map([
       ...valueVariables,
@@ -482,7 +484,10 @@ function analyzeStatement(
   );
   if (!domain.ok) return { type: null, issue: domain.issue };
 
-  return { type: classifySignatureWith({ domain: domain.value, codomain: codomain.value }), issue: null };
+  return {
+    type: classifySignatureWith({ domain: domain.value, codomain: codomain.value }),
+    issue: null,
+  };
 }
 
 /**
@@ -545,11 +550,7 @@ export function evaluateParameterExpression(
   expression: Expr,
   overrides: ReadonlyMap<string, number> = new Map(),
 ): Result<number, MathIssue> {
-  const environment = workspaceEnvironment(
-    workspace,
-    overrides,
-    new Map<string, Complex>(),
-  );
+  const environment = workspaceEnvironment(workspace, overrides, new Map<string, Complex>());
   const result = evaluate(expression, environment);
   if (!result.ok) return result;
   if (result.value.kind !== 'scalar') {

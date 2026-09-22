@@ -18,13 +18,7 @@ import { canonicalName } from './builtins';
 import { rationalFromLiteralText } from './rational';
 
 export type TokenType =
-  | 'number'
-  | 'name'
-  | 'operator'
-  | 'lparen'
-  | 'rparen'
-  | 'comma'
-  | 'equals';
+  'number' | 'name' | 'operator' | 'lparen' | 'rparen' | 'comma' | 'equals' | 'integral';
 
 export interface Token {
   readonly type: TokenType;
@@ -38,6 +32,33 @@ const IDENTIFIER_START = /[\p{L}_]/u;
 const IDENTIFIER_PART = /[\p{L}\p{N}_]/u;
 const DIGIT = /[0-9]/;
 const OPERATORS = new Set(['+', '-', '*', '/', '^']);
+
+/**
+ * `∮`, which is the one piece of notation in this language that is a construct rather
+ * than a value.
+ *
+ * It gets its own token kind and deliberately not a place in `OPERATORS`: that set
+ * feeds the parser's infix table, where an entry with no binding rule silently becomes
+ * `null` and then a confusing "unexpected token". A distinct kind means the parser can
+ * only handle it where it is handled, and nowhere else by accident.
+ */
+const INTEGRAL_SIGN = '∮';
+
+/**
+ * Notation this project knows about and has not built.
+ *
+ * The lexer's contract is to accept what the language is, so these are errors — but
+ * the message says which kind of error, rather than "unexpected character" for
+ * something a reader will recognise instantly and expect to work.
+ */
+const NOT_YET_READ = new Map<string, string>([
+  ['∫', 'a plain integral, as opposed to a closed one'],
+  ['∬', 'a double integral'],
+  ['∭', 'a triple integral'],
+  ['∂', 'a partial derivative'],
+  ['∇', 'the gradient operator'],
+  ['∑', 'a sum'],
+]);
 
 function isWhitespace(character: string): boolean {
   return character === ' ' || character === '\t' || character === '\n' || character === '\r';
@@ -119,6 +140,24 @@ export function tokenize(source: string): Result<readonly Token[], ParseError> {
       tokens.push({ type: 'equals', text: character, start, end: index + 1 });
       index += 1;
       continue;
+    }
+
+    if (character === INTEGRAL_SIGN) {
+      tokens.push({ type: 'integral', text: character, start, end: index + 1 });
+      index += 1;
+      continue;
+    }
+
+    const notYetRead = NOT_YET_READ.get(character);
+    if (notYetRead !== undefined) {
+      return {
+        ok: false,
+        issue: {
+          kind: 'parse-error',
+          message: `"${character}" is recognised as ${notYetRead}, and this language does not read it yet.`,
+          span: { start, end: index + 1 },
+        },
+      };
     }
 
     return {

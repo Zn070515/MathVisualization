@@ -34,16 +34,69 @@ import {
 
 /** Python keywords and names that a lowered symbol must not collide with. */
 const PYTHON_RESERVED = new Set([
-  'False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 'break', 'class', 'continue',
-  'def', 'del', 'elif', 'else', 'except', 'finally', 'for', 'from', 'global', 'if', 'import',
-  'in', 'is', 'lambda', 'nonlocal', 'not', 'or', 'pass', 'raise', 'return', 'try', 'while',
-  'with', 'yield',
+  'False',
+  'None',
+  'True',
+  'and',
+  'as',
+  'assert',
+  'async',
+  'await',
+  'break',
+  'class',
+  'continue',
+  'def',
+  'del',
+  'elif',
+  'else',
+  'except',
+  'finally',
+  'for',
+  'from',
+  'global',
+  'if',
+  'import',
+  'in',
+  'is',
+  'lambda',
+  'nonlocal',
+  'not',
+  'or',
+  'pass',
+  'raise',
+  'return',
+  'try',
+  'while',
+  'with',
+  'yield',
 ]);
 
 /** SymPy names that the lowering relies on; a symbol may not shadow them. */
 const SYMPY_RESERVED = new Set([
-  'pi', 'E', 'I', 'Rational', 'sin', 'cos', 'tan', 'sinh', 'cosh', 'tanh', 'exp', 'log', 'sqrt',
-  'Abs', 'arg', 're', 'im', 'conjugate', 'Matrix', 'sympify', 'Symbol', 'oo', 'nan', 'zoo',
+  'pi',
+  'E',
+  'I',
+  'Rational',
+  'sin',
+  'cos',
+  'tan',
+  'sinh',
+  'cosh',
+  'tanh',
+  'exp',
+  'log',
+  'sqrt',
+  'Abs',
+  'arg',
+  're',
+  'im',
+  'conjugate',
+  'Matrix',
+  'sympify',
+  'Symbol',
+  'oo',
+  'nan',
+  'zoo',
 ]);
 
 const SYMPY_FUNCTION_NAMES: Readonly<Record<string, string>> = {
@@ -231,6 +284,22 @@ function lower(expr: Expr, symbols: Map<string, string>): Result<string, MathIss
       }
       return ok(`Matrix([${parts.join(', ')}])`);
     }
+
+    case 'contour-integral':
+      // Refused, and deliberately not half-done. The honest SymPy form is
+      // `Integral(f(gamma(t))*Derivative(gamma(t), t), (t, 0, 2*pi))`, but the path is a
+      // *function of the document* and `sympyPreamble` declares symbols, not functions.
+      // Emitting it before that is solved would put an undeclared name on the far side
+      // of the engine boundary — which is what this module's contract forbids: an
+      // undeclared name is reported, never passed through. The integral is computed
+      // numerically instead, and that is a complete answer rather than a placeholder.
+      return fail({
+        kind: 'unsupported',
+        detail: 'Contour integral handed to the symbolic engine',
+        message:
+          'A contour integral is evaluated numerically, so the symbolic engine is not given it. The number beside the line is a quadrature, and it states how accurate it is.',
+        span: expr.span,
+      });
   }
 }
 
@@ -300,6 +369,13 @@ function collectFreeNames(expr: Expr): string[] {
         break;
       case 'tuple':
         for (const item of node.items) visit(item);
+        break;
+      case 'contour-integral':
+        // The integration variable is bound by the node, so it is not a free name — but
+        // everything *else* in the integrand still is, and this visitor's `default` is a
+        // silent `break`. Without this case a parameter mentioned inside an integrand
+        // would never reach `symbols`, and the lowering would quietly omit it.
+        visit(node.integrand);
         break;
       default:
         break;

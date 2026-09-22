@@ -331,6 +331,19 @@ class Lowering {
             'This view shows a single complex value at each point, so it cannot display a list-valued expression yet.',
           span: expr.span,
         });
+
+      case 'contour-integral':
+        // Not "not yet" — never. A fragment shader evaluates a function at every pixel,
+        // and a contour integral is not a function of the pixel: it is one number,
+        // computed once. Lowering it would mean integrating per fragment, which is both
+        // absurd and wrong.
+        return fail({
+          kind: 'unsupported',
+          detail: 'Contour integral lowered to a shader',
+          message:
+            'A contour integral is one number rather than a value at each point of the plane, so this view cannot draw it. Its value belongs beside the line that asked for it.',
+          span: expr.span,
+        });
     }
   }
 

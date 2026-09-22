@@ -28,12 +28,7 @@
  * `^` (right associative). So `-z^2` is `-(z^2)` and `2^-3` is well formed.
  * Because implicit multiplication has the precedence of `*`, `2z^2` is `2*(z^2)`.
  */
-import {
-  type BinaryOperator,
-  type Expr,
-  type Statement,
-  type UnaryOperator,
-} from './ast';
+import { type BinaryOperator, type Expr, type Statement, type UnaryOperator } from './ast';
 import { BUILTIN_CONSTANT_NAMES } from './conventions';
 import { BUILTIN_FUNCTION_NAMES } from './builtins';
 import { type ParseError, type Result, span } from './errors';
@@ -219,6 +214,22 @@ class Parser {
     return { name: nameToken.text, parameters };
   }
 
+  /**
+   * Parse every remaining token as one expression.
+   *
+   * Used for the integrand of a contour integral, which is parsed by a second parser
+   * over a slice of this one's tokens — the same mechanism `LatexParser` uses for a
+   * definition head, and the reason the differential can be found before the
+   * expression that precedes it is parsed.
+   */
+  parseWholeExpression(): Result<Expr, ParseError> {
+    const body = this.parseExpressionResult(0);
+    if (!body.ok) return body;
+    const trailing = this.trailingError();
+    if (trailing !== null) return { ok: false, issue: trailing };
+    return body;
+  }
+
   private trailingError(): ParseError | null {
     const token = this.peek();
     if (token === undefined) return null;
@@ -278,15 +289,40 @@ class Parser {
     if (token.type === 'operator') {
       switch (token.text) {
         case '+':
-          return { op: 'add', precedence: PRECEDENCE_ADDITIVE, rightAssociative: false, consumesToken: true };
+          return {
+            op: 'add',
+            precedence: PRECEDENCE_ADDITIVE,
+            rightAssociative: false,
+            consumesToken: true,
+          };
         case '-':
-          return { op: 'sub', precedence: PRECEDENCE_ADDITIVE, rightAssociative: false, consumesToken: true };
+          return {
+            op: 'sub',
+            precedence: PRECEDENCE_ADDITIVE,
+            rightAssociative: false,
+            consumesToken: true,
+          };
         case '*':
-          return { op: 'mul', precedence: PRECEDENCE_MULTIPLICATIVE, rightAssociative: false, consumesToken: true };
+          return {
+            op: 'mul',
+            precedence: PRECEDENCE_MULTIPLICATIVE,
+            rightAssociative: false,
+            consumesToken: true,
+          };
         case '/':
-          return { op: 'div', precedence: PRECEDENCE_MULTIPLICATIVE, rightAssociative: false, consumesToken: true };
+          return {
+            op: 'div',
+            precedence: PRECEDENCE_MULTIPLICATIVE,
+            rightAssociative: false,
+            consumesToken: true,
+          };
         case '^':
-          return { op: 'pow', precedence: PRECEDENCE_POWER, rightAssociative: true, consumesToken: true };
+          return {
+            op: 'pow',
+            precedence: PRECEDENCE_POWER,
+            rightAssociative: true,
+            consumesToken: true,
+          };
         default:
           return null;
       }
@@ -315,7 +351,10 @@ class Parser {
       if (value === null) {
         return {
           ok: false,
-          issue: this.errorAt(token, `The number ${token.text} is outside the representable range.`),
+          issue: this.errorAt(
+            token,
+            `The number ${token.text} is outside the representable range.`,
+          ),
         };
       }
       return {
@@ -329,11 +368,28 @@ class Parser {
       };
     }
 
+    if (token.type === 'integral') {
+      return this.parseContourIntegral(token);
+    }
+
     if (token.type === 'name') {
       this.advance();
       const next = this.peek();
       if (next?.type === 'lparen' && this.knownFunctions.has(token.text)) {
         return this.parseCall(token);
+      }
+      // A leading underscore is how a contour is named after the `∮`, and nowhere
+      // else. Without this, `_gamma` would go to the juxtaposed-letters rule and
+      // quietly become `_ · g · a · m · m · a`, which is a wrong answer rather than a
+      // message.
+      if (token.text.startsWith('_')) {
+        return {
+          ok: false,
+          issue: this.errorAt(
+            token,
+            'A name beginning with an underscore names a contour, and only after ∮ — as in ∮_gamma f(z) dz.',
+          ),
+        };
       }
       if (BUILTIN_CONSTANT_NAMES.has(token.text)) {
         return {
@@ -386,7 +442,137 @@ class Parser {
       return this.parseParenthesised(token);
     }
 
-    return { ok: false, issue: this.errorAt(token, `Expected an expression, found "${token.text}".`) };
+    return {
+      ok: false,
+      issue: this.errorAt(token, `Expected an expression, found "${token.text}".`),
+    };
+  }
+
+  /**
+   * `∮_gamma f(z) dz`.
+   *
+   * The differential is looked for *first*, by a scan at bracket depth zero, and the
+   * integrand is then parsed by a second parser over the tokens that precede it. The
+   * order matters: without it the ordinary expression parser would swallow `dz` as a
+   * factor — juxtaposition multiplies, so `f(z) dz` reads as `f(z)·d·z` — and the
+   * differential would have to be recognised after the fact, from a tree that no
+   * longer contains it.
+   *
+   * The alternative, teaching the *lexer* that `d` followed by a letter is a
+   * differential, was rejected: it would change the meaning of the documented variable
+   * `d` in every line of every workspace, and `d(x)` would stay a product while `dx`
+   * would not. Confining the rule to this construct keeps the rest of the language
+   * exactly as it was.
+   */
+  private parseContourIntegral(sign: Token): Result<Expr, ParseError> {
+    this.advance();
+
+    const nameToken = this.peek();
+    if (nameToken === undefined || nameToken.type !== 'name') {
+      return {
+        ok: false,
+        issue: this.errorAt(nameToken, 'A contour integral names its path, as in ∮_gamma f(z) dz.'),
+      };
+    }
+    this.advance();
+    const path = nameToken.text.startsWith('_') ? nameToken.text.slice(1) : nameToken.text;
+    if (path === '') {
+      return {
+        ok: false,
+        issue: this.errorAt(nameToken, 'A contour is named after the ∮, as in ∮_gamma f(z) dz.'),
+      };
+    }
+
+    const found = this.findDifferential();
+    if (!found.ok) return found;
+    if (found.value === null) {
+      return {
+        ok: false,
+        issue: this.errorAt(
+          this.peek(),
+          'A contour integral needs a differential saying what is integrated, as in ∮_gamma f(z) dz.',
+        ),
+      };
+    }
+    const differential = found.value;
+
+    const integrandTokens = this.tokens.slice(this.index, differential.index);
+    const inner = new Parser(integrandTokens, this.source, {
+      knownFunctions: this.knownFunctions,
+      // The integration variable is bound by the integral, so inside the integrand it
+      // is a name like any other bound name.
+      knownValues: new Set([...this.knownValues, differential.variable]),
+    });
+    const integrand = inner.parseWholeExpression();
+    if (!integrand.ok) {
+      return {
+        ok: false,
+        issue: this.errorAt(
+          integrandTokens[0] ?? sign,
+          `The integrand of a contour integral is an expression in ${differential.variable}: ${integrand.issue.message}`,
+        ),
+      };
+    }
+
+    this.index = differential.index + differential.length;
+    const last = this.tokens[this.index - 1];
+    return {
+      ok: true,
+      value: {
+        kind: 'contour-integral',
+        path,
+        pathSpan: span(nameToken.start, nameToken.end),
+        variable: differential.variable,
+        integrand: integrand.value,
+        span: span(sign.start, last?.end ?? sign.end),
+      },
+    };
+  }
+
+  /**
+   * The differential that ends the integrand, found by shape and bracket depth.
+   *
+   * Depth matters: in `∮_γ f(g(dz)) dz` the inner `dz` is inside brackets and is part
+   * of the integrand, not the differential. An operator immediately before the
+   * differential is the other case worth catching — `f(z)*dz` is someone writing the
+   * product they mean, and saying so is better than letting the integrand parse fail
+   * somewhere confusing.
+   */
+  private findDifferential(): Result<
+    { index: number; variable: string; length: number } | null,
+    ParseError
+  > {
+    let depth = 0;
+    for (let scan = this.index; scan < this.tokens.length; scan += 1) {
+      const token = this.tokens[scan];
+      if (token === undefined) break;
+      if (token.type === 'lparen') {
+        depth += 1;
+        continue;
+      }
+      if (token.type === 'rparen') {
+        depth -= 1;
+        if (depth < 0) break;
+        continue;
+      }
+      if (depth !== 0) continue;
+
+      const spelled = differentialAt(token, this.tokens[scan + 1]);
+      if (spelled === null) continue;
+
+      const before = this.tokens[scan - 1];
+      if (before !== undefined && before.type === 'operator') {
+        return {
+          ok: false,
+          issue: this.errorAt(
+            before,
+            `"${token.text}" multiplied by "${before.text}" is a product, not a differential. In a contour integral the differential stands beside the integrand: ∮_gamma f(z) dz.`,
+          ),
+        };
+      }
+      return { ok: true, value: { index: scan, ...spelled } };
+    }
+    return { ok: true, value: null };
   }
 
   /**
@@ -540,6 +726,26 @@ export function detectDefinitionHeader(
 
   if (list[index]?.type !== 'equals') return null;
   return { name: nameToken.text, parameters };
+}
+
+/**
+ * The integration variable, if these tokens spell a differential.
+ *
+ * Two spellings for one thing, because the lexer reads a maximal run of letters as a
+ * single token: `dz` arrives as one name and `d z` as two. Reading both is what keeps
+ * the plain and LaTeX front ends agreeing, since `d z` is two letters on the LaTeX
+ * side no matter how it was written.
+ */
+function differentialAt(
+  token: Token,
+  next: Token | undefined,
+): { variable: string; length: number } | null {
+  if (token.type !== 'name') return null;
+  if (/^d[A-Za-z]$/.test(token.text)) return { variable: token.text.slice(1), length: 1 };
+  if (token.text === 'd' && next?.type === 'name' && /^[A-Za-z]$/.test(next.text)) {
+    return { variable: next.text, length: 2 };
+  }
+  return null;
 }
 
 /**

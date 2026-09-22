@@ -79,7 +79,10 @@ function unboundSymbol(name: string, expr: Expr): MathIssue {
  * arguments, or a call to something that is not a function all produce an issue
  * carrying a mathematical explanation.
  */
-export function inferSpace(expr: Expr, context: InferenceContext = EMPTY_CONTEXT): Result<Space, MathIssue> {
+export function inferSpace(
+  expr: Expr,
+  context: InferenceContext = EMPTY_CONTEXT,
+): Result<Space, MathIssue> {
   switch (expr.kind) {
     case 'number':
       return ok(R1);
@@ -101,6 +104,42 @@ export function inferSpace(expr: Expr, context: InferenceContext = EMPTY_CONTEXT
       const bound = context.variables.get(expr.name);
       if (bound === undefined) return fail(unboundSymbol(expr.name, expr));
       return ok(bound);
+    }
+
+    case 'contour-integral': {
+      // The path has to be a function of one real parameter. A function of a complex
+      // variable is not a contour — it is a map of the plane — and saying which is
+      // wrong is the whole of what this check is for.
+      const path = context.functions.get(expr.path);
+      if (path === undefined) {
+        return fail({
+          kind: 'unknown-function',
+          name: expr.path,
+          message: `"${expr.path}" is not a function, so it cannot be the path of a contour integral. A path is a function of one real parameter, as in ${expr.path}(t) = ....`,
+          span: expr.pathSpan,
+        });
+      }
+      if (path.domain.kind !== 'R' || path.domain.dim !== 1) {
+        return fail({
+          kind: 'dimension-mismatch',
+          message: `A contour is parameterised by one real variable, and "${expr.path}" is a function of ${spaceToString(path.domain)}.`,
+          span: expr.pathSpan,
+        });
+      }
+
+      // The integrand is checked with the integration variable bound to the plane: it
+      // is a complex variable whatever it is called, because that is what a contour
+      // integral integrates over.
+      const integrand = inferSpace(expr.integrand, {
+        variables: new Map([...context.variables, [expr.variable, C1]]),
+        functions: context.functions,
+      });
+      if (!integrand.ok) return integrand;
+
+      // A complex number, always. The integral of a real-valued integrand along a path
+      // is complex in general, and typing it real because the integrand looked real
+      // would be wrong for every contour that is not the real axis.
+      return ok(C1);
     }
 
     case 'unary':
@@ -166,7 +205,11 @@ export function inferSpace(expr: Expr, context: InferenceContext = EMPTY_CONTEXT
   }
 }
 
-function inferPowerSpace(baseExpr: Expr, exponentExpr: Expr, context: InferenceContext): Result<Space, MathIssue> {
+function inferPowerSpace(
+  baseExpr: Expr,
+  exponentExpr: Expr,
+  context: InferenceContext,
+): Result<Space, MathIssue> {
   const base = inferSpace(baseExpr, context);
   if (!base.ok) return base;
   const exponent = inferSpace(exponentExpr, context);

@@ -50,6 +50,7 @@ import {
   principalArg,
 } from './complex';
 import { builtinConstant } from './conventions';
+import { contourIntegral } from './contour';
 import { fail, ok, type MathIssue, type Result } from './errors';
 import { exprToText } from './format';
 import { rationalToNumber } from './rational';
@@ -113,15 +114,27 @@ export function asComponents(value: Value): readonly Complex[] | null {
 const MAXIMUM_DEPTH = 256;
 
 /**
+ * How deeply contour integrals may nest inside one another.
+ *
+ * Separate from `MAXIMUM_DEPTH` because the two guards stop different things, and the
+ * depth guard does not stop this one. `g(z) = ∮_γ g(w) dw` is not a stack overflow:
+ * each level costs about two thousand evaluations, so the *time* runs away long before
+ * the call stack does, and a guard counting call frames would never fire.
+ */
+const MAXIMUM_CONTOUR_DEPTH = 4;
+
+/**
  * Evaluate an expression.
  *
  * The optional `depth` is threaded through recursive calls so that a circular
- * definition is reported rather than overflowing the stack.
+ * definition is reported rather than overflowing the stack. `contourDepth` is the
+ * same idea for a different resource — see {@link MAXIMUM_CONTOUR_DEPTH}.
  */
 export function evaluate(
   expr: Expr,
   environment: EvaluationEnvironment = EMPTY_ENVIRONMENT,
   depth = 0,
+  contourDepth = 0,
 ): Result<Value, MathIssue> {
   if (depth > MAXIMUM_DEPTH) {
     return fail({
@@ -135,6 +148,9 @@ export function evaluate(
   switch (expr.kind) {
     case 'number':
       return ok(scalarValue(cx(rationalToNumber(expr.value), 0)));
+
+    case 'contour-integral':
+      return evaluateContour(expr, environment, depth, contourDepth);
 
     case 'constant': {
       const constant = builtinConstant(expr.name);
@@ -305,10 +321,16 @@ function multiplyValues(
     return ok(scalarValue(cmul(left.value, right.value)));
   }
   if (left.kind === 'scalar' && right.kind === 'tuple') {
-    return ok({ kind: 'tuple', items: right.items.map((item) => mapValue(item, (z) => cmul(left.value, z))) });
+    return ok({
+      kind: 'tuple',
+      items: right.items.map((item) => mapValue(item, (z) => cmul(left.value, z))),
+    });
   }
   if (left.kind === 'tuple' && right.kind === 'scalar') {
-    return ok({ kind: 'tuple', items: left.items.map((item) => mapValue(item, (z) => cmul(z, right.value))) });
+    return ok({
+      kind: 'tuple',
+      items: left.items.map((item) => mapValue(item, (z) => cmul(z, right.value))),
+    });
   }
   // Two lists multiplied together is ambiguous: it could be a dot product, a
   // cross product, or an outer product. Choosing one silently would be wrong.
@@ -341,7 +363,10 @@ function divideValues(
   }
   if (left.kind === 'tuple' && right.kind === 'scalar') {
     const divisor = right.value;
-    return ok({ kind: 'tuple', items: left.items.map((item) => mapValue(item, (z) => cdiv(z, divisor))) });
+    return ok({
+      kind: 'tuple',
+      items: left.items.map((item) => mapValue(item, (z) => cdiv(z, divisor))),
+    });
   }
   return fail({
     kind: 'unsupported',
@@ -349,6 +374,103 @@ function divideValues(
     message: 'A list cannot be used as a divisor.',
     span: expr.span,
   });
+}
+
+/**
+ * A contour integral, computed by `contour.ts`.
+ *
+ * The two callbacks are the whole of the connection: `contourIntegral` knows about
+ * quadrature and nothing about this tree, and this function knows about the tree and
+ * nothing about quadrature. That is the same arrangement `zerosAndPoles.ts` has, and it
+ * is why the integral composes — a contour integral is a scalar like any other, so
+ * `∮_γ f(z) dz + 1` is an ordinary expression.
+ *
+ * The cost is real and worth stating: a path and an integrand evaluated on a grid of
+ * a few thousand points, twice over for the error estimate.
+ */
+function evaluateContour(
+  expr: Extract<Expr, { kind: 'contour-integral' }>,
+  environment: EvaluationEnvironment,
+  depth: number,
+  contourDepth: number,
+): Result<Value, MathIssue> {
+  if (contourDepth >= MAXIMUM_CONTOUR_DEPTH) {
+    return fail({
+      kind: 'unsupported',
+      detail: `Contour integrals nested ${contourDepth + 1} deep`,
+      message: `A contour integral inside the integrand of another one is not supported: it would cost a whole integration for every sample of the outer one.`,
+      span: expr.span,
+    });
+  }
+
+  const path = environment.functions.get(expr.path);
+  if (path === undefined) {
+    return fail({
+      kind: 'unknown-function',
+      name: expr.path,
+      message: `"${expr.path}" is not a function, so it cannot be the path of a contour integral.`,
+      span: expr.pathSpan,
+    });
+  }
+
+  const parameter = path.parameters[0];
+  if (path.parameters.length !== 1 || parameter === undefined) {
+    return fail({
+      kind: 'arity-mismatch',
+      name: expr.path,
+      expected: 1,
+      received: path.parameters.length,
+      message: `A contour is a function of one real parameter, and "${expr.path}" takes ${path.parameters.length}.`,
+      span: expr.pathSpan,
+    });
+  }
+
+  const innerFunctions = environment.functions;
+  const atParameter = (t: number): Result<Complex, MathIssue> => {
+    const value = evaluate(
+      path.body,
+      {
+        values: new Map([...environment.values, [parameter, cx(t, 0)]]),
+        functions: innerFunctions,
+      },
+      depth + 1,
+      contourDepth + 1,
+    );
+    if (!value.ok) return value;
+    const scalar = asComplex(value.value);
+    return scalar === null
+      ? fail({
+          kind: 'unsupported',
+          detail: 'A path returned a list',
+          message: `"${expr.path}" has to take a single complex value, not a list.`,
+          span: expr.pathSpan,
+        })
+      : ok(scalar);
+  };
+
+  const atPoint = (z: Complex): Result<Complex, MathIssue> => {
+    const value = evaluate(
+      expr.integrand,
+      { values: new Map([...environment.values, [expr.variable, z]]), functions: innerFunctions },
+      depth + 1,
+      contourDepth + 1,
+    );
+    if (!value.ok) return value;
+    const scalar = asComplex(value.value);
+    return scalar === null
+      ? fail({
+          kind: 'unsupported',
+          detail: 'The integrand returned a list',
+          message:
+            'The integrand of a contour integral has to take a single complex value, not a list.',
+          span: expr.integrand.span,
+        })
+      : ok(scalar);
+  };
+
+  const integrated = contourIntegral({ path: atParameter, integrand: atPoint });
+  if (!integrated.ok) return fail(integrated.issue);
+  return ok(scalarValue(integrated.value.value));
 }
 
 function evaluateCall(

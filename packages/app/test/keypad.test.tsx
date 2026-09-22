@@ -250,8 +250,10 @@ describe('keys for mathematics the language does not have yet', () => {
     renderWithKeypad(makeStore([''], 'complex'));
     await user.click(screen.getByRole('tab', { name: 'func' }));
 
-    const contour = screen.getByRole('button', { name: 'contour integration' });
-    expect((contour as HTMLButtonElement).disabled).toBe(true);
+    // `Res` rather than `∮`: the contour key became a real one when the language
+    // learned to read it, and a planned key is evidence only while it is still planned.
+    const residues = screen.getByRole('button', { name: 'residues' });
+    expect((residues as HTMLButtonElement).disabled).toBe(true);
     // Pressing it must not put anything into the formula.
     expect(field().value).toBe('');
   });
@@ -259,8 +261,8 @@ describe('keys for mathematics the language does not have yet', () => {
   it('never insert a command the parser does not read', async () => {
     // The invariant that stops the keypad offering a button which produces a broken
     // line: every command in every insertion must be one the LaTeX parser knows.
-    // This is the check that would have caught a key inserting `\oint` or
-    // `\mathrm{delete}`.
+    // This is the check that would have caught a key inserting `\mathrm{delete}` — and
+    // it is why the contour key could be promoted from planned to real at all.
     const { keypadFor } = await import('../src/expression/keypad');
     const { LATEX_KNOWN_COMMANDS } = await import('@mathviz/mathcore');
 
@@ -308,12 +310,7 @@ describe('keys for mathematics the language does not have yet', () => {
             // A key's fragment is expected to be valid in *some* natural context:
             // on its own, as an infix operator between two expressions, between two
             // digits (the decimal point), or between two list entries (the comma).
-            const contexts = [
-              filled,
-              `z${filled}z`,
-              `3${filled}5`,
-              `\\left(z${filled}z\\right)`,
-            ];
+            const contexts = [filled, `z${filled}z`, `3${filled}5`, `\\left(z${filled}z\\right)`];
             expect(
               contexts.some((candidate) => parseLatexStatement(candidate).ok),
               `${subsystem} key "${entry.title}" inserts ${entry.insert}`,
