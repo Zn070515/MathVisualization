@@ -1,0 +1,5 @@
+# The symbolic engine.
+#
+# SymPy is the only dependency. The service itself uses only the standard
+# library, so there is no web framework to install, pin or keep patched.
+sympy>=1.12

@@ -1,0 +1,7 @@
+packages:
+  - 'packages/*'
+
+# esbuild ships a native binary that it installs with a postinstall script.
+# Vite and Vitest both require it, so the build script is allowed to run.
+allowBuilds:
+  esbuild: true

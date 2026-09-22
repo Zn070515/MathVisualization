@@ -1,0 +1,34 @@
+{
+  "name": "mathvisualization",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Expression-first environment for complex analysis, integral transforms and multivariable calculus.",
+  "scripts": {
+    "dev": "pnpm --filter @mathviz/app dev",
+    "build": "pnpm --filter @mathviz/mathcore build && pnpm --filter @mathviz/app build",
+    "preview": "pnpm --filter @mathviz/app preview",
+    "test": "pnpm -r test",
+    "test:watch": "pnpm -r test:watch",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "eslint": "^9.15.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.14",
+    "globals": "^15.12.0",
+    "prettier": "^3.4.1",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.16.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

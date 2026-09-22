@@ -1,0 +1,259 @@
+/**
+ * The three subsystems.
+ *
+ * One description of each subsystem drives the homepage entries, the header
+ * navigation, the route components and the examples offered in the expression
+ * panel. The three are described in the same shape on purpose: GOAL.md requires
+ * them to be equal in status, and a shared shape is the cheapest way to keep them
+ * equal as the project grows.
+ *
+ * Capability status
+ * -----------------
+ * Each capability carries an honest status. `implemented` means there is code
+ * behind it that does the mathematics and a test that checks it. `planned` means
+ * it is not built. Nothing in between, and no capability is listed whose
+ * mathematics is faked: an unimplemented capability appears in the interface as a
+ * named intention, which is more useful than a button that returns a wrong
+ * answer (GOAL.md 18).
+ */
+import type { MathObjectKind } from '@mathviz/mathcore';
+
+export type SubsystemId = 'complex' | 'transforms' | 'calculus';
+
+export interface Capability {
+  readonly name: string;
+  readonly summary: string;
+  readonly status: 'implemented' | 'planned';
+}
+
+export interface SubsystemDefinition {
+  readonly id: SubsystemId;
+  readonly path: string;
+  /** Ordering numeral, shown in the interface as a drafting-sheet index. */
+  readonly index: string;
+  readonly title: string;
+  /** One line for the homepage entries. */
+  readonly summary: string;
+  /** The examples offered as starting points. They remain editable. */
+  readonly examples: readonly string[];
+  /** Object kinds this subsystem knows how to draw today. */
+  readonly drawableKinds: readonly MathObjectKind[];
+  readonly capabilities: readonly Capability[];
+}
+
+export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
+  {
+    id: 'complex',
+    path: '/complex',
+    index: '01',
+    title: 'Complex Analysis',
+    summary: 'Functions of a complex variable, drawn as maps of the plane.',
+    examples: ['f(z)=z^2', 'g(z)=sin(z)/(z^2+1)', 'h(z)=(z-1)/(z+1)', 'p(z)=1/z', 'z^a'],
+    drawableKinds: ['complex-function', 'complex-path', 'real-function'],
+    capabilities: [
+      {
+        name: 'Domain colouring',
+        summary: 'Argument as hue, modulus as brightness, with modulus bands and phase contours.',
+        status: 'implemented',
+      },
+      {
+        name: 'Magnitude, phase, real and imaginary views',
+        summary: 'Each part of the value as its own scalar field, over the same plane.',
+        status: 'implemented',
+      },
+      {
+        name: 'Mapped grid',
+        summary:
+          'The image of the coordinate grid under the function, showing how it deforms the plane. The frame is fitted to the whole image and reports its range; it cannot be zoomed yet, so a map whose image spans several orders of magnitude is drawn compressed.',
+        status: 'implemented',
+      },
+      {
+        name: 'Linked cursor and selection',
+        summary: 'One shared point across every open view, with the exact value read out.',
+        status: 'implemented',
+      },
+      {
+        name: 'Parameters',
+        summary: 'A real assignment becomes a slider that every dependent expression follows live.',
+        status: 'implemented',
+      },
+      {
+        name: 'Symbolic derivative',
+        summary: 'The derivative in closed form, from the symbolic engine when it is running.',
+        status: 'implemented',
+      },
+      {
+        name: 'Cauchy–Riemann residuals',
+        summary: 'u_x - v_y and u_y + v_x as fields, showing where the equations hold.',
+        status: 'planned',
+      },
+      {
+        name: 'Zeros, poles and their orders',
+        summary: 'Special points found and marked in the plane, with the order reported.',
+        status: 'planned',
+      },
+      {
+        name: 'Taylor and Laurent series',
+        summary: 'Expansions about a point, with the convergence disc or annulus drawn.',
+        status: 'planned',
+      },
+      {
+        name: 'Contour integrals and residues',
+        summary: 'A path as an expression, the accumulated integral traced in the plane, the residue theorem checked.',
+        status: 'planned',
+      },
+      {
+        name: 'Branch points and cuts',
+        summary: 'Where a multi-valued function changes branch, and how the cut is placed.',
+        status: 'planned',
+      },
+    ],
+  },
+  {
+    id: 'transforms',
+    path: '/transforms',
+    index: '02',
+    title: 'Integral Transforms',
+    summary: 'Signals in the time domain and what they become in the transform domain.',
+    examples: ['f(t)=exp(-t^2)', 'g(t)=exp(-t)', 'h(t)=sin(t)', 'p(t)=1/(1+t^2)'],
+    drawableKinds: ['real-function', 'complex-path'],
+    capabilities: [
+      {
+        name: 'Expression typing',
+        summary: 'A function of t is recognised as a real signal or a complex-valued one.',
+        status: 'implemented',
+      },
+      {
+        name: 'Time-domain plot',
+        summary: 'The signal drawn against t, with the real and imaginary parts separated when the signal is complex.',
+        status: 'implemented',
+      },
+      {
+        name: 'Linked cursor and selection',
+        summary: 'One shared value of t across the views that are open.',
+        status: 'implemented',
+      },
+      {
+        name: 'Fourier transform',
+        summary: 'The transform in closed form, with magnitude and phase spectra, and the convention stated.',
+        status: 'planned',
+      },
+      {
+        name: 'Fourier series and Gibbs phenomenon',
+        summary: 'Partial sums of a periodic signal, with the overshoot at a jump made visible.',
+        status: 'planned',
+      },
+      {
+        name: 'DFT, FFT and sampling',
+        summary: 'Sampled signals, frequency bins, and where aliasing begins.',
+        status: 'planned',
+      },
+      {
+        name: 'Convolution',
+        summary: 'The reflected and shifted kernel, the pointwise product and the accumulated area, animated in t.',
+        status: 'planned',
+      },
+      {
+        name: 'Laplace transform and the s-plane',
+        summary: 'F(s) over the complex plane, with poles, zeros and the region of convergence shaded.',
+        status: 'planned',
+      },
+      {
+        name: 'Inverse transforms',
+        summary: 'Reconstruction from the transform domain, symbolically and numerically.',
+        status: 'planned',
+      },
+    ],
+  },
+  {
+    id: 'calculus',
+    path: '/calculus',
+    index: '03',
+    title: 'Multivariable Calculus',
+    summary: 'Scalar and vector fields, their local structure, and the integrals over them.',
+    examples: [
+      'f(x,y)=x^2-y^2',
+      'g(x,y)=x^2+y^2',
+      'h(x,y)=sin(x)*cos(y)',
+      'p(x,y)=exp(-(x^2+y^2))',
+    ],
+    drawableKinds: ['scalar-field', 'real-function'],
+    capabilities: [
+      {
+        name: 'Scalar fields as a heatmap',
+        summary: 'f(x, y) shaded over the plane, with the value range stated.',
+        status: 'implemented',
+      },
+      {
+        name: 'Coordinate grid over the field',
+        summary: 'The plane grid and axes, so a feature can be located by its coordinates.',
+        status: 'implemented',
+      },
+      {
+        name: 'Linked cursor and selection',
+        summary: 'One shared point, with f and its coordinate read out.',
+        status: 'implemented',
+      },
+      {
+        name: 'Parameters',
+        summary: 'A real assignment becomes a slider; f(x, y) = x^2 - a y^2 redraws as it moves.',
+        status: 'implemented',
+      },
+      {
+        name: 'Contours and level sets',
+        summary: 'Level curves of the field, drawn over the heatmap or on their own.',
+        status: 'planned',
+      },
+      {
+        name: 'Gradient and directional derivatives',
+        summary: 'The gradient field, its relation to the level sets, and the rate of change along a chosen direction.',
+        status: 'planned',
+      },
+      {
+        name: 'Tangent planes and linear approximation',
+        summary: 'The tangent plane at a chosen point, with the error of the linear approximation.',
+        status: 'planned',
+      },
+      {
+        name: 'Critical points and extrema',
+        summary: 'Where the gradient vanishes, classified through the Hessian.',
+        status: 'planned',
+      },
+      {
+        name: 'Double and triple integrals',
+        summary: 'A region, its iterated form, and the accumulated volume.',
+        status: 'planned',
+      },
+      {
+        name: 'Coordinate changes and Jacobians',
+        summary: 'Polar, cylindrical and spherical coordinates, with the Jacobian determinant as an area or volume factor.',
+        status: 'planned',
+      },
+      {
+        name: 'Vector fields, divergence and curl',
+        summary: 'Arrows, streamlines, divergence as a source density and curl as a local rotation.',
+        status: 'planned',
+      },
+      {
+        name: 'Line and surface integrals',
+        summary: 'Work along a path, flux through a surface, and the orientation conventions that fix their signs.',
+        status: 'planned',
+      },
+      {
+        name: 'Green, divergence and Stokes theorems',
+        summary: 'Both sides of each theorem computed and shown against each other on the same picture.',
+        status: 'planned',
+      },
+    ],
+  },
+];
+
+export function subsystemById(id: SubsystemId): SubsystemDefinition {
+  const found = SUBSYSTEMS.find((subsystem) => subsystem.id === id);
+  if (found === undefined) throw new Error(`unknown subsystem: ${id}`);
+  return found;
+}
+
+export function implementedCapabilities(subsystem: SubsystemDefinition): readonly Capability[] {
+  return subsystem.capabilities.filter((capability) => capability.status === 'implemented');
+}

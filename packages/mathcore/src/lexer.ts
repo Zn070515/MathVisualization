@@ -1,0 +1,168 @@
+/**
+ * Lexer.
+ *
+ * Turns source text into tokens. Deliberately small: it recognises numbers,
+ * names, operators and punctuation, and nothing else. Aliases (`ln`, `π`) are
+ * canonicalised here so that no later stage has to know they exist.
+ *
+ * Two details that matter mathematically:
+ *
+ * - `2e^(it)` is `2 * e^(i*t)`, not the number `2e`. A number literal only
+ *   consumes an exponent when an `e` is actually followed by digits (optionally
+ *   signed), so a bare `e` after digits is Euler's number.
+ * - Names may contain any Unicode letter, so `θ`, `ω` and `φ` can be typed
+ *   directly rather than only spelled out.
+ */
+import { type ParseError, type Result } from './errors';
+import { canonicalName } from './builtins';
+import { rationalFromLiteralText } from './rational';
+
+export type TokenType =
+  | 'number'
+  | 'name'
+  | 'operator'
+  | 'lparen'
+  | 'rparen'
+  | 'comma'
+  | 'equals';
+
+export interface Token {
+  readonly type: TokenType;
+  /** Text as written, except that names are already canonicalised. */
+  readonly text: string;
+  readonly start: number;
+  readonly end: number;
+}
+
+const IDENTIFIER_START = /[\p{L}_]/u;
+const IDENTIFIER_PART = /[\p{L}\p{N}_]/u;
+const DIGIT = /[0-9]/;
+const OPERATORS = new Set(['+', '-', '*', '/', '^']);
+
+function isWhitespace(character: string): boolean {
+  return character === ' ' || character === '\t' || character === '\n' || character === '\r';
+}
+
+/**
+ * Tokenize source text.
+ *
+ * Returns a `parse-error` result, rather than throwing, so that the expression
+ * panel can show the failure inline while the user is still typing.
+ */
+export function tokenize(source: string): Result<readonly Token[], ParseError> {
+  const tokens: Token[] = [];
+  let index = 0;
+
+  while (index < source.length) {
+    const character = source[index] as string;
+
+    if (isWhitespace(character)) {
+      index += 1;
+      continue;
+    }
+
+    const start = index;
+
+    if (DIGIT.test(character)) {
+      const numberEnd = scanNumber(source, index);
+      const raw = source.slice(start, numberEnd);
+      // Validate the literal here so the parser never sees an out-of-range number.
+      if (rationalFromLiteralText(raw) === null) {
+        return {
+          ok: false,
+          issue: {
+            kind: 'parse-error',
+            message: `The number ${raw} is outside the range this evaluator represents.`,
+            span: { start, end: numberEnd },
+          },
+        };
+      }
+      tokens.push({ type: 'number', text: raw, start, end: numberEnd });
+      index = numberEnd;
+      continue;
+    }
+
+    if (IDENTIFIER_START.test(character)) {
+      let end = index + 1;
+      while (end < source.length && IDENTIFIER_PART.test(source[end] as string)) end += 1;
+      const raw = source.slice(start, end);
+      tokens.push({ type: 'name', text: canonicalName(raw), start, end });
+      index = end;
+      continue;
+    }
+
+    if (OPERATORS.has(character)) {
+      tokens.push({ type: 'operator', text: character, start, end: index + 1 });
+      index += 1;
+      continue;
+    }
+
+    if (character === '(') {
+      tokens.push({ type: 'lparen', text: character, start, end: index + 1 });
+      index += 1;
+      continue;
+    }
+
+    if (character === ')') {
+      tokens.push({ type: 'rparen', text: character, start, end: index + 1 });
+      index += 1;
+      continue;
+    }
+
+    if (character === ',') {
+      tokens.push({ type: 'comma', text: character, start, end: index + 1 });
+      index += 1;
+      continue;
+    }
+
+    if (character === '=') {
+      tokens.push({ type: 'equals', text: character, start, end: index + 1 });
+      index += 1;
+      continue;
+    }
+
+    return {
+      ok: false,
+      issue: {
+        kind: 'parse-error',
+        message: `Unexpected character "${character}".`,
+        span: { start, end: index + 1 },
+      },
+    };
+  }
+
+  return { ok: true, value: tokens };
+}
+
+/**
+ * End index of a numeric literal starting at `start`.
+ *
+ * Grammar: digits [ '.' digits ] [ ('e'|'E') ['+'|'-'] digits ].
+ * The exponent is only consumed when a digit actually follows, which is what
+ * keeps `2e^(it)` meaning `2 * e^(i*t)`.
+ */
+function scanNumber(source: string, start: number): number {
+  let index = start;
+  while (index < source.length && DIGIT.test(source[index] as string)) index += 1;
+
+  if (source[index] === '.') {
+    const afterDot = index + 1;
+    if (afterDot < source.length && DIGIT.test(source[afterDot] as string)) {
+      index = afterDot;
+      while (index < source.length && DIGIT.test(source[index] as string)) index += 1;
+    }
+  }
+
+  const exponentMarker = source[index];
+  if (exponentMarker === 'e' || exponentMarker === 'E') {
+    let cursor = index + 1;
+    const sign = source[cursor];
+    if (sign === '+' || sign === '-') cursor += 1;
+    if (cursor < source.length && DIGIT.test(source[cursor] as string)) {
+      index = cursor;
+      while (index < source.length && DIGIT.test(source[index] as string)) index += 1;
+    }
+  }
+
+  return index;
+}

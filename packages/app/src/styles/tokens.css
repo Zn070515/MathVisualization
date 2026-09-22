@@ -1,0 +1,95 @@
+/*
+ * Design tokens.
+ *
+ * The direction is "drafting paper": the visual language of a mathematician's
+ * working sheet rather than of a software product. Warm paper, ink, hairline
+ * rules, one red pencil for annotations, and no decoration that does not carry
+ * information. GOAL.md asks for restrained, lightweight, high information
+ * density, mathematical typography and no AI-product feeling; this file is where
+ * those words become numbers.
+ *
+ * Typography notes
+ * ----------------
+ * Three families, each with a job, all present on the major desktop platforms so
+ * that the interface does not depend on a network font service:
+ *
+ *   --font-display  Palatino / Iowan Old Style: headings and the product name.
+ *                   A humanist serif with genuine calligraphic character.
+ *   --font-math     Cambria Math / STIX Two Math: expressions and numeric
+ *                   readouts. A real mathematical typeface, so digits and
+ *                   operators sit correctly next to Greek letters.
+ *   --font-label    Cascadia Mono / Consolas: small uppercase labels and
+ *                   keyboard hints. Monospaced, letter-spaced, instrument-like.
+ *
+ * Every foreground colour is checked against the surface it sits on. The faintest
+ * ink reaches 4.6:1 on paper, so nothing that carries meaning falls below the
+ * contrast a small-text reader needs.
+ */
+
+:root {
+  /* Surfaces */
+  --paper: #f6f4ef;
+  --paper-raised: #fdfcfa;
+  --paper-sunken: #efece5;
+  --paper-grid: rgba(25, 23, 20, 0.055);
+
+  /* Ink */
+  --ink: #191714;
+  --ink-soft: #4f4a43;
+  --ink-muted: #6c665d;
+  --ink-faint: #8b857a;
+
+  /* Rules and borders */
+  --rule: #ddd7cb;
+  --rule-strong: #c4bdb0;
+
+  /* One accent, used the way a red pencil is used: sparingly, for the thing
+     that needs attention. Errors, focus, and the active entry. */
+  --accent: #ab2f1c;
+  --accent-ink: #8c2413;
+  --accent-wash: rgba(171, 47, 28, 0.07);
+
+  /* Domain-colouring legend swatches, matching coloring.ts */
+  --legend-zero: #000000;
+  --legend-pole: #ffffff;
+
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', 'Palatino', 'Book Antiqua',
+    'URW Palladio L', Georgia, serif;
+  --font-math: 'Cambria Math', 'STIX Two Math', 'Latin Modern Math', 'Cambria', 'Georgia',
+    serif;
+  --font-label: 'Cascadia Mono', 'Consolas', 'SF Mono', 'DejaVu Sans Mono', ui-monospace,
+    monospace;
+
+  --text-xs: 0.6875rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
+  --text-display: 2.5rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4.5rem;
+
+  --panel-width: 22rem;
+  --header-height: 3.25rem;
+
+  /* Square corners throughout: this is a scientific instrument, not a card. */
+  --radius: 0px;
+
+  --motion-fast: 120ms;
+  --motion-base: 220ms;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+  }
+}
