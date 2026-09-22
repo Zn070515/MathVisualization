@@ -14,7 +14,8 @@
 import { describe, expect, it } from 'vitest';
 import { childNodes, collectVariableNames, walk, type Expr } from '../src/ast';
 import { cabs, csub, cx } from '../src/complex';
-import { asComplex, evaluate, evaluateScalar } from '../src/evaluator';
+import { windingAround } from '../src/contour';
+import { asComplex, evaluate, evaluateContourDetails, evaluateScalar } from '../src/evaluator';
 import { exprToText } from '../src/format';
 import { lowerToDomainColoringProgram } from '../src/glsl';
 import { inferSpace, makeInferenceContext } from '../src/infer';
@@ -326,6 +327,69 @@ describe('the whole way through', () => {
     expect(value.ok).toBe(true);
     if (!value.ok) return;
     expect(cabs(csub(value.value, cx(1, 2 * Math.PI)))).toBeLessThan(1e-9);
+  });
+});
+
+describe('the residue theorem, checked rather than asserted', () => {
+  /** Run the analysis for a three-line workspace and return what it found. */
+  function analyse(path: string, integrand: string) {
+    const workspace = buildWorkspace(inputs(`gamma(t)=${path}`, `f(z)=${integrand}`, '∮_gamma f(z) dz'));
+    const statement = workspace.entries[2]?.statement;
+    if (statement?.kind !== 'expression') throw new Error('expected a statement');
+    const details = evaluateContourDetails(statement.body, workspaceEnvironment(workspace));
+    if (details === null) throw new Error('expected a contour integral');
+    if (!details.ok) throw new Error(`analysis failed: ${details.issue.message}`);
+    return details.value;
+  }
+
+  it('counts the turns of a contour around a point', () => {
+    const circle = Array.from({ length: 64 }, (_, index) => {
+      const t = (index / 64) * 2 * Math.PI;
+      return cx(Math.cos(t), Math.sin(t));
+    });
+    expect(windingAround(circle, cx(0, 0))).toBe(1);
+    expect(windingAround(circle, cx(2, 0))).toBe(0);
+    // Twice round is two.
+    expect(windingAround([...circle, ...circle], cx(0, 0))).toBe(2);
+    // Through the point itself there is no winding number, and no zero pretending to be one.
+    expect(windingAround(circle, cx(1, 0))).toBeNull();
+  });
+
+  it('finds the pole inside, and agrees with its residue', () => {
+    const details = analyse('exp(i*t)', '1/z');
+
+    expect(details.enclosed).toHaveLength(1);
+    const pole = details.enclosed[0];
+    expect(pole?.winding).toBe(1);
+    expect(cabs(csub(pole?.residue ?? cx(0, 0), cx(1, 0)))).toBeLessThan(1e-6);
+
+    // The two sides come from different methods: quadrature along the circle, and circle
+    // quadrature at the pole. That they agree is the theorem.
+    expect(cabs(csub(details.integral.value, details.residueSum))).toBeLessThan(
+      Math.max(details.integral.estimatedError, 1e-9),
+    );
+    expect(cabs(csub(details.residueSum, cx(0, 2 * Math.PI)))).toBeLessThan(1e-6);
+  });
+
+  it('leaves out a pole the contour does not wind around', () => {
+    // `1/(z − 2)` has its pole at 2, and the unit circle does not enclose it. An analysis
+    // that reported residues without checking enclosure would claim `2πi` here; Cauchy's
+    // theorem says the integral is zero, and the test is that the two agree.
+    const details = analyse('exp(i*t)', '1/(z-2)');
+    expect(details.enclosed).toHaveLength(0);
+    expect(cabs(details.residueSum)).toBeLessThan(1e-12);
+    expect(cabs(details.integral.value)).toBeLessThan(1e-8);
+  });
+
+  it('scales the residue sum by the winding number', () => {
+    // Twice round the circle winds twice, so the theorem says `2·2πi` — the winding
+    // number is what makes the theorem a statement about the contour and not only about
+    // the function.
+    const details = analyse('exp(2*i*t)', '1/z');
+    const pole = details.enclosed[0];
+    expect(pole?.winding).toBe(2);
+    expect(cabs(csub(details.integral.value, cx(0, 4 * Math.PI)))).toBeLessThan(1e-6);
+    expect(cabs(csub(details.residueSum, cx(0, 4 * Math.PI)))).toBeLessThan(1e-6);
   });
 });
 

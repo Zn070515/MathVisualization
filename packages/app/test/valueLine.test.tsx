@@ -75,6 +75,22 @@ describe('a line whose result is a number', () => {
     expect(container.textContent).toContain('residue theorem does not apply');
   });
 
+  it('checks the residue theorem, and says which poles it counted', () => {
+    // GOAL.md section 7.17. The two sides come from different methods, so showing them
+    // together is a check rather than a restatement.
+    const container = renderPanel(seeded('e^{it}', '\\frac{1}{z}'));
+    expect(container.textContent).toContain('1 pole inside');
+    expect(container.textContent).toContain('Σ');
+    expect(container.textContent).toContain("the same number to within the integral's error estimate");
+  });
+
+  it('counts no poles when the contour does not wind around one', () => {
+    // The pole of `1/(z − 2)` is at 2, outside the unit circle. An analysis that reported
+    // residues without checking enclosure would claim 2πi here.
+    const container = renderPanel(seeded('e^{it}', '\\frac{1}{z-2}'));
+    expect(container.textContent).toContain('no poles inside');
+  });
+
   it('shows the evaluator’s reason rather than a blank when there is no value', () => {
     // The contour runs through the pole, so the integral does not exist. An empty space
     // would look like a bug; the reason looks like a reason.

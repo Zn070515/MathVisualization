@@ -107,8 +107,8 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
       {
         name: 'Contour integrals and residues',
         summary:
-          'A path as an expression, the accumulated integral traced in the plane, the residue theorem checked.',
-        status: 'planned',
+          'A contour written as an expression, ∮_gamma f(z) dz, over t ∈ [0, 2π]. Its value appears under the line that asked for it, together with the interval, whether the path actually closed, and how accurate the quadrature is. The contour and its accumulated integral are drawn in the plane. For a closed contour the residue theorem is worked out independently — the poles the winding number puts inside, each with its residue — and shown against the integral, which is the check rather than a restatement.',
+        status: 'implemented',
       },
       {
         name: 'Branch points and cuts',

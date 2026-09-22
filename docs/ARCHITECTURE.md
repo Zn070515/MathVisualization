@@ -392,8 +392,63 @@ the rule: a capability may not claim more than the interface shows.
 
 This is the first thing here that Desmos does not do. It marks where a curve meets
 the axis; it does not tell you that `z²` has a *double* zero there, and it has no
-notion of a pole at all. And the contour integral behind it is one step from the
-residue theorem, which is where the complex subsystem goes next.
+notion of a pole at all.
+
+### 7.2c Contour integrals
+
+`mathcore/src/contour.ts`, and the one place where the language itself had to grow.
+
+`GOAL.md` section 7.15 writes the interaction as notation — `f(z) = ...`,
+`gamma(t) = ...`, `∮_gamma f(z) dz` — and explicitly rejects a dialog for it. So the
+contour integral is a *node in the tree*, and the first one that binds a variable: the
+`z` in `∮_gamma f(z) dz` is bound by the integral, which is why `collectVariableNames`
+had to stop being a `walk`. Getting that wrong is quiet — the line would be typed as a
+function of `z` instead of a value, and nothing about the integral would look wrong.
+
+The integral itself is a **quadrature**, and the three things that make a quadrature
+honest are reported rather than assumed:
+
+- **the rule** — the composite trapezoid, spectrally accurate on a closed contour and
+  second order on an open one, so every result says whether the path actually closed;
+- **the derivative** — `γ′` by a Richardson-extrapolated central difference, because a
+  plain one at that step leaves about `6×10⁻⁸` of relative error and would not meet the
+  `10⁻⁹` the reference identities are stated to. The residual does not improve when the
+  grid is refined, which is the measurement that shows the derivative rather than the
+  quadrature is what limits the answer;
+- **the error** — measured by running the rule at `n` and at `2n`, never allowed below
+  the derivative's floor. Both claims were checked by building them wrong: with a plain
+  central difference the answer is `6.6×10⁻⁸` out and the error estimate independently
+  catches it.
+
+Two things are deliberately *not* decided by the quadrature. Whether the path closed is
+computed and shown, because `∮` over an open path is a claim the picture cannot make
+good on. And **which poles are enclosed** is settled by the winding number — an integer,
+from the argument principle applied to the contour's own samples — because a quadrature
+cannot see a pole the grid steps over.
+
+That division is what makes the residue theorem worth showing. The two sides come from
+**different methods**: quadrature along the reader's contour, against circle quadrature at
+each enclosed pole. Checking an answer against itself would prove nothing, which is why
+the enclosure is decided by the winding number and not by the integral being compared.
+The residue at a pole is its defining integral around a circle that holds that pole and
+no other, and the radius ladder — a descending sequence that has to agree — is what makes
+an over-generous circle safe: `1/(z² − 1)` about `z = 1` answers `1/2` where a
+single-radius version answers `1`.
+
+The capability flipped in the same commit as the drawing, which is the rule.
+
+### 7.2d A value line
+
+A contour integral is a value, not a function, and until this feature nothing in the
+interface displayed a line's value: `∮_gamma f(z) dz` typed correctly and showed nothing
+at all. `ValueLine` shows it under the line that produced it, with the interval, the
+closure, and the theorem's own answer. The number is written in the same notation the
+readout uses, so the two cannot disagree about how a complex number is written.
+
+The one piece of *state* this needed was finding the integral at all: a value is never
+the active expression, so `selectContourLine` looks for it separately, and the curve drawn
+on the plane and the number under the line come from one integration rather than two —
+the core returns the path samples it already computed.
 
 ### 7.3 The renderers
 
@@ -746,9 +801,9 @@ MathVisualization/
 │   │   │   errors.ts  rational.ts  complex.ts  conventions.ts  builtins.ts
 │   │   │   ast.ts  lexer.ts  parser.ts  latex.ts  types.ts  infer.ts
 │   │   │   evaluator.ts  format.ts  display.ts  ticks.ts  workspace.ts
-│   │   │   pointsOfInterest.ts  zerosAndPoles.ts
+│   │   │   pointsOfInterest.ts  zerosAndPoles.ts  contour.ts
 │   │   │   coloring.ts  surface.ts  glsl.ts  surfaceGlsl.ts  sympy.ts  cas.ts
-│   │   └── test/               443 tests
+│   │   └── test/               484 tests
 │   └── app/                    the interface. React, Vite.
 │       ├── src/
 │       │   ├── subsystems.ts   the three subsystems, one description
@@ -756,7 +811,8 @@ MathVisualization/
 │       │   ├── routes/         HomePage, SubsystemPage
 │       │   ├── state/          store, workspaceStore, persistence, viewKinds,
 │       │   │                   StoreProvider
-│       │   ├── expression/     MathExpressionField, ExpressionRow, ExpressionPanel
+│       │   ├── expression/     MathExpressionField, ExpressionRow, ValueLine,
+│       │   │                   ExpressionPanel
 │       │   │                   MathKeypad, ParameterSlider, mathInputAdapter,
 │       │   │                   keypad/{types,common,complex,transforms,calculus}
 │       │   ├── display/        NumberText, numbers,   the number display layer
@@ -769,7 +825,7 @@ MathVisualization/
 │       │   ├── symbolic/       the HTTP adapter and its panel
 │       │   ├── analysis/       CapabilityList
 │       │   └── styles/         tokens.css, app.css
-│       └── test/               220 tests
+│       └── test/               234 tests
 └── services/
     └── symbolic/               SymPy behind an adapter, stdlib only
 ```
@@ -786,14 +842,28 @@ what exists now:
 
 | Next feature | Where it goes |
 |---|---|
-| Zeros, poles and their orders | A new module in `mathcore` (numerical detection through the evaluator), drawn on the existing `complex-plane` view. The type system and AST do not change. |
-| Contour integrals and residues | A `ComplexPath` already has a signature (`R → C`) and `complex-plane` already draws one. Add path sampling and the accumulated integral to `mathcore`. The evaluator is reused unchanged. |
 | Cauchy–Riemann residuals | Already expressible: `re`/`im` of a complex function are scalar fields of `x` and `y`. A view of `u_x - v_y` needs no new mathematics, only a way to express the partial derivative. |
 | Fourier and Laplace | New `mathcore` modules with their conventions added to `conventions.ts`, plus a transform-domain view. The `s-plane` is `complex-plane` with `s` bound as the complex variable, which is what the view already does. |
 | Gradients and divergence | `surface.ts` already samples a scalar field into a mesh, so a gradient can be shown as arrows over the existing surface or heatmap. Vector fields are the one case the current rendering design does not cover: a `vec2` per point is not a scalar, so `scalarRamp` does not apply to it. |
 | Contours and level sets | A two-dimensional representation of `R² → R`, alongside the surface and the heatmap, using the same `axisTicks` ladder the grid already uses. |
+| Taylor and Laurent series, branch cuts | New `mathcore` modules. The series want a symbolic engine for the coefficients; a branch cut is a *convention* before it is a drawing, so it belongs in `conventions.ts` first. |
 
 The recurring pattern: a new mathematical concept becomes a new module in
 `mathcore` that consumes the existing AST, and a view in `app` that consumes the
-existing store. Neither the parser nor the type system needs to be revisited,
-which is the property the architecture was built to have.
+existing store.
+
+**That pattern held for every feature until contour integrals, and it is worth saying
+where it stopped being true.** `GOAL.md` 7.15 asks for the integral to be *written*,
+`∮_gamma f(z) dz`, rather than assembled from a dialog — so the feature needed a node in
+the tree, a token in the lexer, a production in each front end, a branch in each lowering
+and, for the first time, a **binder inside an expression**: the `z` in `∮_gamma f(z) dz`
+is bound by the integral. None of that was free, and the honest lesson is that the
+architecture made it *cheap* rather than *unnecessary*: every backend that could not
+implement the node had to refuse it out loud, because the switches carry annotated return
+types and no `default`. Two of them do exactly that today — a fragment shader evaluates
+per pixel and a contour integral is one number, and the symbolic engine is not handed an
+integral whose path it has no way to declare.
+
+The type system, on the other hand, did not move at all: a line with no free variables was
+already `scalar`, so the value side of the feature needed no inference work — only
+somewhere to *show* the number, which had not existed because until then no line had one.

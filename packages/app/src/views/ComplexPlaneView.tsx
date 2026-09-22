@@ -165,7 +165,7 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
       contourNode,
       workspaceEnvironment(workspace, state.parameterValues),
     );
-    return details !== null && details.ok ? details.value : null;
+    return details !== null && details.ok ? details.value.integral : null;
   }, [contourNode, workspace, state.parameterValues]);
 
   const dragStart = useRef<{ x: number; y: number } | null>(null);

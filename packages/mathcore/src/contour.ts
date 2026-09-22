@@ -41,6 +41,7 @@ import {
   csub,
   cx,
   isFiniteComplex,
+  principalArg,
 } from './complex';
 import { CONTOUR_INTEGRAL, NUMERICS } from './conventions';
 import { type MathIssue, type Result, fail, ok } from './errors';
@@ -162,6 +163,47 @@ export function residueAt(
   const secondLast = measured[measured.length - 2] ?? null;
   if (last !== null && secondLast !== null && agrees(last, secondLast)) return last;
   return null;
+}
+
+/**
+ * How many times a contour winds around a point, counted from the contour's samples.
+ *
+ * The argument principle, applied to the contour rather than to a function: the total
+ * change in `arg(γ(t) − p)` over the traversal, divided by a full turn. It is the same
+ * idea as `windingNumber` in `zerosAndPoles.ts` and trustworthy for the same reason — the
+ * answer is an integer, so sampling error can move it by a millionth and cannot move it
+ * by one.
+ *
+ * The samples come from the caller because the caller already has them: they are the
+ * ones the integral was computed on, and counting the turns of a different sampling
+ * would be answering about a different curve. A contour that passes exactly through the
+ * point has no winding number, and says so rather than returning a zero that would read
+ * as "outside".
+ */
+export function windingAround(path: readonly Complex[], about: Complex): number | null {
+  let previous: number | null = null;
+  let total = 0;
+
+  for (const point of path) {
+    const offset = csub(point, about);
+    if (offset.re === 0 && offset.im === 0) return null;
+    const argument = principalArg(offset);
+    if (!Number.isFinite(argument)) return null;
+    if (previous !== null) {
+      let step = argument - previous;
+      // Wrapped into (-π, π], so a step never spans more than half a turn: the samples
+      // of a smooth contour move a fraction of a turn at a time.
+      if (step > Math.PI) step -= 2 * Math.PI;
+      else if (step <= -Math.PI) step += 2 * Math.PI;
+      total += step;
+    }
+    previous = argument;
+  }
+
+  if (!Number.isFinite(total)) return null;
+  // `Math.round(-0.0000001)` is `-0`, and a winding of negative zero is a wart a caller
+  // should not have to think about.
+  return Math.round(total / (2 * Math.PI)) + 0;
 }
 
 /** (1/2πi) ∮ f dz around |z − centre| = radius, or null when the circle cannot be walked. */

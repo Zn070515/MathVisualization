@@ -24,6 +24,8 @@
 import type { Expr } from './ast';
 import { builtinFunction } from './builtins';
 import {
+  CX_I,
+  CX_ZERO,
   type Complex,
   cabs,
   cadd,
@@ -40,20 +42,28 @@ import {
   cre,
   csin,
   csinh,
+  cscale,
   csqrt,
   csub,
   ctan,
   ctanh,
   cx,
+  isFiniteComplex,
   isUndefined,
   isZero,
   principalArg,
 } from './complex';
 import { builtinConstant } from './conventions';
-import { contourIntegral, type ContourIntegralResult } from './contour';
+import {
+  contourIntegral,
+  residueAt,
+  windingAround,
+  type ContourIntegralResult,
+} from './contour';
 import { fail, ok, type MathIssue, type Result } from './errors';
 import { exprToText } from './format';
 import { rationalToNumber } from './rational';
+import { findZerosAndPoles } from './zerosAndPoles';
 
 /** A function the user defined, in the form the evaluator needs. */
 export interface UserFunctionDefinition {
@@ -399,14 +409,38 @@ function evaluateContour(
   return ok(scalarValue(integrated.value.value));
 }
 
+/** A pole of the integrand that the contour winds around, and what it contributes. */
+export interface EnclosedPole {
+  readonly z: Complex;
+  /** How many times the contour winds around it — an integer, from the argument principle. */
+  readonly winding: number;
+  /** Its residue, or null when no circle isolates it well enough to say. */
+  readonly residue: Complex | null;
+}
+
+/** A contour integral and everything that qualifies it. */
+export interface ContourDetails {
+  readonly integral: ContourIntegralResult;
+  /** The poles of the integrand inside the contour, in the order they were found. */
+  readonly enclosed: readonly EnclosedPole[];
+  /** `2πi Σ n(γ, zₖ) Res(f, zₖ)` — the residue theorem's other side. */
+  readonly residueSum: Complex;
+}
+
 /**
  * Everything a contour integral reports, not only its number.
  *
  * `evaluate` returns the value, which is what arithmetic needs: `∮ f dz + 1` has no
- * business knowing whether the contour closed. A line whose *whole content* is a
- * contour integral is different — whether the path came back to where it started, and
- * how much the grid moved the answer, are part of what the number claims, and they
- * belong beside it rather than in a footnote.
+ * business knowing whether the contour closed. A line whose *whole content* is a contour
+ * integral is different — whether the path came back to where it started, how much the
+ * grid moved the answer, and what the residue theorem says it should have been, are all
+ * part of what the number claims, and they belong beside it rather than in a footnote.
+ *
+ * **The two sides are computed by different methods, which is the point of showing them
+ * at all.** The integral is a quadrature along the reader's own contour; the sum is
+ * circle quadrature at each pole, over poles the winding number — an integer, from the
+ * argument principle applied to the contour's samples — decided were inside. Comparing
+ * two quadratures of the same function would be checking an answer against itself.
  *
  * Returns null when the expression is not a contour integral, because then there is no
  * single integral to describe and the caller has nothing to add to the value.
@@ -414,18 +448,103 @@ function evaluateContour(
 export function evaluateContourDetails(
   expr: Expr,
   environment: EvaluationEnvironment = EMPTY_ENVIRONMENT,
-): Result<ContourIntegralResult, MathIssue> | null {
+): Result<ContourDetails, MathIssue> | null {
   if (expr.kind !== 'contour-integral') return null;
-  return integrateContour(expr, environment, 0, 0);
+
+  const callbacks = contourCallbacks(expr, environment, 0, 0);
+  if (!callbacks.ok) return callbacks;
+
+  const integral = contourIntegral({
+    path: callbacks.value.atParameter,
+    integrand: callbacks.value.atPoint,
+  });
+  if (!integral.ok) return integral;
+
+  const enclosed = enclosedPoles(integral.value, callbacks.value.atPoint);
+  let residueSum: Complex = CX_ZERO;
+  for (const pole of enclosed) {
+    if (pole.residue === null) continue;
+    residueSum = cadd(residueSum, cscale(pole.residue, pole.winding));
+  }
+
+  return ok({
+    integral: integral.value,
+    enclosed,
+    // 2πi times the sum.
+    residueSum: cscale(cmul(residueSum, CX_I), 2 * Math.PI),
+  });
+}
+
+/**
+ * The poles inside a contour, with their residues.
+ *
+ * The region searched is the contour's own bounding box, generously padded: a pole
+ * outside the contour cannot be enclosed, and one just outside it is worth finding so
+ * that a reader can see it was considered and left out rather than missed.
+ */
+function enclosedPoles(
+  integral: ContourIntegralResult,
+  atPoint: (z: Complex) => Result<Complex, MathIssue>,
+): readonly EnclosedPole[] {
+  if (integral.path.length === 0) return [];
+
+  let xMin = Number.POSITIVE_INFINITY;
+  let xMax = Number.NEGATIVE_INFINITY;
+  let yMin = Number.POSITIVE_INFINITY;
+  let yMax = Number.NEGATIVE_INFINITY;
+  for (const point of integral.path) {
+    if (!isFiniteComplex(point)) continue;
+    xMin = Math.min(xMin, point.re);
+    xMax = Math.max(xMax, point.re);
+    yMin = Math.min(yMin, point.im);
+    yMax = Math.max(yMax, point.im);
+  }
+  if (!Number.isFinite(xMin) || xMax <= xMin || yMax <= yMin) return [];
+
+  const pad = 0.25 * Math.max(xMax - xMin, yMax - yMin);
+  const found = findZerosAndPoles(atPoint, {
+    xMin: xMin - pad,
+    xMax: xMax + pad,
+    yMin: yMin - pad,
+    yMax: yMax + pad,
+  });
+
+  const poles: EnclosedPole[] = [];
+  for (const point of found) {
+    if (point.kind !== 'pole') continue;
+    const winding = windingAround(integral.path, point.z);
+    if (winding === null || winding === 0) continue;
+    // A circle wide enough to hold this pole but not its neighbours: the residue is
+    // measured at half the distance to the nearest other pole, and `residueAt`'s ladder
+    // guards against the estimate being wrong.
+    let nearest = Math.max(xMax - xMin, yMax - yMin);
+    for (const other of found) {
+      if (other === point) continue;
+      nearest = Math.min(nearest, cabs(csub(other.z, point.z)));
+    }
+    poles.push({
+      z: point.z,
+      winding,
+      residue: residueAt(atPoint, point.z, nearest / 2),
+    });
+  }
+  return poles;
 }
 
 /** Resolve the path and the integrand, and integrate. */
-function integrateContour(
+/** The two callbacks a contour integral needs, once its path has been resolved. */
+interface ContourCallbacks {
+  readonly atParameter: (t: number) => Result<Complex, MathIssue>;
+  readonly atPoint: (z: Complex) => Result<Complex, MathIssue>;
+}
+
+/** Resolve the path and the integrand, or say why they cannot be resolved. */
+function contourCallbacks(
   expr: Extract<Expr, { kind: 'contour-integral' }>,
   environment: EvaluationEnvironment,
   depth: number,
   contourDepth: number,
-): Result<ContourIntegralResult, MathIssue> {
+): Result<ContourCallbacks, MathIssue> {
   if (contourDepth >= MAXIMUM_CONTOUR_DEPTH) {
     return fail({
       kind: 'unsupported',
@@ -500,9 +619,22 @@ function integrateContour(
       : ok(scalar);
   };
 
-  const integrated = contourIntegral({ path: atParameter, integrand: atPoint });
-  if (!integrated.ok) return fail(integrated.issue);
-  return integrated;
+  return ok({ atParameter, atPoint });
+}
+
+/** Integrate along the contour, resolving the path and the integrand first. */
+function integrateContour(
+  expr: Extract<Expr, { kind: 'contour-integral' }>,
+  environment: EvaluationEnvironment,
+  depth: number,
+  contourDepth: number,
+): Result<ContourIntegralResult, MathIssue> {
+  const callbacks = contourCallbacks(expr, environment, depth, contourDepth);
+  if (!callbacks.ok) return callbacks;
+  return contourIntegral({
+    path: callbacks.value.atParameter,
+    integrand: callbacks.value.atPoint,
+  });
 }
 
 function evaluateCall(
