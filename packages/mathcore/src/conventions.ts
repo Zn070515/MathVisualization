@@ -35,7 +35,8 @@ export const CONVENTIONS = {
     name: 'Principal argument',
     definition: `Arg z ∈ ${PRINCIPAL_ARGUMENT_RANGE}, continuous except on the negative real axis`,
     note: 'The negative real axis belongs to the upper edge of the branch cut, so Arg(-1) = π rather than -π. JavaScript atan2 returns -π for a negative zero imaginary part; principalArg remaps that single case so the range is exactly (-π, π].',
-    glslImplementation: 'complexArg() in the shader prelude uses atan(y, x) and must agree on this range.',
+    glslImplementation:
+      'complexArg() in the shader prelude uses atan(y, x) and must agree on this range.',
   },
   complexLogarithm: {
     name: 'Complex logarithm',
@@ -73,7 +74,12 @@ export const CONVENTIONS = {
   contourOrientation: {
     name: 'Contour orientation',
     definition: 'Positive orientation is counter-clockwise',
-    note: 'Recorded now so the future contour-integration feature has a fixed sign convention from the start. Not yet implemented.',
+    note: 'The parameter runs over [0, 2π] so that γ(t) = r·e^(it) is traversed exactly once in the positive direction, which is what fixes the sign of ∮ f dz as +2πi times the enclosed residues. A path written the other way round — γ(t) = r·e^(-it) — reverses the sign, and that is the whole of what orientation means here. See `contourIntegral` for the parameter range and the accuracy floor.',
+  },
+  contourIntegral: {
+    name: 'Contour integral',
+    definition: '∮_γ f(z) dz = ∫ f(γ(t))·γ′(t) dt over t ∈ [0, 2π]',
+    note: 'The rule is the composite trapezoid: spectrally accurate for a closed contour, second order for an open one, so every result reports whether the path actually closed and by how much it missed. γ′ is a Richardson-extrapolated central difference, which puts a floor of about 1e-10 (relative) on the accuracy of any result, and the reported error estimate is never allowed below it. The integral is a quadrature, so a pole the grid steps over is invisible to it — which is why whether a pole is *enclosed* is settled by the winding number and not by this.',
   },
   surfaceNormal: {
     name: 'Surface normal orientation',
@@ -82,7 +88,8 @@ export const CONVENTIONS = {
   },
   booleanReturn: {
     name: 'Undefined values',
-    definition: 'Undefined results are reported as a mathematical issue, never as NaN reaching the UI',
+    definition:
+      'Undefined results are reported as a mathematical issue, never as NaN reaching the UI',
     note: 'The numerical evaluator returns a discriminated result carrying a reason (division by zero, logarithm of zero, unbound symbol, ...). The GPU path cannot do this, so the shader marks undefined pixels explicitly and the CPU path is the reference.',
   },
   numberDisplay: {
@@ -155,7 +162,12 @@ export interface BuiltinConstant {
 }
 
 export const BUILTIN_CONSTANTS: readonly BuiltinConstant[] = [
-  { name: 'pi', space: 'R', value: { re: Math.PI, im: 0 }, description: 'Ratio of circumference to diameter' },
+  {
+    name: 'pi',
+    space: 'R',
+    value: { re: Math.PI, im: 0 },
+    description: 'Ratio of circumference to diameter',
+  },
   { name: 'e', space: 'R', value: { re: Math.E, im: 0 }, description: "Euler's number" },
   { name: 'tau', space: 'R', value: { re: 2 * Math.PI, im: 0 }, description: 'Full turn, 2π' },
   { name: 'i', space: 'C', value: CX_I, description: 'Imaginary unit' },
@@ -194,6 +206,37 @@ export const NUMERICS = {
   defaultFieldResolution: 256,
   /** Step used by finite-difference derivative estimates. */
   finiteDifferenceStep: 1e-6,
+  /** Points on the grid a contour integral is computed on. */
+  contourSamples: 1024,
+  /**
+   * The derivative's step as a fraction of the parameter interval.
+   *
+   * Larger than `finiteDifferenceStep` on purpose. An extrapolated central difference
+   * has a truncation term of order h⁴ and a roundoff term of order ε/h, and those meet
+   * around h ≈ 10⁻⁴ of the interval; a step of 10⁻⁶ would be entirely roundoff.
+   */
+  contourDerivativeStepFraction: 1e-4,
+  /**
+   * The relative accuracy floor the derivative imposes, so that no result claims to be
+   * more exact than the derivative that produced it.
+   */
+  contourDerivativeFloor: 1e-10,
+  /** How near the ends have to meet, relative to the path's size, for it to be closed. */
+  contourClosureTolerance: 1e-9,
+} as const;
+
+/**
+ * The parameter interval a contour is integrated over.
+ *
+ * One interval for every contour, so that the sign of the answer is fixed by a single
+ * stated convention rather than by what each path happened to be written as. A path
+ * that should be traversed over some other interval is written so that it is not:
+ * `γ(t) = a + (b − a)·t/(2π)` walks a segment once, just as `γ(t) = r·e^(it)` walks a
+ * circle once.
+ */
+export const CONTOUR_INTEGRAL = {
+  from: 0,
+  to: 2 * Math.PI,
 } as const;
 
 /** Domain-coloring convention, shared by the CPU reference and the shader. */
@@ -201,8 +244,7 @@ export const DOMAIN_COLORING = {
   /** Hue is driven by the argument, mapped from (-π, π] onto [0, 1). */
   hueFromArgument: 'h = (Arg w + π) / 2π',
   /** Brightness is driven by the modulus on a logarithmic scale. */
-  brightnessFromModulus:
-    'log2|w| drives a per-octave band; |w| = 1 sits at the middle of a band',
+  brightnessFromModulus: 'log2|w| drives a per-octave band; |w| = 1 sits at the middle of a band',
   /** Number of brightness bands per octave of |w|. */
   bandsPerOctave: 1,
   /** How |w| = 0 (a zero of the function) is drawn. */

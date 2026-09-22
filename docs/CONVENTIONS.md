@@ -111,12 +111,40 @@ distinction.
 
 ## Geometry and orientation
 
-Recorded now so the features that need them start from a fixed sign.
-
 ### Contour orientation
 
 Positive orientation is **counter-clockwise**. This fixes the sign of every
 contour integral and therefore the sign of `2πi Σ Res(f, zₖ)`.
+
+### Contour integral
+
+```
+∮_γ f(z) dz = ∫ f(γ(t))·γ′(t) dt     over t ∈ [0, 2π]
+```
+
+The parameter runs over `[0, 2π]` for **every** contour, so the sign of the answer is
+fixed by one stated convention rather than by how each path happens to be written:
+`γ(t) = r·e^(it)` walks a circle once in the positive direction, and a segment is
+written `γ(t) = a + (b − a)·t/(2π)` to walk once as well. Writing the path the other
+way round reverses the sign, and that is the whole of what orientation means here.
+
+The rule is the **composite trapezoid**. It is spectrally accurate on a closed contour
+— refining the grid stops helping once the integrand is resolved, because the integrand
+is periodic in the parameter — and second order on an open one. So every result reports
+whether the path actually closed and by how much it missed; `∮` over an open path is a
+claim the picture cannot make good on.
+
+`γ′` is a **Richardson-extrapolated** central difference. A plain one at the step this
+uses leaves about `6×10⁻⁸` of relative error, which would not meet the `10⁻⁹` the
+reference identities are stated to; extrapolating cancels the step-squared term and
+brings it to about `4×10⁻¹²`. That sets a floor, so every result carries an error
+estimate that is never allowed below it.
+
+And the integral is a **quadrature**: a pole the grid steps over is invisible to it.
+Whether a pole is *enclosed* is therefore settled by the winding number and not by
+this — the two are used together and never one in place of the other.
+
+## Recorded for features not yet built
 
 ### Surface normal
 

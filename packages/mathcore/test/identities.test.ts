@@ -16,6 +16,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { type Complex, cadd, cdiv, cmul, cx, cexp, isUndefined } from '../src/complex';
+import { contourIntegral as integrateContour } from '../src/contour';
+import { ok, type MathIssue, type Result } from '../src/errors';
 import { evaluateScalar, makeEnvironment, type UserFunctionDefinition } from '../src/evaluator';
 import { formatComplex } from '../src/format';
 import { parseExpression, parseStatement } from '../src/parser';
@@ -31,16 +33,28 @@ function exprOf(source: string, knownFunctions: readonly string[] = []): Expr {
 function atXY(source: string, x: number, y: number): Complex {
   const result = evaluateScalar(
     exprOf(source),
-    makeEnvironment({ values: [['x', cx(x, 0)], ['y', cx(y, 0)]] }),
+    makeEnvironment({
+      values: [
+        ['x', cx(x, 0)],
+        ['y', cx(y, 0)],
+      ],
+    }),
   );
   if (!result.ok) throw new Error(`expected a value for "${source}", got: ${result.issue.message}`);
   return result.value;
 }
 
 /** Evaluate an expression of one complex variable. */
-function at(source: string, z: Complex, functions: readonly UserFunctionDefinition[] = []): Complex {
+function at(
+  source: string,
+  z: Complex,
+  functions: readonly UserFunctionDefinition[] = [],
+): Complex {
   const result = evaluateScalar(
-    exprOf(source, functions.map((fn) => fn.name)),
+    exprOf(
+      source,
+      functions.map((fn) => fn.name),
+    ),
     makeEnvironment({
       values: [['z', z]],
       functions: functions.map((fn) => [fn.name, fn] as const),
@@ -76,39 +90,33 @@ function expectComplexNear(actual: Complex, expected: Complex, tolerance: number
 }
 
 /**
- * Contour integral of `source` along the circle |z - centre| = radius, using the
- * trapezoidal rule on the periodic parametrisation.
+ * Contour integral of `source` along the circle |z − centre| = radius.
  *
- * ∫_γ f(z) dz = ∫₀²π f(γ(t)) γ'(t) dt with γ(t) = centre + r e^{it}, so
- * γ'(t) = i r e^{it}. The integrand is periodic, so the trapezoidal rule
- * converges spectrally: 4096 points reach the floating-point noise floor.
+ * This delegates to the shipped routine, and is the only place these identities are
+ * computed. It used to carry its own trapezoid rule with an analytic γ′; keeping that
+ * would have left the reference tests checking mathematics the product does not do,
+ * which is the opposite of what a reference test is for. The routine consumes the
+ * evaluator through a callback, exactly as the app does, so what is under test here is
+ * still the whole path from source text to a number.
+ *
+ * The integrand is periodic on a closed circle, so the trapezoid converges spectrally.
+ * The accuracy is now the derivative's rather than machine precision — `contour.ts`
+ * states that floor and reports it — so the tolerances below are the ones that hold.
  */
-function contourIntegral(
-  source: string,
-  centre: Complex,
-  radius: number,
-  samples = 4096,
-): Complex {
-  let total: Complex = cx(0, 0);
-  const step = (2 * Math.PI) / samples;
+function contourIntegral(source: string, centre: Complex, radius: number, samples = 4096): Complex {
+  const integrand = exprOf(source);
+  const onCircle = (t: number): Result<Complex, MathIssue> =>
+    ok(cx(centre.re + radius * Math.cos(t), centre.im + radius * Math.sin(t)));
 
-  for (let index = 0; index < samples; index += 1) {
-    const t = index * step;
-    const pointOnCircle: Complex = { re: centre.re + radius * Math.cos(t), im: centre.im + radius * Math.sin(t) };
-    const derivative: Complex = { re: -radius * Math.sin(t), im: radius * Math.cos(t) };
-
-    const value = evaluateScalar(
-      exprOf(source),
-      makeEnvironment({ values: [['z', pointOnCircle]] }),
-    );
-    // A pole exactly on the contour would make the integral meaningless; the
-    // sample points here never coincide with one, so a failure is reported.
-    if (!value.ok) throw new Error(`the contour passed through a singularity of "${source}"`);
-
-    total = cadd(total, cmul(value.value, derivative));
-  }
-
-  return cmul(total, cx(step, 0));
+  const result = integrateContour({
+    integrand: (z) => evaluateScalar(integrand, makeEnvironment({ values: [['z', z]] })),
+    path: onCircle,
+    from: 0,
+    to: 2 * Math.PI,
+    samples,
+  });
+  if (!result.ok) throw new Error(`"${source}" could not be integrated: ${result.issue.message}`);
+  return result.value.value;
 }
 
 describe('differentiation', () => {
@@ -313,10 +321,7 @@ describe('display of numerical results', () => {
 describe('undefined behaviour stays undefined', () => {
   it('never turns a singularity into a finite number', () => {
     for (const source of ['1/z', 'log(z)', '1/(z^2+1)']) {
-      const result = evaluateScalar(
-        exprOf(source),
-        makeEnvironment({ values: [['z', cx(0, 0)]] }),
-      );
+      const result = evaluateScalar(exprOf(source), makeEnvironment({ values: [['z', cx(0, 0)]] }));
       if (!result.ok) continue;
       // Where the evaluator does produce a value, it must not be a silently
       // undefined complex number.
@@ -333,5 +338,7 @@ describe('undefined behaviour stays undefined', () => {
 });
 
 function expectMathClose(actual: number, expected: number, tolerance: number): void {
-  expect(Math.abs(actual - expected)).toBeLessThanOrEqual(tolerance * Math.max(1, Math.abs(expected)));
+  expect(Math.abs(actual - expected)).toBeLessThanOrEqual(
+    tolerance * Math.max(1, Math.abs(expected)),
+  );
 }
