@@ -13,9 +13,16 @@
  * rather than the scale guessed at.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { type Complex, cx, displayNumberToText } from '@mathviz/mathcore';
+import {
+  type Complex,
+  type CriticalPoint,
+  cx,
+  displayNumberToText,
+  findCriticalPoints,
+} from '@mathviz/mathcore';
 import { drawGridAndAxes } from '../render/axes2d';
 import { CANVAS_COLORS, prepareCanvas2d } from '../render/canvasSurface';
+import { TICK_FONT } from '../render/canvasText';
 import { NumberText } from '../display/NumberText';
 import { viewNumber } from '../display/numbers';
 import { useStore } from '../state/store';
@@ -27,6 +34,29 @@ import { fitViewport, fromScreen, planeWindow, toScreen } from './window2d';
 
 /** Points sampled across the visible interval. */
 const SAMPLES = 900;
+
+/** How near a marked point the pointer has to be for the cursor to take it. */
+const SNAP_RADIUS = 14;
+
+/** The height a marked point sits at: an axis crossing is on the axis. */
+function heightOf(point: CriticalPoint): number {
+  return point.kind === 'zero' ? 0 : point.value;
+}
+
+/**
+ * How a marked point is written.
+ *
+ * A crossing is a coordinate and nothing else; a turn says which kind it is. That
+ * is the whole distinction the analysis makes, made visible: a minimum that sits
+ * on the axis reads `min (0, 0)`, and never `(0, 0)`, so it is not passed off as a
+ * crossing.
+ */
+function labelOf(point: CriticalPoint): string {
+  const t = displayNumberToText(viewNumber(point.t));
+  if (point.kind === 'zero') return `(${t}, 0)`;
+  const value = displayNumberToText(viewNumber(point.value));
+  return `${point.kind === 'maximum' ? 'max' : 'min'} (${t}, ${value})`;
+}
 
 interface Range {
   readonly min: number;
@@ -77,6 +107,23 @@ export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
   )}`;
 
   const [measured, setMeasured] = useState<Range | null>(null);
+  /** The marked point the cursor has taken, if any. Labelled; the rest are dots. */
+  const [snapped, setSnapped] = useState<CriticalPoint | null>(null);
+
+  /**
+   * Where the curve crosses the axis, and where it turns round.
+   *
+   * Only where the value is real: for a signal drawn as its real and imaginary
+   * parts, "the zeros of f" is not what is on the screen, and marking them would
+   * point at a curve that is not the one being read.
+   */
+  const criticalPoints = useMemo((): readonly CriticalPoint[] => {
+    if (!drawable || evaluation === null || isComplexValued) return [];
+    return findCriticalPoints((t) => evaluation.evaluate(cx(t, 0)), {
+      tMin: visible.min,
+      tMax: visible.max,
+    });
+  }, [drawable, evaluation, isComplexValued, visible]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -160,6 +207,39 @@ export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
     strokeCurve((value) => value.re, CANVAS_COLORS.curve);
     if (isComplexValued) strokeCurve((value) => value.im, CANVAS_COLORS.curveSecondary);
 
+    // The points worth naming: marked always, labelled only for the one the cursor
+    // has taken. That is how a reader finds them without the picture disappearing
+    // under numbers.
+    for (const point of criticalPoints) {
+      const at = toScreen(window, { x: point.t, y: heightOf(point) }, width, height);
+      if (!Number.isFinite(at.x) || at.x < 0 || at.x > width) continue;
+      context.beginPath();
+      context.arc(at.x, at.y, Math.max(2.5, ratio * 3), 0, Math.PI * 2);
+      // Filled with the paper and ringed with ink, so it reads as a mark *on* the
+      // curve rather than as part of it.
+      context.fillStyle = CANVAS_COLORS.paper;
+      context.fill();
+      context.strokeStyle = CANVAS_COLORS.curve;
+      context.lineWidth = Math.max(1.2, ratio * 1.4);
+      context.stroke();
+    }
+
+    if (snapped !== null) {
+      const at = toScreen(window, { x: snapped.t, y: heightOf(snapped) }, width, height);
+      if (Number.isFinite(at.x)) {
+        const text = labelOf(snapped);
+        context.font = `${TICK_FONT.size}px ${TICK_FONT.family}`;
+        const textWidth = context.measureText(text).width;
+        // Beside the point, and inside the frame — flipped to the other side rather
+        // than clipped when there is no room on the right.
+        const left = at.x + 10 + textWidth > width ? at.x - 10 - textWidth : at.x + 10;
+        context.fillStyle = CANVAS_COLORS.curve;
+        context.textAlign = 'left';
+        context.textBaseline = 'bottom';
+        context.fillText(text, left, Math.max(TICK_FONT.size + 2, at.y - 8));
+      }
+    }
+
     // The shared cursor: a rule at the chosen value of the variable, and a mark
     // where the curve is there, so the readout has something on the picture to
     // point at.
@@ -185,9 +265,11 @@ export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
       }
     }
   }, [
+    criticalPoints,
     drawable,
     evaluation,
     isComplexValued,
+    snapped,
     state.hover,
     state.selection,
     state.viewport,
@@ -238,6 +320,38 @@ export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
     return Number.isFinite(point.x) ? cx(point.x, 0) : null;
   };
 
+  /**
+   * The marked point under the pointer, if there is one.
+   *
+   * Snapping is what makes the marked points readable rather than merely visible:
+   * the cursor takes the exact value the analysis found, so the readout prints
+   * that value and not the nearest pixel's.
+   */
+  const criticalNear = (event: { clientX: number; clientY: number }): CriticalPoint | null => {
+    const canvas = canvasRef.current;
+    if (canvas === null || criticalPoints.length === 0) return null;
+    const bounds = canvas.getBoundingClientRect();
+    if (bounds.width === 0 || bounds.height === 0) return null;
+
+    const window = planeWindow(state.viewport, bounds.width, bounds.height);
+    const pointerX = event.clientX - bounds.left;
+    const pointerY = event.clientY - bounds.top;
+
+    let best: CriticalPoint | null = null;
+    let bestDistance = SNAP_RADIUS * SNAP_RADIUS;
+    for (const point of criticalPoints) {
+      const at = toScreen(window, { x: point.t, y: heightOf(point) }, bounds.width, bounds.height);
+      const dx = at.x - pointerX;
+      const dy = at.y - pointerY;
+      const distance = dx * dx + dy * dy;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = point;
+      }
+    }
+    return best;
+  };
+
   const dragStart = useRef<{ x: number; y: number } | null>(null);
 
   return (
@@ -254,8 +368,17 @@ export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
           store.setSelection(variableAt(event));
         }}
         onPointerMove={(event) => {
-          const point = variableAt(event);
-          if (point !== null) store.setHover(point);
+          // Snapping comes first: on a marked point the cursor takes *that* point,
+          // so the readout prints the value the analysis found rather than the
+          // coordinate under the pixel.
+          const near = criticalNear(event);
+          setSnapped(near);
+          if (near !== null) {
+            store.setHover(cx(near.t, 0));
+          } else {
+            const point = variableAt(event);
+            if (point !== null) store.setHover(point);
+          }
 
           const start = dragStart.current;
           if (start === null) return;
@@ -275,6 +398,7 @@ export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
         }}
         onPointerLeave={() => {
           dragStart.current = null;
+          setSnapped(null);
           store.clearCursor();
         }}
         onWheel={(event) => {

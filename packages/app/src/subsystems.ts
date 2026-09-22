@@ -137,6 +137,12 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
         status: 'implemented',
       },
       {
+        name: 'Points of interest, and a cursor that takes them',
+        summary:
+          'Zero crossings and turning points marked on the curve and labelled. A crossing reads as a coordinate; a turn reads as a maximum or a minimum, so a minimum that sits on the axis is never passed off as a root. Moving the pointer near one takes it exactly, and the readout prints the value the analysis found rather than the pixel’s.',
+        status: 'implemented',
+      },
+      {
         name: 'Linked cursor and selection',
         summary: 'One shared value of t across the views that are open.',
         status: 'implemented',

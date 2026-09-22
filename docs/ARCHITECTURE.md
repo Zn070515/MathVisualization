@@ -319,6 +319,27 @@ decided from *measured* text widths. That last rule is a pure function
 (`readableLabels`) so that it can be tested without a canvas, which jsdom does not
 have.
 
+**Points of interest.** `mathcore/src/critical.ts` finds where a curve crosses the
+axis and where it turns round, and the cartesian view marks them and lets the
+cursor take them. It is worth stating what it does *not* claim, because the tool it
+is modelled on gets this wrong and says so: intercepts and extrema are
+*approximations*, and a minimum at height 0.0001 looks exactly like a root until
+you zoom in. So a crossing and a touch are different variants of the result type,
+and the difference is visible on screen — a crossing is labelled with a coordinate,
+a turn is labelled `min` or `max` with its value. `(t − 2)² + 0.0001` therefore
+reports a minimum at 0.0001 and never a root.
+
+Two numerical decisions carry that:
+
+- **A sign change is not a crossing.** `tan` runs from `+∞` to `−∞` across `π/2`,
+  which every sampler reads as a sign change and no function has a root there.
+  Bisection tells them apart by asking which way the magnitude moved — at a root it
+  shrinks towards zero, at a pole it grows towards infinity — which is scale-free,
+  so no tolerance has to be guessed for a function measured in millions.
+- **A turn wins the place.** Where an exact zero and a turn coincide — `t²` and
+  `|t|` both land their minimum exactly on a sample — the true statement is that
+  the curve *touched*, and calling that a crossing is the mistake being avoided.
+
 ### 7.3 The renderers
 
 Two WebGL2 renderers, deliberately siblings rather than one generalised class:
@@ -580,7 +601,7 @@ There is one convention per row and one place it is written down.
 
 Four levels, all of them runnable:
 
-1. **`pnpm test`** — 629 tests. Parser, AST, type inference, complex arithmetic,
+1. **`pnpm test`** — 646 tests. Parser, AST, type inference, complex arithmetic,
    numerical evaluation, workspace behaviour, GLSL lowering, SymPy lowering,
    colouring, surface sampling, how a number is written, where the axis ticks go,
    and the mathematical reference identities. The identity suite
@@ -663,7 +684,7 @@ MathVisualization/
 │   │   │   ast.ts  lexer.ts  parser.ts  latex.ts  types.ts  infer.ts
 │   │   │   evaluator.ts  format.ts  display.ts  ticks.ts  workspace.ts
 │   │   │   coloring.ts  surface.ts  glsl.ts  surfaceGlsl.ts  sympy.ts  cas.ts
-│   │   └── test/               409 tests
+│   │   └── test/               426 tests
 │   └── app/                    the interface. React, Vite.
 │       ├── src/
 │       │   ├── subsystems.ts   the three subsystems, one description
