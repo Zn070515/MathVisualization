@@ -1,20 +1,84 @@
-# MathVisualization
+<div align="center">
 
-An expression-first environment for exploring complex analysis, integral
-transforms and multivariable calculus. You write mathematics; the system works out
-what kind of object it is and offers the views and analyses that apply to it.
+<h1>MathVisualization</h1>
 
-```
-/
-├── /complex       Complex Analysis
-├── /transforms    Integral Transforms
-└── /calculus      Multivariable Calculus
-```
+<p><strong>表达式优先的数学探索环境</strong> · <strong>An expression-first environment for mathematics</strong></p>
 
-The three are peers. They share one mathematical core: one parser, one AST, one
-type system, one numerical evaluator, one symbolic adapter. `GOAL.md` is the
-product document and the authority on what this project is and is not; this file
-covers how to run it.
+<p>
+  <a href="https://github.com/Zn070515/MathVisualization/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Zn070515/MathVisualization/ci.yml?branch=main&label=CI" alt="CI status"></a>
+</p>
+
+<p>
+  <img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white" alt="TypeScript 5.9">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=20232A" alt="React 19">
+  <img src="https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white" alt="Vite 5">
+  <img src="https://img.shields.io/badge/WebGL2-two%20pipelines-990000" alt="WebGL2">
+  <img src="https://img.shields.io/badge/MathLive-0.110-1e40af" alt="MathLive 0.110">
+  <img src="https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white" alt="Python 3.12 or newer">
+</p>
+
+<p>
+  <a href="#setting-it-up">快速开始 · Get started</a> ·
+  <a href="#what-you-should-see">界面导览 · A tour</a> ·
+  <a href="#verifying-it">验证 · Verifying</a> ·
+  <a href="#design-notes">设计说明 · Design notes</a>
+</p>
+
+</div>
+
+MathVisualization is an environment for exploring complex analysis, integral
+transforms and multivariable calculus by *writing mathematics*. You type an
+expression; the system infers what kind of object it is — `C → C`, `R² → R` — and
+puts the pictures and the analyses that suit **that object** in front of you, rather
+than asking you to pick a tool first.
+
+| Subsystem | What it is for |
+|---|---|
+| `/complex` | Functions of a complex variable, drawn as maps of the plane. |
+| `/transforms` | Signals in the time domain, and what they become in the transform domain. |
+| `/calculus` | Scalar and vector fields, their local structure, and the integrals over them. |
+
+They are peers, and each is the beginning of a subject rather than a demonstration.
+Underneath, they are one program: one parser, one AST, one type system, one
+numerical evaluator, one symbolic adapter — and a core with **no runtime
+dependencies at all**.
+
+## Read these first
+
+| Document | What it governs |
+|---|---|
+| [`GOAL.md`](GOAL.md) | The product document, and the authority on what this project is and is not. |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | How it is built, and why — every claim naming the file it is about. |
+| [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) | Every mathematical convention, rendered for a reader. |
+| [`packages/mathcore/src/conventions.ts`](packages/mathcore/src/conventions.ts) | The same conventions as a machine-readable table the tests assert against, so the document above cannot drift from the behaviour. |
+
+## What it refuses to do
+
+The interesting part of this project is what it will not do, because each of these
+is a thing that would have been easier.
+
+- **A second mathematical truth.** There is one AST. Plain text and LaTeX both
+  produce it; the CPU evaluator, the symbolic engine and two GPU pipelines all read
+  it. A renderer that needed its own parser would be a second answer to the same
+  question.
+- **Fabrication.** An unimplemented capability is named and marked as such, never
+  offered as a button that returns a wrong answer. A value that does not exist is
+  reported with a *reason* — the divisor is zero here — rather than as `NaN`.
+- **A number written two ways.** One policy for how a number is written, in the core,
+  so the readout and the axis labels cannot disagree about the same magnitude.
+- **Hidden scaling.** A curve that leaves the frame is stated as a number in the
+  legend rather than silently rescaled to fit. Moving the frame is a thing you ask
+  for, not a thing done behind your back.
+- **A claim without evidence.** A result obtained numerically is presented as one. A
+  place where a curve crosses the axis and a place where it merely touches are
+  different statements, and are labelled differently.
+- **An account system.** There is no login, no server, and no telemetry. Your work is
+  written in your own browser.
+
+> **What is verified** is stated in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §11,
+> and **whether it passes** is stated by the [CI workflow](.github/workflows/ci.yml) —
+> which runs one command, `pnpm verify`, the same one a developer runs. Counts and
+> stage numbers are deliberately left to those, so that this file cannot go stale.
 
 ---
 
@@ -383,7 +447,7 @@ On Windows, use `Remove-Item -Recurse -Force` in place of `rm -rf`.
 ```bash
 pnpm lint          # ESLint, zero warnings
 pnpm typecheck     # tsc, both packages
-pnpm test          # 646 tests
+pnpm test          # the suite
 pnpm build         # production build of the application
 ```
 
