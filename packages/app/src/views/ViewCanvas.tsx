@@ -9,6 +9,7 @@
  * The default is one view. Adding a second is a deliberate act, which is how
  * GOAL.md section 5.4 wants multi-view to work — available, but not imposed.
  */
+import { type ReactNode } from 'react';
 import {
   FIELD_MODE_DESCRIPTIONS,
   FIELD_MODE_LABELS,
@@ -33,16 +34,30 @@ const VIEW_TITLES: Readonly<Record<ViewKind, string>> = {
   plot: 'Plot',
 };
 
-export function ViewCanvas({ store }: { store: WorkspaceStore }): React.JSX.Element {
+export interface ViewCanvasProps {
+  readonly store: WorkspaceStore;
+  /** Whether the analysis drawer is showing. */
+  readonly analysisOpen: boolean;
+  readonly onAnalysisToggle: () => void;
+  /** The drawer's contents, supplied by the page so this component stays about views. */
+  readonly analysis: ReactNode;
+}
+
+export function ViewCanvas({
+  store,
+  analysisOpen,
+  onAnalysisToggle,
+  analysis,
+}: ViewCanvasProps): React.JSX.Element {
   const views = useStore(store, (current) => current.views);
   const subsystem = useStore(store, (current) => current.subsystem);
   const addable = availableViewKinds(subsystem);
 
   return (
     <div className="canvas">
-      {/* Views are added deliberately rather than being present by default, which
-          is how GOAL.md section 5.4 wants multi-view to behave: available, and
-          never imposed. */}
+      {/* Views are added deliberately rather than being present by default, which is
+          how GOAL.md section 5.4 wants multi-view to behave: available, and never
+          imposed. */}
       <div className="canvas__bar">
         <span className="canvas__bar-label">Add view</span>
         {addable.map((kind) => (
@@ -57,6 +72,7 @@ export function ViewCanvas({ store }: { store: WorkspaceStore }): React.JSX.Elem
             {VIEW_TITLES[kind]}
           </button>
         ))}
+
         <button
           type="button"
           className="canvas__reset"
@@ -67,6 +83,21 @@ export function ViewCanvas({ store }: { store: WorkspaceStore }): React.JSX.Elem
         >
           Reset view
         </button>
+
+        {/* Analysis lives here rather than under the expression list, because the
+            bottom of that panel belongs to input. Both reveal the same mathematics
+            as before; only their address has changed. */}
+        <button
+          type="button"
+          className={
+            analysisOpen ? 'canvas__analysis canvas__analysis--on' : 'canvas__analysis'
+          }
+          aria-expanded={analysisOpen}
+          onClick={onAnalysisToggle}
+          title={analysisOpen ? 'Hide analysis' : 'Show analysis and capabilities'}
+        >
+          Analysis
+        </button>
       </div>
 
       <div className={`canvas-grid canvas-grid--${Math.min(views.length, 2)}`}>
@@ -74,6 +105,8 @@ export function ViewCanvas({ store }: { store: WorkspaceStore }): React.JSX.Elem
           <ViewFrame key={view.id} store={store} view={view} removable={views.length > 1} />
         ))}
       </div>
+
+      {analysisOpen && <div className="canvas__drawer">{analysis}</div>}
     </div>
   );
 }

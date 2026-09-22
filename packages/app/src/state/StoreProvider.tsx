@@ -14,7 +14,7 @@ import { useEffect, useMemo, type ReactNode } from 'react';
 import { DEFAULT_VIEWPORT, WorkspaceStore, type ViewBlueprint } from './workspaceStore';
 import { WorkspaceStoreContext } from './storeContext';
 import { loadWorkspace, saveWorkspace } from './persistence';
-import { cx } from '@mathviz/mathcore';
+import { cx, plainToLatex } from '@mathviz/mathcore';
 import { subsystemById, type SubsystemId } from '../subsystems';
 
 /** The views a subsystem opens with. */
@@ -40,9 +40,16 @@ export function WorkspaceProvider({
     const definition = subsystemById(subsystem);
     const restored = loadWorkspace(subsystem);
 
+    // The examples are written in the plain syntax because that is the readable way
+    // to keep one description of each. They reach the editor as LaTeX, converted
+    // through the canonical AST so that the two cannot say different things.
+    const opening = (restored?.lines ?? definition.examples.slice(0, 2)).map((line) =>
+      restored === null ? plainToLatex(line) : line,
+    );
+
     const created = new WorkspaceStore({
       subsystem,
-      initialLines: restored?.lines ?? definition.examples.slice(0, 2),
+      initialLines: opening,
       drawableKinds: definition.drawableKinds,
     });
 
@@ -74,7 +81,7 @@ export function WorkspaceProvider({
     return store.subscribe(() => {
       const state = store.getState();
       saveWorkspace(subsystem, {
-        lines: state.lines.map((line) => line.source),
+        lines: state.lines.map((line) => line.latex),
         parameterValues: Object.fromEntries(state.parameterValues),
         viewport: {
           centreRe: state.viewport.centre.re,

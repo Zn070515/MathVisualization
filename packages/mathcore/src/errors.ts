@@ -31,6 +31,16 @@ export interface ParseError {
   readonly kind: 'parse-error';
   readonly message: string;
   readonly span: SourceSpan;
+  /**
+   * True when the source is not wrong but *unfinished* — an empty fraction, a
+   * closing brace that has not been typed yet, a function awaiting its argument.
+   *
+   * The distinction matters while someone is typing. An unfinished expression is a
+   * normal state and should be shown as nothing at all; a wrong one deserves a
+   * sentence. Without this flag the interface would flag an error on every
+   * keystroke that opens a structure.
+   */
+  readonly incomplete?: boolean;
 }
 
 /** Reason a symbol could not be resolved during evaluation or inference. */

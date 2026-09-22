@@ -9,16 +9,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { cx } from '@mathviz/mathcore';
-import { WorkspaceStore, resetLineIds } from '../src/state/workspaceStore';
+import { makeStore } from './helpers';
 import { ReadoutBar } from '../src/readout/ReadoutBar';
-
-function makeStore(initialLines: string[]): WorkspaceStore {
-  return new WorkspaceStore({
-    subsystem: 'complex',
-    initialLines,
-    drawableKinds: ['complex-function', 'complex-path', 'real-function'],
-  });
-}
 
 /**
  * Read one labelled cell of the readout.
@@ -36,7 +28,6 @@ function readCell(container: HTMLElement, label: string): string {
 
 beforeEach(() => {
   cleanup();
-  resetLineIds();
 });
 
 describe('with no cursor', () => {

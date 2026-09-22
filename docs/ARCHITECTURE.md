@@ -16,34 +16,45 @@ section 30:
 ## 1. The pipeline
 
 ```
-                    ┌──────────────────────────────────────────┐
-   source text ────► │  lexer  →  parser  →  canonical AST      │   mathcore
-   "f(z)=sin(z)/     └──────────────────────────────────────────┘
-     (z^2+1)"                          │
-                                       ▼
-                          ┌──────────────────────────┐
-                          │  mathematical type system │
-                          │  C → C, ComplexFunction   │
-                          └──────────────────────────┘
-                                       │
-               ┌───────────────────────┼───────────────────────┐
-               ▼                       ▼                       ▼
-    ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐
-    │ numerical          │  │ symbolic           │  │ GPU                │
-    │ evaluator          │  │ lowering → SymPy   │  │ lowering → GLSL    │
-    │ (CPU, double)      │  │ (exact)            │  │ (WebGL2, 32-bit)   │
-    └────────────────────┘  └────────────────────┘  └────────────────────┘
-               │                       │                       │
-               ▼                       ▼                       ▼
-       readout, mapped        derivative, and          domain colouring,
-       grid, scalar range     whatever the engine      scalar field modes
-                              can answer
+  ┌── front ends (surface syntaxes) ──┐
+  │                                   │
+  │  plain text        LaTeX          │
+  │  "sin(z)/(z^2+1)"  "\frac{\sin(z)}{z^2+1}"
+  │       │                 │         │
+  │  lexer+parser     latex.ts        │
+  │       │                 │         │
+  └───────┴────────┬────────┴─────────┘
+                   ▼
+        ┌──────────────────────────┐
+        │  canonical AST           │   mathcore — one tree, no runtime dependencies
+        └──────────────────────────┘
+                   │
+                   ▼
+        ┌──────────────────────────┐
+        │  mathematical type system │
+        │  C → C, ComplexFunction   │
+        └──────────────────────────┘
+                   │
+     ┌─────────────┼─────────────┬──────────────────┐
+     ▼             ▼             ▼                  ▼
+┌──────────┐ ┌──────────┐ ┌──────────┐   ┌──────────────────────┐
+│ numerical│ │ symbolic │ │ GPU      │   │ AST → LaTeX          │
+│ evaluator│ │ → SymPy  │ │ → GLSL   │   │ (printing, for the   │
+│ (double) │ │ (exact)  │ │ (WebGL2) │   │  editor to display)  │
+└──────────┘ └──────────┘ └──────────┘   └──────────────────────┘
+     │             │            │                    │
+     ▼             ▼            ▼                    ▼
+ readout, mapped  derivative   domain colouring   the structured
+ grid, ranges     and more    scalar field modes  math field
 ```
 
-Everything left of the three arrows is in `packages/mathcore`, which has **no
-runtime dependencies at all** and knows nothing about the DOM, React, the network
-or storage. Everything to the right of them is an *engine*: a consumer of the tree,
-not a second interpretation of the mathematics.
+Everything left of the type system is in `packages/mathcore`, which has **no runtime
+dependencies at all** and knows nothing about the DOM, React, the network or storage.
+Everything to the right is an *engine*: a consumer of the tree, not a second
+interpretation of the mathematics.
+
+Two front ends and four back ends, one tree. That is the whole architecture, and the
+sections below are the details of each arrow.
 
 ---
 
@@ -84,26 +95,60 @@ parameters. That is why `z^2` on its own is understood as a complex function.
 
 ---
 
-## 3. The parser
+## 3. The parsers
 
-`packages/mathcore/src/lexer.ts`, `parser.ts`
+`packages/mathcore/src/lexer.ts`, `parser.ts`, `latex.ts`
 
-Hand-written: a lexer, then a precedence-climbing parser. Not delegated to a
-library, because `GOAL.md` section 8 forbids binding the core architecture to a
-library's internal data structure, and because the tree *is* the architecture.
+There are two front ends and one tree. **Plain text** is what the examples, the tests
+and the documentation are written in, because it is the readable form; **LaTeX** is
+what the structured editor reads and writes, because a math editor's interchange
+format is LaTeX and inventing another would be inventing work. Both produce the
+canonical AST, so the two can never disagree about the mathematics.
 
-Precedence, low to high: `+ -`, `* /` and implicit multiplication, unary sign,
-`^` (right associative). So `-z^2` is `-(z^2)` and `2z^2` is `2*(z^2)`.
+Both are hand-written. Not delegated to a library, because `GOAL.md` section 8
+forbids binding the core architecture to a library's internal data structure, and
+because the tree *is* the architecture.
 
-### The two rules that needed deciding
+Precedence, low to high, in both syntaxes: `+ -`, `* /` and implicit multiplication,
+unary sign, `^` (right associative). So `-z^2` is `-(z^2)` and `2z^2` is `2*(z^2)`.
+
+### LaTeX, and why parsing it is not a formality
+
+LaTeX has **no operator precedence**. `a+b\cdot c` is three atoms in a row, and it
+only *reads* as `a + b·c` by convention. A tree needs an answer, so `latex.ts`
+recovers the conventional reading. That is what makes
+
+```
+\frac{\sin(z)}{z^{2}+1}   ⟹   sin(z) / (z^2 + 1)
+```
+
+rather than a denominator that swallows the addition — the failure mode is tested
+explicitly, because it is the one that would quietly change the mathematics.
+
+Three further decisions in that module:
+
+- **A subscript belongs to the name.** `a_1` is a different symbol from `a`, not an
+  operation applied to one. A compound subscript is braced in the name, so
+  `z_{k+1}` cannot be confused with the sum `z_k + 1`.
+- **Unfinished is not wrong.** An empty fraction or a missing closing brace is a
+  normal state while someone is typing, and is reported as `incomplete` rather than
+  as an error. Without that flag the interface would flag a mistake on every
+  keystroke that opens a structure.
+- **Trailing input is an error.** `z\int` must not parse as `z`. Without the check it
+  would, silently discarding the rest of the line.
+
+### The two rules that needed deciding, in both syntaxes
 
 **Implicit multiplication by juxtaposition.** `2z`, `2(z+1)`, `(z+1)(z-1)` all
 multiply. The one ambiguous case is a name followed by `(`: `sin(z)` is a call,
 `z(z+1)` is a product. This is resolved using the workspace's own function names,
-collected up front by `collectDefinedNames()`, so definition order does not
+collected up front by `collectNamesAcrossSyntaxes()`, so definition order does not
 matter. Parsing therefore depends on the document — a deliberate, documented
 choice, since it is the only way to read `z(z+1)` the way a mathematician means
 it without inventing notation.
+
+**A bare `i` is the imaginary unit** in both syntaxes, for the same reason: it is
+what the letter means in this subject.
 
 **Juxtaposed letters multiply.** The lexer reads a maximal run of letters as one
 token, so `it` and `ay` arrive as single names. If such a run is *not* a name the
@@ -265,6 +310,97 @@ produced and values to bind; it does not know what the expression means.
 
 ---
 
+## 7.4 The expression editor
+
+`packages/app/src/expression/`
+
+### Why MathLive, and why not MathQuill
+
+MathQuill was the first choice. Desmos's editing behaviour is the behaviour being
+reproduced, and MathQuill came out of Desmos. It was rejected on evidence:
+
+| | MathQuill | MathLive |
+|---|---|---|
+| published version | `0.10.1-a` — a prerelease | `0.110.0` |
+| last published | 2023, and 2016 before that | months ago, actively |
+| runtime dependency | `jquery ^1.12.3` | none in the editor itself |
+| TypeScript types | **none**; `@types/mathquill` does not exist (404) | ships its own |
+| React 19 | manipulates the DOM directly, against the reconciler | a web component, framework-agnostic |
+| accessibility | no meaningful screen-reader support | designed with it: ARIA and spoken mathematics |
+
+A hard jQuery 1.x dependency, no types at all, and unmaintained prerelease releases
+are not acceptable for the input layer of a project meant to last. The editing
+semantics that were wanted are not lost by the substitution: MathLive navigates
+structures with the arrow keys, emits and accepts LaTeX, and reports a **cancellable
+`move-out` event carrying a direction** when the caret runs out of structure. That
+last one is what makes structural-then-row navigation fall out for free:
+
+```
+ArrowDown inside a fraction   → moves to the denominator        (the editor's job)
+ArrowDown at the bottom        → move-out{direction:'downward'}  → the next row
+```
+
+The application handles `move-out`; it never has to guess where the caret should go.
+
+### What MathLive is *not* used for
+
+It carries its own computer algebra system as a dependency. **That system is never
+called.** MathLive here is a text-entry widget that reads and writes LaTeX. The
+canonical AST remains the only mathematical truth, and `latex.ts` in the core is what
+turns LaTeX into it. A second CAS evaluating anything would be exactly the dual truth
+this architecture exists to prevent. The production build contains no reference to it;
+the development build of MathLive imports it from a content delivery network, which is
+one more reason the editor is the only module that touches LaTeX and the only module
+that would need changing if it were ever replaced.
+
+### The adapter, and the interface it holds to
+
+`mathInputAdapter.ts` defines `MathFieldHandle` — insert, backspace, focus, read — and
+`MathExpressionField.tsx` implements it over the element. Nothing else in the
+application touches the editor. That is what makes the editor replaceable, and it is
+also what makes the integration testable: the tests drive a double that behaves like an
+editable field with a caret, so the *integration* is tested without a TeX engine.
+
+Three details in that adapter are load-bearing:
+
+- **The value is written only when it differs.** The element owns its editing state; a
+  blind write per render would reset the caret on every keystroke.
+- **Keypad buttons cancel their own pointer-down.** Without it, pressing a key moves
+  focus out of the formula and the caret is lost. This is asserted directly.
+- **The caret follows the focused row.** Enter, the keypad's return key and an arrow
+  that runs out of structure all move the *store's* focus; the caret has to follow or
+  the next keystroke lands in the previous formula.
+
+### The removed chrome
+
+The editor's own menu and virtual-keyboard buttons are hidden through the parts it
+exposes, because this application supplies the keypad and the editor's menu is empty.
+Two icon buttons inside every row would be precisely the chrome this round set out to
+remove.
+
+## 7.5 The keypad
+
+`packages/app/src/expression/keypad/`
+
+One keypad, three configurations. The digits and the letters are the same everywhere;
+only the function page differs, and it is *composed* from the shared groups plus the
+subsystem's own. There is no `ComplexKeypad` component — only a configuration, which
+is what stops the three subsystems growing three input systems.
+
+Every key carries **LaTeX**, not a command name or a callback. It goes straight into
+the field, which is the same representation the field reads and writes, so the keypad
+cannot drift into a second vocabulary. A key whose LaTeX the canonical AST cannot read
+is a key that should not exist: the calculus and transforms operators that the language
+does not yet have are rendered **inert and labelled**, with the reason in the tooltip,
+rather than inserting something the parser would reject. Two tests enforce this — one
+checks that every command in every insertion is one the parser knows, the other that
+every insertion is valid in some natural context.
+
+Keys for mathematics the language *does* have are live: the fraction key builds a real
+fraction with the caret in the numerator, and pressing it with a selection wraps the
+selection rather than discarding it (`#@` is MathLive's placeholder for the selection,
+`#?` for an empty box).
+
 ## 8. Linked view state
 
 `packages/app/src/state/workspaceStore.ts`
@@ -330,6 +466,8 @@ behaviour. The most consequential:
 | Domain colouring | hue from `arg`, brightness from `log₂|w|` per octave |
 | Scalar ramp | the viridis palette, monotone in lightness |
 | Undefined values | reported as a mathematical issue, never as `NaN` reaching the UI |
+| Editor interchange format | LaTeX, parsed by `latex.ts` into the same canonical AST the plain syntax produces |
+| Unfinished input | reported as `incomplete`, and shown as nothing rather than as an error |
 
 There is one convention per row and one place it is written down.
 
@@ -349,7 +487,16 @@ Four levels, all of them runnable:
 2. **`pnpm lint`, `pnpm typecheck`, `pnpm build`** — clean.
 3. **The symbolic engine** — `services/symbolic/server.py`, exercised against a
    running instance: `d/dz exp(z) = exp(z)` comes back exact.
-4. **The GPU against the CPU** — verified in a real browser by reading pixels out
+4. **The editor and the keypad** — driven in a real browser, because a TeX engine
+   cannot be exercised in jsdom. Verified there: `f(z)=sin(z)/(z^2+1)` typesets as a
+   two-dimensional quotient; the fraction key builds `rac{\placeholder{}}{\placeholder{}}`
+   with the caret in the numerator; `ArrowDown` inside a fraction moves to the
+   denominator with **no** `move-out`, while `ArrowDown` at the bottom emits
+   `move-out{downward}` and the panel opens the next row; `Enter` creates a row and the
+   caret follows it, so typing lands in the new formula; the three subsystem URLs share
+   one input system with per-subsystem function keys; and the editor's own menu and
+   virtual-keyboard buttons are absent.
+5. **The GPU against the CPU** — verified in a real browser by reading pixels out
    of the framebuffer and checking them against the convention. For `f(z) = z²`:
 
    | Point | Expected | Measured |
@@ -386,7 +533,9 @@ MathVisualization/
 │       │   ├── shell/          AppShell
 │       │   ├── routes/         HomePage, SubsystemPage
 │       │   ├── state/          store, workspaceStore, persistence, viewKinds
-│       │   ├── expression/     ExpressionPanel, ExpressionRow, ParameterSlider
+│       │   ├── expression/     MathExpressionField, ExpressionRow, ExpressionPanel
+│       │   │                   MathKeypad, mathInputAdapter,
+│       │   │                   keypad/{types,common,complex,transforms,calculus}
 │       │   ├── views/          FieldView, MappedGridView, PlotView, ViewCanvas
 │       │   ├── render/         fieldRenderer (WebGL2)
 │       │   ├── readout/        ReadoutBar

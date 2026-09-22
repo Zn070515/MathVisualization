@@ -42,6 +42,7 @@ export * from './builtins';
 export * from './ast';
 export * from './lexer';
 export * from './parser';
+export * from './latex';
 export * from './types';
 export * from './infer';
 export * from './evaluator';

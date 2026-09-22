@@ -24,6 +24,7 @@ import {
   type VariableBinding,
   type Workspace,
   type WorkspaceEntry,
+  type WorkspaceInput,
   buildWorkspace,
   collectVariableNames,
   cx,
@@ -32,10 +33,22 @@ import {
 import { MutableStore } from './store';
 import type { SubsystemId } from '../subsystems';
 
-/** One editable line, with a stable identity so focus and errors survive edits. */
+/**
+ * One editable line, with a stable identity so focus and errors survive edits.
+ *
+ * `latex` is the line's source, and it is LaTeX because that is what the structured
+ * editor reads and writes. LaTeX is a *surface syntax*, not a second truth: it is
+ * parsed into the canonical AST by the core, and everything mathematical —
+ * typing, evaluation, rendering — works from that tree. See `docs/ARCHITECTURE.md`.
+ */
 export interface ExpressionLine {
   readonly id: string;
-  readonly source: string;
+  readonly latex: string;
+}
+
+/** Pass a line to the core in the syntax it is written in. */
+function workspaceInput(line: ExpressionLine): WorkspaceInput {
+  return { id: line.id, source: line.latex, syntax: 'latex' };
 }
 
 /** The visible region of the plane, in plane units. */
@@ -164,16 +177,16 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
     initialLines?: readonly string[];
     drawableKinds: readonly MathObjectKind[];
   }) {
-    const lines: ExpressionLine[] = (options.initialLines ?? []).map((source) => ({
+    const lines: ExpressionLine[] = (options.initialLines ?? []).map((latex) => ({
       id: nextLineId(),
-      source,
+      latex,
     }));
 
     super({
       subsystem: options.subsystem,
       lines,
-      workspace: buildWorkspace(lines),
-      parameterValues: collectSliderValues(buildWorkspace(lines)),
+      workspace: buildWorkspace(lines.map(workspaceInput)),
+      parameterValues: collectSliderValues(buildWorkspace(lines.map(workspaceInput))),
       hover: null,
       selection: null,
       viewport: DEFAULT_VIEWPORT,
@@ -215,12 +228,12 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
 
   // ------------------------------------------------------------------ lines
 
-  setLineSource(id: string, source: string): void {
-    this.rebuild((lines) => lines.map((line) => (line.id === id ? { ...line, source } : line)));
+  setLineLatex(id: string, latex: string): void {
+    this.rebuild((lines) => lines.map((line) => (line.id === id ? { ...line, latex } : line)));
   }
 
-  addLine(source = '', options: { focus?: boolean } = {}): string {
-    const line: ExpressionLine = { id: nextLineId(), source };
+  addLine(latex = '', options: { focus?: boolean } = {}): string {
+    const line: ExpressionLine = { id: nextLineId(), latex };
     this.rebuild(
       (lines) => [...lines, line],
       options.focus === false ? {} : { focusedLineId: line.id },
@@ -230,7 +243,7 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
 
   /** Add an empty line directly below an existing one, and focus it. */
   insertLineAfter(id: string): string {
-    const line: ExpressionLine = { id: nextLineId(), source: '' };
+    const line: ExpressionLine = { id: nextLineId(), latex: '' };
     this.rebuild(
       (lines) => {
         const index = lines.findIndex((candidate) => candidate.id === id);
@@ -250,11 +263,11 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
   clearOrRemoveLine(id: string): void {
     const line = this.getState().lines.find((candidate) => candidate.id === id);
     if (line === undefined) return;
-    if (line.source.trim() === '') {
+    if (line.latex.trim() === '') {
       this.removeLine(id);
       return;
     }
-    this.setLineSource(id, '');
+    this.setLineLatex(id, '');
   }
 
   focusLine(id: string | null): void {
@@ -388,7 +401,7 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
   ): void {
     this.update((state) => {
       const lines = transform(state.lines);
-      const workspace = buildWorkspace(lines);
+      const workspace = buildWorkspace(lines.map(workspaceInput));
       return {
         ...state,
         ...extra,

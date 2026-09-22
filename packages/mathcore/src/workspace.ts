@@ -50,13 +50,21 @@ import {
   inferDomain,
   spaceForConventionLetter,
 } from './infer';
-import { collectDefinedNames, parseStatement } from './parser';
+import { detectLatexDefinition, detectLatexParameter, parseLatexStatement } from './latex';
+import { detectDefinitionHeader, detectParameterName, parseStatement } from './parser';
 import { type Signature, type Space, spaceToString } from './types';
 
-/** Source text of one line, with a stable identity for the UI to key on. */
+/**
+ * Source text of one line, with a stable identity for the UI to key on.
+ *
+ * `syntax` names the surface language the text is written in. Both produce the
+ * same canonical AST, so nothing downstream of parsing needs to know which was
+ * used. The default is plain text, which keeps every existing caller working.
+ */
 export interface WorkspaceInput {
   readonly id: string;
   readonly source: string;
+  readonly syntax?: 'plain' | 'latex';
 }
 
 /** What a line turned out to be. */
@@ -118,12 +126,18 @@ export const EMPTY_WORKSPACE: Workspace = {
  * that definitions and parameters may refer to each other in any order.
  */
 export function buildWorkspace(inputs: readonly WorkspaceInput[]): Workspace {
-  const defined = collectDefinedNames(inputs.map((input) => input.source));
+  const defined = collectNamesAcrossSyntaxes(inputs);
   const functionNames = defined.functions;
-  const parseOptions = { knownFunctions: defined.functions, knownValues: defined.values };
 
   const drafts = inputs.map((input) => {
-    const parsed = parseStatement(input.source, parseOptions);
+    const parsed =
+      input.syntax === 'latex'
+        ? parseLatexStatement(input.source, { knownFunctions: defined.functions })
+        : parseStatement(input.source, {
+            knownFunctions: defined.functions,
+            knownValues: defined.values,
+          });
+
     if (!parsed.ok) {
       const entry: WorkspaceEntry = {
         id: input.id,
@@ -206,6 +220,47 @@ export function buildWorkspace(inputs: readonly WorkspaceInput[]): Workspace {
   });
 
   return { entries, parameters, functions, signatures, functionNames };
+}
+
+/**
+ * Every name the document defines, whichever syntax each line is written in.
+ *
+ * Function names are collected for lines of both syntaxes, because both parsers
+ * need them to tell a call from a product. Value names are only needed by the
+ * plain-text parser: LaTeX writes `ab` as two letter tokens, which already
+ * multiplies, so there is no ambiguity to resolve.
+ */
+function collectNamesAcrossSyntaxes(inputs: readonly WorkspaceInput[]): {
+  functions: Set<string>;
+  values: Set<string>;
+} {
+  const functions = new Set<string>();
+  const values = new Set<string>();
+
+  for (const input of inputs) {
+    if (input.syntax === 'latex') {
+      const header = detectLatexDefinition(input.source);
+      if (header !== null) {
+        functions.add(header.name);
+        for (const parameter of header.parameters) values.add(parameter);
+        continue;
+      }
+      const parameter = detectLatexParameter(input.source);
+      if (parameter !== null) values.add(parameter);
+      continue;
+    }
+
+    const header = detectDefinitionHeader(input.source);
+    if (header !== null) {
+      functions.add(header.name);
+      for (const parameter of header.parameters) values.add(parameter);
+      continue;
+    }
+    const parameter = detectParameterName(input.source);
+    if (parameter !== null) values.add(parameter);
+  }
+
+  return { functions, values };
 }
 
 /** Names defined twice in one workspace, mapped to the statement that repeats. */

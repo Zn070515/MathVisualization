@@ -75,7 +75,7 @@ uv pip install --python .venv/Scripts/python.exe -r requirements.txt
 ```bash
 pnpm lint          # ESLint, zero warnings
 pnpm typecheck     # tsc, both packages
-pnpm test          # 339 tests
+pnpm test          # 424 tests
 pnpm build         # production build of the application
 ```
 
@@ -93,6 +93,12 @@ The tests are not smoke tests. Among them:
   shared selection, multiple views;
 - the GLSL lowering, including the shader's mirror of the colouring convention;
 - the SymPy lowering, including exactness at the engine boundary;
+- the LaTeX front end: that it produces the *same* tree as the plain syntax, that the
+  round trip holds, that a compound subscript is not confused with a sum, and that
+  unfinished input is reported as unfinished rather than wrong;
+- the keypad: that every key inserts LaTeX the parser reads (so no key can offer a
+  button that produces a broken line), that insertions land at the caret, that a
+  selection is wrapped rather than discarded, and that a press does not steal focus;
 - **mathematical reference identities** — `d/dz exp(z) = exp(z)` by central
   differences, `∮ 1/z dz = 2πi` around the unit circle by the trapezoidal rule,
   Cauchy's theorem for entire functions, and Cauchy–Riemann residuals that are
@@ -102,9 +108,9 @@ The tests are not smoke tests. Among them:
 
 ## What works today
 
-Run the app and open the **Analysis and capabilities** disclosure in any subsystem:
-the implemented and unimplemented halves are listed by name, from the same source
-that drives the rest of the interface. The short version:
+Run the app and press **Analysis** in the canvas toolbar: the implemented and
+unimplemented halves are listed by name, from the same source that drives the rest of
+the interface. The short version:
 
 **Complex Analysis** — domain colouring; magnitude, phase, real and imaginary
 views; the mapped grid; a shared cursor and selection across views; parameters as
@@ -125,10 +131,16 @@ directional derivatives, tangent planes, critical points, multiple integrals,
 coordinate changes, vector fields, divergence, curl, and the three integral
 theorems in the calculus subsystem.
 
-The expression editor is a text field with a mathematical face, not yet a visual
-mathematical editor with real fractions, integrals and contour notation. That is a
-component in its own right and it is not built. Everything downstream of it —
-parsing, typing, evaluation, drawing — is real.
+**The expression editor is a structured mathematical editor**, not a text field: real
+fractions, exponents, radicals, subscripts, Greek letters and function notation, with a
+caret that navigates the structure. It is built on MathLive, wrapped behind a
+three-verb adapter; the reasoning, and why MathQuill was rejected, is in
+`docs/ARCHITECTURE.md` section 7.4.
+
+Under the expression list is a mathematical keypad with three pages — digits, letters,
+functions — whose function page differs per subsystem. The keypad inserts LaTeX the
+canonical AST reads; mathematics the language does not have yet is shown inert and
+labelled, rather than as a button that returns a wrong answer.
 
 ---
 
@@ -141,8 +153,11 @@ packages/mathcore/   the shared mathematical core. No runtime dependencies.
   coloring  glsl  sympy  cas
 
 packages/app/        the interface: React, Vite, WebGL2
-  subsystems  shell  routes  state  expression  views  render
+  subsystems  shell  routes  state  views  render
   readout  symbolic  analysis  styles
+  expression/   the editor, the row, the panel and the keypad
+                (MathExpressionField, mathInputAdapter, MathKeypad,
+                 keypad/{types,common,complex,transforms,calculus})
 
 services/symbolic/   SymPy behind an adapter. Standard library only.
 
@@ -173,9 +188,10 @@ system and the domain-colouring convention are defined here rather than delegate
 to libraries, so the project owns its mathematical model. Third-party code sits
 behind interfaces: SymPy behind `CasAdapter`, WebGL behind a renderer.
 
-**One AST, three backends.** The same tree is walked by the numerical evaluator,
-lowered to SymPy syntax, and lowered to a WebGL2 fragment shader. There is no
-second parser and no per-subsystem mathematics.
+**Two front ends, four back ends, one tree.** Plain text and LaTeX both parse into the
+same canonical AST; that tree is then walked by the numerical evaluator, lowered to
+SymPy syntax, lowered to a WebGL2 fragment shader, and printed back to LaTeX. There is
+no second parser and no per-subsystem mathematics.
 
 **Undefined is a reason, not `NaN`.** `1/z` at the origin does not produce a
 number; it produces a sentence saying the divisor is zero. The GPU path cannot
@@ -190,6 +206,16 @@ as exact rationals so that the distinction remains available.
 store, read by every view. A view cannot have a private cursor because there is
 nowhere to put one.
 
+**LaTeX is a surface syntax, not a second truth.** The editor reads and writes LaTeX;
+`latex.ts` in the core parses it into the *same* canonical AST the plain-text parser
+produces. Two front ends, four back ends, one tree.
+
+**The math core has no opinion about the editor.** Everything mathematical lives in
+`packages/mathcore`; the editor is one module in the application behind a three-verb
+adapter, so it can be replaced without touching any mathematics.
+
 **Nothing is faked.** A capability that is not implemented appears as a named
 intention, never as a button that returns a wrong answer. If you add a feature,
-add it to `subsystems.ts` with the right status and put a test behind it.
+add it to `subsystems.ts` with the right status and put a test behind it. The keypad
+holds itself to the same rule: a key whose LaTeX the parser cannot read is disabled
+and labelled, and a test enforces it.

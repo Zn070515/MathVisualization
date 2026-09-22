@@ -1,207 +1,245 @@
 /**
  * Expression panel tests.
  *
- * These check the interaction the panel is responsible for: typing produces a
- * type, a bad expression produces a stated reason rather than a blank, a
- * parameter becomes a control, and the keyboard flow works. What is *not* tested
- * here is the mathematics — that is the core's test suite — so the assertions are
- * about what the interface shows and what it sends to the store.
+ * What is checked here is the interaction the panel owns: typing produces a type and a
+ * tree, a bad expression is explained while an unfinished one stays quiet, a parameter
+ * becomes a slider, and the keyboard flows between rows. The mathematics itself is the
+ * core's test suite; these assertions are about what the interface shows and what it
+ * sends to the store.
+ *
+ * The math editor is a test double (see `setup.ts`), so the field here is an editable
+ * box with a caret rather than a TeX engine. The real editor's typesetting and
+ * structural navigation are verified in a browser.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {
-  WorkspaceStore,
-  resetLineIds,
-  type ViewKind,
-} from '../src/state/workspaceStore';
+import { exprToText, parseLatexStatement } from '@mathviz/mathcore';
 import { ExpressionPanel } from '../src/expression/ExpressionPanel';
+import type { FakeMathFieldElement } from './setup';
+import { lineSources, makeStore } from './helpers';
+import type { WorkspaceStore } from '../src/state/workspaceStore';
 
-function makeStore(
-  initialLines: string[] = [],
-  kinds: ViewKind[] = [],
-): WorkspaceStore {
-  void kinds;
-  return new WorkspaceStore({
-    subsystem: 'complex',
-    initialLines,
-    drawableKinds: ['complex-function', 'complex-path', 'real-function'],
-  });
+function renderPanel(store: WorkspaceStore, options: { keypadOpen?: boolean } = {}): {
+  container: HTMLElement;
+  toggle: () => void;
+} {
+  let open = options.keypadOpen ?? false;
+  const view = render(
+    <ExpressionPanel
+      store={store}
+      keypadOpen={open}
+      onKeypadToggle={() => {
+        open = !open;
+      }}
+    />,
+  );
+  return { container: view.container, toggle: () => view.rerender(
+    <ExpressionPanel store={store} keypadOpen={open} onKeypadToggle={() => {}} />,
+  ) };
+}
+
+/** The editor element for a row, by its accessible name. */
+function fieldAt(index: number): FakeMathFieldElement {
+  const fields = document.querySelectorAll('math-field');
+  const field = fields[index];
+  if (field === undefined) throw new Error(`no field at index ${index}`);
+  return field as FakeMathFieldElement;
 }
 
 beforeEach(() => {
   cleanup();
-  resetLineIds();
 });
 
 describe('showing what an expression is', () => {
-  it('shows the inferred type once an expression parses', () => {
-    render(<ExpressionPanel store={makeStore(['f(z)=z^2'])} />);
+  it('types an expression and shows its type only on the row', () => {
+    renderPanel(makeStore(['f(z)=z^2']));
     expect(screen.getByText('C → C')).toBeTruthy();
   });
 
-  it('names the kind of object', () => {
-    render(<ExpressionPanel store={makeStore(['f(z)=z^2'])} />);
-    expect(screen.getByText('complex')).toBeTruthy();
+  it('shows a scalar field differently', () => {
+    renderPanel(makeStore(['f(x,y)=x^2+y^2'], 'calculus'));
+    expect(screen.getByText('R² → R')).toBeTruthy();
   });
 
-  it('shows no type for an expression that does not parse yet', () => {
-    render(<ExpressionPanel store={makeStore(['f(z)=z^'])} />);
+  it('shows no type for an expression that is still being written', () => {
+    renderPanel(makeStore(['f(z)=z^']));
     expect(screen.queryByText('C → C')).toBeNull();
   });
 
-  it('types a scalar field differently', () => {
-    render(<ExpressionPanel store={makeStore(['f(x,y)=x^2+y^2'])} />);
-    expect(screen.getByText('R² → R')).toBeTruthy();
-    expect(screen.getByText('scalar field')).toBeTruthy();
+  it('carries no line numbers, kind labels or heading', () => {
+    const { container } = renderPanel(makeStore(['f(z)=z^2']));
+    // The engineering metadata that used to crowd the row.
+    expect(screen.queryByText('EXPRESSIONS')).toBeNull();
+    expect(screen.queryByText('01')).toBeNull();
+    expect(screen.queryByText('complex')).toBeNull();
+    expect(screen.queryByText('Why?')).toBeNull();
+    expect(container.querySelector('.panel__header')).toBeNull();
   });
 });
 
-describe('problems are explained', () => {
-  it('offers to explain a problem, and then explains it', async () => {
-    const user = userEvent.setup();
-    render(<ExpressionPanel store={makeStore(['f(z)=z^'])} />);
-
-    const explain = screen.getByRole('button', { name: 'Why?' });
-    await user.click(explain);
-
-    // The message comes from the core, so it says what a mathematician needs.
-    expect(screen.getByRole('status').textContent).toContain('Expected an expression');
-  });
-
-  it('explains a mathematical problem as well as a syntax one', async () => {
-    const user = userEvent.setup();
-    render(<ExpressionPanel store={makeStore(['f(z)=wombat*z'])} />);
-
-    await user.click(screen.getByRole('button', { name: 'Why?' }));
+describe('problems are explained, unfinished input is not', () => {
+  it('explains a genuine problem in words', () => {
+    renderPanel(makeStore(['f(z)=wombat*z']));
     expect(screen.getByRole('status').textContent).toContain('not defined');
   });
 
-  it('marks the input as invalid for a screen reader', () => {
-    render(<ExpressionPanel store={makeStore(['f(z)=z^'])} />);
-    const input = screen.getByRole('textbox', { name: 'Expression 1' });
-    expect(input.getAttribute('aria-invalid')).toBe('true');
+  it('stays quiet about an unfinished expression', () => {
+    renderPanel(makeStore(['f(z)=z^']));
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('marks the field invalid for a screen reader only when it is wrong', () => {
+    renderPanel(makeStore(['f(z)=z^']));
+    expect(fieldAt(0).getAttribute('aria-invalid')).toBe('false');
+
+    cleanup();
+    renderPanel(makeStore(['f(z)=wombat*z']));
+    expect(fieldAt(0).getAttribute('aria-invalid')).toBe('true');
   });
 });
 
 describe('editing', () => {
-  it('sends each keystroke to the store, and re-types as it goes', async () => {
-    const user = userEvent.setup();
+  it('sends what the editor holds to the store, and re-types as it goes', () => {
     const store = makeStore(['f(z)=z']);
-    render(<ExpressionPanel store={store} />);
+    renderPanel(store);
 
-    const input = screen.getByRole('textbox', { name: 'Expression 1' });
-    await user.type(input, '^2');
+    const field = fieldAt(0);
+    field.value = 'f\\left(z\\right)=z^{2}';
+    field.dispatchEvent(new Event('input'));
 
-    expect(store.getState().lines[0]?.source).toBe('f(z)=z^2');
+    expect(lineSources(store)[0]).toBe('f\\left(z\\right)=z^{2}');
     expect(screen.getByText('C → C')).toBeTruthy();
   });
 
-  it('turns a real assignment into a slider on the rows that use it', async () => {
-    const store = makeStore(['f(z)=a*z']);
-    render(<ExpressionPanel store={store} />);
-    // With no `a` defined there is nothing to slide.
-    expect(screen.queryByRole('slider')).toBeNull();
+  it('reads the LaTeX the field holds into the canonical tree', () => {
+    renderPanel(makeStore(['f(z)=sin(z)/(z^2+1)']));
+    const parsed = parseLatexStatement(lineSources(makeStore(['f(z)=sin(z)/(z^2+1)']))[0] ?? '');
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    if (parsed.value.kind !== 'function-definition') throw new Error('expected a definition');
+    // The fraction survives: the denominator did not swallow the addition.
+    expect(exprToText(parsed.value.body)).toBe('sin(z) / (z ^ 2 + 1)');
+  });
+});
 
-    store.addLine('a=2');
-    const user = userEvent.setup();
-    await user.type(screen.getByRole('textbox', { name: 'Expression 1' }), ' ');
-
-    // The slider appears on the row that mentions `a`, not on the definition row.
+describe('parameters', () => {
+  it('puts a slider on the rows that use the parameter, not on the definition', () => {
+    renderPanel(makeStore(['a=2', 'f(z)=a*z']));
     const sliders = screen.getAllByRole('slider');
     expect(sliders).toHaveLength(1);
     expect(sliders[0]?.getAttribute('aria-label')).toBe('Value of a');
   });
 
-  it('reports a parameter change to the store', async () => {
+  it('reports a parameter change to the store and resets it', async () => {
     const user = userEvent.setup();
     const store = makeStore(['a=2', 'f(z)=a*z']);
-    render(<ExpressionPanel store={store} />);
+    renderPanel(store);
 
     const field = screen.getByRole('textbox', { name: 'Exact value of a' });
     await user.clear(field);
     await user.type(field, '7{Enter}');
-
     expect(store.getState().parameterValues.get('a')).toBe(7);
-  });
-
-  it('resets a parameter to the value its definition gives it', async () => {
-    const user = userEvent.setup();
-    const store = makeStore(['a=2', 'f(z)=a*z']);
-    store.setParameter('a', 11);
-    render(<ExpressionPanel store={store} />);
 
     await user.click(screen.getByRole('button', { name: 'Reset a to its defined value' }));
     expect(store.getState().parameterValues.get('a')).toBe(2);
   });
+
+  it('offers no slider for a complex parameter', () => {
+    renderPanel(makeStore(['a=2i']));
+    expect(screen.queryAllByRole('slider')).toHaveLength(0);
+  });
 });
 
-describe('keyboard flow', () => {
-  it('adds a line below the current one on Enter', async () => {
-    const user = userEvent.setup();
+describe('keyboard flow between rows', () => {
+  it('starts a new expression on Enter', () => {
     const store = makeStore(['f(z)=z^2']);
-    render(<ExpressionPanel store={store} />);
+    renderPanel(store);
 
-    await user.type(screen.getByRole('textbox', { name: 'Expression 1' }), '{Enter}');
+    fieldAt(0).press('Enter');
 
     expect(store.getState().lines).toHaveLength(2);
-    expect(store.getState().lines[1]?.source).toBe('');
+    expect(lineSources(store)[1]).toBe('');
   });
 
-  it('moves focus between lines with the arrow keys', async () => {
-    const user = userEvent.setup();
+  it('goes to the next expression on a downward move', () => {
     const store = makeStore(['f(z)=z^2', 'g(z)=1/z']);
-    render(<ExpressionPanel store={store} />);
+    renderPanel(store);
 
-    const first = screen.getByRole('textbox', { name: 'Expression 1' });
-    first.focus();
-    await user.keyboard('{ArrowDown}');
-
+    fieldAt(0).moveOut('downward');
     expect(store.getState().focusedLineId).toBe(store.getState().lines[1]?.id);
   });
 
-  it('removes an empty line with Backspace', async () => {
-    const user = userEvent.setup();
+  it('goes to the previous expression on an upward move', () => {
+    const store = makeStore(['f(z)=z^2', 'g(z)=1/z']);
+    renderPanel(store);
+    store.focusLine(store.getState().lines[1]?.id ?? null);
+
+    fieldAt(1).moveOut('upward');
+    expect(store.getState().focusedLineId).toBe(store.getState().lines[0]?.id);
+  });
+
+  it('adds a row when leaving the last one downwards', () => {
+    const store = makeStore(['f(z)=z^2']);
+    renderPanel(store);
+
+    fieldAt(0).moveOut('downward');
+    expect(store.getState().lines).toHaveLength(2);
+  });
+
+  it('removes a blank expression on Backspace', () => {
     const store = makeStore(['f(z)=z^2', '']);
-    render(<ExpressionPanel store={store} />);
+    renderPanel(store);
 
-    const second = screen.getByRole('textbox', { name: 'Expression 2' });
-    await user.click(second);
-    await user.keyboard('{Backspace}');
+    fieldAt(1).press('Backspace');
+    expect(store.getState().lines).toHaveLength(1);
+  });
 
+  it('does not remove a row that has content', () => {
+    const store = makeStore(['f(z)=z^2']);
+    renderPanel(store);
+
+    fieldAt(0).press('Backspace');
     expect(store.getState().lines).toHaveLength(1);
   });
 });
 
 describe('adding and removing', () => {
-  it('adds an empty line from the footer', async () => {
+  it('adds an expression from the + control', async () => {
     const user = userEvent.setup();
     const store = makeStore(['f(z)=z^2']);
-    render(<ExpressionPanel store={store} />);
+    renderPanel(store);
 
-    await user.click(screen.getByRole('button', { name: 'Add expression' }));
+    await user.click(screen.getByRole('button', { name: 'Add an expression' }));
     expect(store.getState().lines).toHaveLength(2);
   });
 
-  it('clears a filled line rather than deleting it', async () => {
+  it('clears a filled row rather than deleting it', async () => {
     const user = userEvent.setup();
     const store = makeStore(['f(z)=z^2']);
-    render(<ExpressionPanel store={store} />);
+    renderPanel(store);
 
-    await user.click(screen.getByRole('button', { name: 'Delete expression 1' }));
+    await user.click(screen.getByRole('button', { name: 'Delete this expression' }));
     expect(store.getState().lines).toHaveLength(1);
-    expect(store.getState().lines[0]?.source).toBe('');
+    expect(lineSources(store)[0]).toBe('');
   });
 });
 
 describe('the panel as a whole', () => {
   it('is a labelled region listing the expressions in order', () => {
-    render(<ExpressionPanel store={makeStore(['f(z)=z^2', 'g(z)=1/z'])} />);
+    renderPanel(makeStore(['f(z)=z^2', 'g(z)=1/z']));
     const panel = screen.getByRole('region', { name: 'Expressions' });
-    const inputs = within(panel).getAllByRole('textbox');
-    expect(inputs.map((input) => (input as HTMLInputElement).value)).toEqual([
-      'f(z)=z^2',
-      'g(z)=1/z',
-    ]);
+    const fields = within(panel).getAllByLabelText(/^Expression/);
+    expect(fields).toHaveLength(2);
+  });
+
+  it('toggles the keypad, which is absent until asked for', async () => {
+    const user = userEvent.setup();
+    const { toggle } = renderPanel(makeStore(['f(z)=z^2']));
+    expect(screen.queryByRole('region', { name: 'Mathematics keypad' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Show the mathematical keypad' }));
+    toggle();
+    expect(screen.getByRole('region', { name: 'Mathematics keypad' })).toBeTruthy();
   });
 });

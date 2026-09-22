@@ -1,204 +1,162 @@
 /**
- * One line of the expression panel.
+ * One line of the expression list.
  *
- * Three things are shown at three levels of prominence, which is the whole of the
- * progressive-disclosure idea (GOAL.md 5.2):
+ * The row is a mathematical expression, and it looks like one. Everything that was
+ * previously stacked beside it — a line number, a type badge, a kind label, a "Why?"
+ * button and a delete cross — is either gone from the default view or shown only
+ * when the row is hovered or focused. The type is still inferred and still
+ * available; it simply no longer competes with the mathematics for attention.
  *
- * 1. Always: the expression, its inferred type badge, and whether it is
- *    drawable. That is enough to use the product.
- * 2. On focus: the parameter sliders the expression depends on.
- * 3. On request: the canonical form of the tree, what the parser built, and any
- *    problem with it.
+ * What is visible without any interaction:
  *
- * The input is a text field with a mathematical face rather than a rich editor.
- * Stating that plainly: a visual mathematical editor with real fractions,
- * integrals and contour notation is a component in its own right (GOAL.md 12) and
- * is not built yet. What is here is honest about being a text field, styled and
- * wired so that the rest of the system — parsing, typing, drawing — is real.
+ * - the expression, typeset;
+ * - its parameters, as sliders directly beneath it, which is where they belong;
+ * - a problem, when there is one, in words.
+ *
+ * What appears on hover or focus: the inferred type, and the delete control. What
+ * is deliberately absent: an index numeral, and any control that would do nothing.
  */
-import { useEffect, useRef, useState } from 'react';
-import {
-  type MathObjectKind,
-  type WorkspaceEntry,
-  exprToText,
-  signatureToString,
-} from '@mathviz/mathcore';
-import type { ExpressionLine } from '../state/workspaceStore';
+import { type MathObjectKind, type MathIssue, type ParseError, type WorkspaceEntry, signatureToString } from '@mathviz/mathcore';
+import type { MathFieldHandle, MoveOutDirection } from './mathInputAdapter';
+import { MathExpressionField } from './MathExpressionField';
 import { ParameterSlider } from './ParameterSlider';
+import type { ExpressionLine } from '../state/workspaceStore';
+import type { Ref } from 'react';
 
 export interface ExpressionRowProps {
   readonly line: ExpressionLine;
   readonly entry: WorkspaceEntry | undefined;
-  readonly index: number;
   readonly focused: boolean;
+  /** Whether this is the line a canvas is currently drawing. */
+  readonly drawn: boolean;
   readonly drawable: boolean;
-  readonly parameters: readonly { name: string; value: number; defined: number }[];
-  readonly onSourceChange: (source: string) => void;
+  readonly parameters: readonly {
+    readonly name: string;
+    readonly value: number;
+    readonly defined: number;
+  }[];
+  readonly handleRef: Ref<MathFieldHandle>;
+  readonly onLatexChange: (latex: string) => void;
   readonly onFocus: () => void;
   readonly onBlur?: () => void;
   readonly onRemove: () => void;
-  readonly onEnterAtEnd: () => void;
-  readonly onNavigate: (direction: -1 | 1) => void;
+  readonly onEnter: () => void;
+  readonly onMoveOut: (direction: MoveOutDirection) => void;
   readonly onParameterChange: (name: string, value: number) => void;
   readonly onParameterReset: (name: string) => void;
 }
 
-/** The kind badge: compact, and the same vocabulary the type system uses. */
+/** The kind of object, in words, for the tooltip rather than the row. */
 const KIND_LABELS: Readonly<Record<MathObjectKind, string>> = {
-  scalar: 'value',
-  'real-function': 'function',
-  'complex-function': 'complex',
-  'scalar-field': 'scalar field',
-  'vector-field': 'vector field',
-  'complex-path': 'path',
-  'parametric-curve': 'curve',
-  'parametric-surface': 'surface',
-  'transform-pair': 'transform pair',
-  unknown: 'unknown',
+  scalar: 'a value',
+  'real-function': 'a function of one real variable',
+  'complex-function': 'a function of one complex variable',
+  'scalar-field': 'a scalar field',
+  'vector-field': 'a vector field',
+  'complex-path': 'a path in the complex plane',
+  'parametric-curve': 'a parametric curve',
+  'parametric-surface': 'a parametric surface',
+  'transform-pair': 'a transform pair',
+  unknown: 'of a kind not recognised yet',
 };
+
+/**
+ * True when the source is unfinished rather than wrong.
+ *
+ * An empty fraction and a mistyped operator are different events. Only the second
+ * deserves a sentence while someone is still typing.
+ */
+function isUnfinished(problem: ParseError | MathIssue | null): boolean {
+  return problem !== null && problem.kind === 'parse-error' && problem.incomplete === true;
+}
 
 export function ExpressionRow({
   line,
   entry,
-  index,
   focused,
+  drawn,
   drawable,
   parameters,
-  onSourceChange,
+  handleRef,
+  onLatexChange,
   onFocus,
   onBlur,
   onRemove,
-  onEnterAtEnd,
-  onNavigate,
+  onEnter,
+  onMoveOut,
   onParameterChange,
   onParameterReset,
 }: ExpressionRowProps): React.JSX.Element {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [showDetail, setShowDetail] = useState(false);
-
-  // A line created for the user should be ready to type into.
-  useEffect(() => {
-    if (focused && line.source === '' && document.activeElement !== inputRef.current) {
-      inputRef.current?.focus();
-    }
-  }, [focused, line.source]);
-
-  const parseError = entry?.parseError ?? null;
-  const typeIssue = entry?.typeIssue ?? null;
-  const problem = parseError ?? typeIssue;
+  const problem = entry?.parseError ?? entry?.typeIssue ?? null;
+  const unfinished = isUnfinished(problem);
   const signature = entry?.type?.signature;
   const kind = entry?.type?.classification.kind;
-
-  const status =
-    problem !== null ? 'invalid' : signature === undefined ? 'incomplete' : 'valid';
 
   return (
     <li
       className={[
-        'row',
-        focused ? 'row--focused' : '',
-        status === 'invalid' ? 'row--invalid' : '',
+        'expr-row',
+        focused ? 'expr-row--focused' : '',
+        problem !== null && !unfinished ? 'expr-row--problem' : '',
       ]
         .filter(Boolean)
         .join(' ')}
     >
-      <div className="row__main">
-        <span className="row__index" aria-hidden="true">
-          {String(index + 1).padStart(2, '0')}
-        </span>
+      <div className="expr-row__line">
+        <MathExpressionField
+          value={line.latex}
+          onChange={onLatexChange}
+          onEnter={onEnter}
+          onMoveOut={onMoveOut}
+          onDeleteEmpty={onRemove}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          handleRef={handleRef}
+          invalid={problem !== null && !unfinished}
+          label={
+            signature === undefined
+              ? 'Expression'
+              : `Expression, ${KIND_LABELS[kind ?? 'unknown']}`
+          }
+        />
 
-        <label className="row__field">
-          <span className="visually-hidden">Expression {index + 1}</span>
-          <input
-            ref={inputRef}
-            className="row__input"
-            value={line.source}
-            spellCheck={false}
-            autoComplete="off"
-            autoCapitalize="off"
-            autoCorrect="off"
-            aria-invalid={status === 'invalid'}
-            aria-describedby={problem === null ? undefined : `${line.id}-problem`}
-            onChange={(event) => {
-              onSourceChange(event.target.value);
-            }}
-            onFocus={onFocus}
-            onBlur={onBlur}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                onEnterAtEnd();
-                return;
-              }
-              if (event.key === 'ArrowDown') {
-                event.preventDefault();
-                onNavigate(1);
-                return;
-              }
-              if (event.key === 'ArrowUp') {
-                event.preventDefault();
-                onNavigate(-1);
-                return;
-              }
-              // Backspace in an empty line removes it, as a list of expressions
-              // should behave.
-              if (
-                event.key === 'Backspace' &&
-                line.source === '' &&
-                event.currentTarget.selectionStart === 0
-              ) {
-                event.preventDefault();
-                onRemove();
-              }
-            }}
-          />
-        </label>
-
-        <div className="row__badges">
+        <div className="expr-row__aside">
           {signature !== undefined && (
             <span
-              className={`badge badge--type${drawable ? ' badge--drawable' : ''}`}
+              className={drawable ? 'expr-row__type expr-row__type--drawn' : 'expr-row__type'}
               title={
                 drawable
-                  ? `${KIND_LABELS[kind ?? 'unknown']}, drawn in this subsystem`
-                  : `${KIND_LABELS[kind ?? 'unknown']}, not drawn in this subsystem`
+                  ? `${KIND_LABELS[kind ?? 'unknown']}, drawn by this subsystem`
+                  : `${KIND_LABELS[kind ?? 'unknown']}, which this subsystem does not draw`
               }
             >
               {signatureToString(signature)}
             </span>
           )}
-          {signature !== undefined && (
-            <span className="row__kind">{KIND_LABELS[kind ?? 'unknown']}</span>
-          )}
-        </div>
-
-        <div className="row__actions">
-          {problem !== null && (
-            <button
-              type="button"
-              className="row__detail-toggle"
-              aria-expanded={showDetail}
-              onClick={() => {
-                setShowDetail((open) => !open);
-              }}
-            >
-              {showDetail ? 'Hide' : 'Why?'}
-            </button>
-          )}
+          {drawn && <span className="expr-row__drawn-mark" title="This is the expression being drawn" />}
           <button
             type="button"
-            className="row__remove"
+            className="expr-row__remove"
+            onPointerDown={(event) => {
+              event.preventDefault();
+            }}
             onClick={onRemove}
-            title="Delete this line"
-            aria-label={`Delete expression ${index + 1}`}
+            aria-label="Delete this expression"
+            title="Delete this expression"
           >
             ×
           </button>
         </div>
       </div>
 
+      {problem !== null && !unfinished && (
+        <p className="expr-row__problem" role="status">
+          {problem.message}
+        </p>
+      )}
+
       {parameters.length > 0 && (
-        <div className="row__parameters">
+        <div className="expr-row__parameters">
           {parameters.map((parameter) => (
             <ParameterSlider
               key={parameter.name}
@@ -214,23 +172,6 @@ export function ExpressionRow({
             />
           ))}
         </div>
-      )}
-
-      {showDetail && problem !== null && (
-        <p className="row__problem" id={`${line.id}-problem`} role="status">
-          {problem.message}
-        </p>
-      )}
-
-      {showDetail && entry?.statement != null && entry.type !== null && (
-        <dl className="row__detail">
-          <dt>Canonical form</dt>
-          <dd className="row__detail-math">{exprToText(entry.statement.body)}</dd>
-          <dt>Object</dt>
-          <dd>{entry.type.classification.description}</dd>
-          <dt>Tree node</dt>
-          <dd className="row__detail-math">{entry.statement.kind}</dd>
-        </dl>
       )}
     </li>
   );
