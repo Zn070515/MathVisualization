@@ -20,28 +20,82 @@ covers how to run it.
 
 ## What you need
 
-| | Version | For |
-|---|---|---|
-| [Node.js](https://nodejs.org) | 20 or newer | everything |
-| pnpm | 11.22.0 — pinned in `package.json`, and Corepack fetches it for you | everything |
-| [Python](https://www.python.org) | 3.12 or newer | **only** the optional symbolic engine |
+Three pieces of software. Only the first two are required.
 
-Nothing else. There is no database, no account system and no backend service.
+| | Version | What it is | For |
+|---|---|---|---|
+| [Node.js](https://nodejs.org) | 20 or newer | the program that runs JavaScript outside a browser — this application is written in JavaScript, so it needs this to run | everything |
+| pnpm | 11.22.0 (written down in `package.json`; Corepack fetches the right one) | a *package manager*: it downloads the libraries the project depends on | everything |
+| [Python](https://www.python.org) | 3.12 or newer | another language, used by one optional feature that does algebra in closed form | **only** the symbolic engine |
+
+Nothing else. There is no database to install, no account to create and no server to
+set up.
 
 ---
 
 ## Setting it up
 
-### 1. Node.js
+Six steps, in order. Every command is meant to be typed into a terminal — that is the
+window where you type words and press Enter — and step 2 shows you how to open one if
+you have never done it before.
 
-**Windows** — with `winget`, in PowerShell:
+Nothing here is dangerous. You cannot break your computer by getting a step wrong;
+the worst that happens is an error message, and the last section deals with those.
+
+### 1. Get the code onto your computer
+
+The project lives at <https://github.com/Zn070515/MathVisualization>. There are two
+ways to get it, and the first needs no other software.
+
+**The easy way — download a zip.** Open that link, click the green **Code** button,
+choose **Download ZIP**, and then unzip the file you get. On Windows, right-click the
+downloaded file and choose *Extract All*; on macOS, double-click it. You now have a
+folder called `MathVisualization-main` (or similar) with the project inside.
+
+**The way that keeps it updatable — `git clone`.** If you already have Git, open a
+terminal anywhere and run:
+
+```bash
+git clone https://github.com/Zn070515/MathVisualization.git
+```
+
+That creates a folder called `MathVisualization`.
+
+Either way, **remember where that folder is**. Everything from here happens inside it.
+On Windows it might be `C:\Users\YourName\Downloads\MathVisualization-main`. Move it
+somewhere you will find again — `Desktop` or `Documents` is fine.
+
+### 2. Open a terminal in that folder
+
+You do not need to know any terminal commands for this. Every system has a way to open
+a terminal that is *already pointed at a folder*:
+
+- **Windows** — open the folder in File Explorer, then right-click on some empty
+  space inside it and choose **Open in Terminal** (Windows 11) or **Open PowerShell
+  window here** (Windows 10; hold Shift while right-clicking if you do not see it).
+- **macOS** — right-click the folder in Finder, then *Services* → **New Terminal at
+  Folder**. If that is missing, enable it in *System Settings* → *Keyboard* →
+  *Keyboard Shortcuts* → *Services* → *Files and Folders*.
+- **Linux** — most file managers have **Open in Terminal** on the right-click menu.
+  Otherwise open a terminal and type `cd ` (with a space), then drag the folder into
+  the window and press Enter.
+
+The terminal now starts *inside* the project. You can tell you are in the right place
+because `ls` (macOS, Linux) or `dir` (Windows) lists files including `package.json`,
+`README.md` and a folder called `packages`.
+
+### 3. Install Node.js
+
+**Windows** — in the terminal you just opened:
 
 ```powershell
 winget install OpenJS.NodeJS.LTS
 ```
 
-Or download the LTS `.msi` from <https://nodejs.org> and run it. Either way, open a
-**new** terminal afterwards, because `PATH` is only re-read when one starts.
+Or download the LTS `.msi` installer from <https://nodejs.org>, run it, and click
+through. Either way, **close the terminal and open a new one** afterwards — the list
+of programs is only read when a terminal starts, so the old one will not know Node.js
+exists yet.
 
 **macOS** — with Homebrew, if you have it:
 
@@ -49,10 +103,10 @@ Or download the LTS `.msi` from <https://nodejs.org> and run it. Either way, ope
 brew install node
 ```
 
-Otherwise download the LTS `.pkg` from <https://nodejs.org> and run it.
+Otherwise download the LTS `.pkg` installer from <https://nodejs.org> and run it.
 
-**Linux** — distribution packages are often several major versions behind, so on
-Debian and Ubuntu the NodeSource build is the reliable one:
+**Linux** — the version in your distribution's repositories is often several major
+versions behind, so on Debian and Ubuntu use the NodeSource build:
 
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
@@ -62,71 +116,113 @@ sudo apt-get install -y nodejs
 On Fedora use `sudo dnf install nodejs`, on Arch `sudo pacman -S nodejs npm`. If you
 already use `nvm`, `nvm install --lts` is the shortest route.
 
-Check it, in a new terminal:
+**Check that it worked.** In a terminal — a *new* one, if you just installed — type:
 
 ```bash
-node -v      # v20.x or newer
+node -v
 ```
 
-### 2. pnpm
+You should see something like `v20.11.1` or a larger number. If instead you see
+`command not found` or `not recognized`, the install did not take: close the terminal,
+open a new one, and try again. If it still fails, the installer probably did not finish
+— run it again and watch for an error.
 
-You do not have to choose a version. `package.json` has a `packageManager` field
-naming the exact pnpm this project builds with, and Corepack — which ships with
-Node — reads it and fetches that one:
+### 4. Install pnpm
+
+You do not have to choose a version. `package.json` contains a `packageManager` field
+naming the exact pnpm this project is built with, and Corepack — which came with
+Node.js in the previous step — reads that field and fetches that exact one:
 
 ```bash
 corepack enable pnpm
 ```
 
-If `corepack` is not on your `PATH`, `npm install -g pnpm` works as well; the pinned
-version is still the one used, because it is written down in the repository rather
-than left to whatever was installed last.
-
-Check it:
+If that says `command not found` or `is not recognized`, use this instead:
 
 ```bash
-pnpm -v      # 11.22.0
+npm install -g pnpm
 ```
 
-### 3. The application
+Then **check it**:
+
+```bash
+pnpm -v
+```
+
+You should see `11.22.0`. Any other number means a different pnpm is being picked up;
+the pinned one is used as soon as `corepack enable pnpm` has succeeded.
+
+### 5. Download the libraries, and start it
+
+Still in the project folder:
 
 ```bash
 pnpm install
+```
+
+This downloads the libraries the project is built on. It prints a spinner and takes
+between thirty seconds and two minutes. **Text in yellow is a warning and is normal.**
+Only lines containing `ERR!` or `error` are a problem — if you see one of those, look
+under *If something does not work* below.
+
+> **Outside mainland China?** The repository is configured to use a mirror that is fast
+> in China. If this step is crawling, open the file `.npmrc` in the project folder,
+> delete the line beginning with `registry=`, save it, and run `pnpm install` again.
+
+When it finishes, start the application:
+
+```bash
 pnpm dev
 ```
 
-Then open <http://127.0.0.1:5173>, which is the homepage. `/complex`, `/transforms`
-and `/calculus` are the three subsystems.
+You should see something very close to this:
 
-The first `pnpm install` takes a minute or two; after that `pnpm dev` starts in
-about a second and reloads as you edit.
+```
+  VITE v5.4.11  ready in 162 ms
 
-### 4. The symbolic engine — optional, and needs Python
+  ➜  Local:   http://127.0.0.1:5173/
+```
 
-The only feature that needs a second process is the symbolic panel: the derivative
-of the active expression, in closed form. **Everything else works without it** —
-every picture, every readout, every parameter slider — and the interface says
-plainly when the engine is absent rather than guessing.
+and then the terminal stops responding. **That is what success looks like — the
+application is running.** Leave the terminal window open.
+
+Now open **<http://127.0.0.1:5173>** in your browser: type it into the address bar, or
+in the terminal click the address while holding Ctrl (Windows, Linux) or Cmd (macOS).
+
+**To stop it**, click on the terminal window and press **Ctrl + C** — the same on all
+three systems. To start it again later, open a terminal in the folder and run
+`pnpm dev`. `pnpm install` only ever has to be done once.
+
+### 6. The symbolic engine — optional, and needs Python
+
+**You can skip this.** Everything visual — every graph, every readout, every slider —
+works without it. The one feature that needs it is the symbolic panel: the derivative
+of the expression you are working on, in closed form, from a computer-algebra system
+rather than by numerical approximation. When the engine is not running the interface
+says so plainly instead of guessing at an answer.
 
 Python 3.12 or newer, if you do not have it:
 
 - **Windows** — `winget install Python.Python.3.12`, or the installer from
-  <https://www.python.org>.
+  <https://www.python.org> (tick *Add Python to PATH* during installation).
 - **macOS** — `brew install python@3.12`, or the installer from
   <https://www.python.org>.
-- **Linux** — `sudo apt install python3.12 python3.12-venv` (Debian/Ubuntu),
+- **Linux** — `sudo apt install python3.12 python3.12-venv` (Debian, Ubuntu),
   `sudo dnf install python3.12` (Fedora), `sudo pacman -S python` (Arch).
 
-Then, from the repository root:
+Then, from the project folder:
 
 ```bash
 cd services/symbolic
 python -m venv .venv
 ```
 
-and install into that environment. The only difference between the systems is where
-the environment keeps its executables, so this is written with the paths rather
-than with an activation step:
+> On macOS and Linux, `python` may not exist and you have to type `python3` instead.
+> If `python -m venv` fails, try `python3 -m venv .venv`.
+
+That creates a private, throwaway Python installation inside the project, so nothing
+you do here can affect the rest of your computer. Install into it — the *only*
+difference between the systems is where an environment keeps its programs:
 
 ```bash
 # Windows
@@ -138,10 +234,11 @@ than with an activation step:
 .venv/bin/python server.py
 ```
 
-It listens on `127.0.0.1:8000`. The application probes it and reports the result;
-point the app somewhere else with `VITE_SYMBOLIC_URL` if you move it.
+The second of those two lines starts the engine. It listens on `127.0.0.1:8000`, and
+like `pnpm dev` it will sit there without returning — that is correct. Leave it
+running in **its own terminal window**, alongside the application's.
 
-With [`uv`](https://docs.astral.sh/uv/) instead, which is faster:
+With [`uv`](https://docs.astral.sh/uv/), which is faster:
 
 ```bash
 cd services/symbolic
@@ -152,34 +249,132 @@ uv pip install --python .venv/Scripts/python.exe -r requirements.txt   # Windows
 
 ---
 
+## What you should see
+
+The homepage lists the three subsystems and, under each, how many of its capabilities
+are implemented. They are peers: none is the main feature and none is a demo.
+
+Open any of them and you get the same layout — expressions on the left, the picture
+they make on the right, and a readout along the bottom:
+
+```
+┌────────────────────┬──────────────────────┐
+│  expressions       │       canvas         │
+│  (type here)       │    (the picture)     │
+│  +            ⌨    │                      │
+└────────────────────┴──────────────────────┘
+   readout: the value where you point
+```
+
+Things worth trying straight away:
+
+- **Just start typing.** The first expression row is already focused, so you do not
+  have to click into it first.
+- **Write a fraction.** Type `sin(z)/(z^2+1)`. It becomes a two-dimensional fraction
+  as you type, and the arrow keys move the caret *inside* the numerator and
+  denominator rather than along a line of text.
+- **Press Enter** on the last row to get another one. Press `⌨` at the bottom of the
+  left panel for a mathematical keypad whose function page differs per subsystem.
+- **Point at the canvas.** The readout along the bottom shows the value of your
+  expression there, with the modulus, the argument, and the colour the picture is
+  painting — so the colour is tied to a number rather than left as decoration.
+- **Drag to pan, wheel to zoom.** On the surface view, drag to orbit and shift-drag to
+  pan.
+- **Press Analysis** in the canvas toolbar to see exactly what is implemented and what
+  is not. Unimplemented things are named there, and never appear as a button that
+  returns a wrong answer.
+
+---
+
 ## If something does not work
 
-**The page will not load, but `curl 127.0.0.1:5173` answers.** Use
-`http://127.0.0.1:5173` rather than `http://localhost:5173`. `localhost` can resolve
-to the IPv6 loopback, and the dev server is bound to IPv4 explicitly — the reason is
-recorded in `packages/app/vite.config.ts`.
+Listed roughly in the order people hit them. Nothing here can damage your computer,
+and nothing here needs a reinstall of the whole project.
 
-**Nothing on 127.0.0.1 is reachable at all, while external sites are fine.** A VPN
-that is configured to send loopback through its proxy will do this, and the browser
-is affected even though `curl` is not, because `curl` ignores the Windows system
-proxy. If the VPN's bypass list contains `<-loopback>`, turn on its "bypass local
-addresses" option.
+### `node: command not found`, or `'node' is not recognized`
 
-**Port 5173 is already in use**, which usually means a previous run is still alive.
-On Windows:
+Node.js is not installed, or the terminal has not noticed it yet. **Close the terminal
+window, open a new one, and try again** — a terminal reads the list of installed
+programs only when it starts, so one that was already open when you installed Node
+will not find it. If a new terminal still cannot find it, run the Node.js installer
+again and watch for an error.
+
+### `pnpm: command not found`, or `'pnpm' is not recognized`
+
+The same thing, one step later: go back to step 4 and run `corepack enable pnpm`
+(again in a **new** terminal). If `corepack` itself is not found, use
+`npm install -g pnpm` instead.
+
+### The browser says it cannot reach the address
+
+Almost always one of two things:
+
+1. **The application is not running.** Look at the terminal where you ran `pnpm dev`.
+   If you closed it, or if you can type in it and get a prompt back, it has stopped —
+   start it again with `pnpm dev`. A running dev server *looks* frozen, which is
+   correct.
+2. **You are at the wrong address.** It must be `http://127.0.0.1:5173`, exactly. Not
+   `https`, and not `localhost`.
+
+### The address is already in use
+
+A previous run is still alive somewhere. On Windows:
 
 ```powershell
 netstat -ano | findstr :5173
-taskkill /F /PID <the pid from the last column>
+taskkill /F /PID <the number in the last column>
 ```
 
-On macOS and Linux, `lsof -i :5173` then `kill <pid>`.
+On macOS and Linux, `lsof -i :5173` then `kill <the number it prints>`.
 
-**The symbolic panel says the engine is unavailable.** Check that
-`http://127.0.0.1:8000` answers, and that only one process is listening on it. On
-Windows, `SO_REUSEADDR` lets two processes bind the same port, so a stale server can
-answer while the one you just started has quietly failed — `netstat -ano | findstr
-:8000` showing two `LISTENING` lines is the symptom, and killing both is the fix.
+Or simply **restart your computer**, which clears it too.
+
+### It works at `127.0.0.1` but not at `localhost`
+
+Use `127.0.0.1`. `localhost` can resolve to the IPv6 form of the address, and the dev
+server listens on the IPv4 form explicitly — the reason is recorded in
+`packages/app/vite.config.ts`. Both spellings look like they should mean the same
+thing, and for this project they do not.
+
+### Nothing on `127.0.0.1` works, but ordinary websites are fine
+
+A VPN is sending that traffic through itself. This affects the browser but not
+commands typed into a terminal, because a terminal ignores the system's proxy
+settings — which is why the two can disagree about whether the server is up. Turn on
+the VPN's **"bypass local addresses"** / **"allow LAN"** option. If its bypass list
+contains `<-loopback>`, that is the setting responsible.
+
+### The page loads but is blank or unstyled
+
+Reload with **Ctrl + Shift + R** (Windows, Linux) or **Cmd + Shift + R** (macOS) to
+bypass the browser's cache. If that does not help, look at the terminal running
+`pnpm dev`: a red error there is the cause, and copying it into a search engine is the
+fastest way to understand it.
+
+### The symbolic panel says the engine is unavailable
+
+You can ignore this and use everything else. If you want it:
+
+- Check that the engine's terminal is still running, and that you visited
+  `http://127.0.0.1:8000` — it should answer with something, rather than refusing.
+- On Windows, two programs can quietly share the same port: a stale engine keeps
+  answering while the one you just started has failed to start. `netstat -ano |
+  findstr :8000` printing two `LISTENING` lines is the symptom. Kill both and start it
+  once.
+
+### Starting over
+
+If the install itself looks broken — odd errors during `pnpm install`, or a build
+failure that makes no sense — this resets the downloaded libraries without touching
+your work or the project:
+
+```bash
+# stop anything running first with Ctrl+C in each terminal, then:
+rm -rf node_modules packages/mathcore/node_modules packages/app/node_modules
+pnpm install
+```
+
+On Windows, use `Remove-Item -Recurse -Force` in place of `rm -rf`.
 
 ---
 
