@@ -376,10 +376,20 @@ number that happens to be nearby. And the search reports only what is inside the
 region it was given — `tan` has a zero at every multiple of π, so a candidate near
 the edge of a window walks straight out of it and must not be reported.
 
-The mathematics is here; the marking is not. The capability that says zeros and
-poles are *marked in the plane* stays `planned` until the view draws them, because a
-capability that claims more than the interface shows is the thing this project's
-capability list exists to prevent.
+The complex plane draws them: a filled disc for a zero and an open ring for a pole,
+because the two are opposites of each other in the mathematics and the drawing should
+not have to be read twice to say so. Taking one with the cursor labels it — `zero of
+order 2 at 0` is what `z²` reports — and the coordinate is rounded to about a
+thousandth of what is on screen first, since the search *located* the point rather
+than solving for it and `-1.06×10⁻¹⁶` is not a better answer than `0`.
+
+The capability flipped to `implemented` in the same commit as the drawing, which is
+the rule: a capability may not claim more than the interface shows.
+
+This is the first thing here that Desmos does not do. It marks where a curve meets
+the axis; it does not tell you that `z²` has a *double* zero there, and it has no
+notion of a pole at all. And the contour integral behind it is one step from the
+residue theorem, which is where the complex subsystem goes next.
 
 ### 7.3 The renderers
 

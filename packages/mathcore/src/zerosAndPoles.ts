@@ -67,8 +67,16 @@ export interface ZerosAndPolesOptions {
   readonly resolution?: number;
 }
 
-/** Places a contour is sampled. Enough that a turn of a few radians is resolved. */
-const CONTOUR_SAMPLES = 512;
+/**
+ * Places a contour is sampled.
+ *
+ * A circle around a single singularity turns the argument by a full turn, so even a
+ * hundred samples would resolve it. The margin is for contours that enclose several
+ * or sit in a region where the function moves quickly, and the failure mode when it
+ * is still not enough is the honest one: the turns do not come to a whole number and
+ * the answer is that there is no answer.
+ */
+const CONTOUR_SAMPLES = 256;
 
 /** How near a whole number a winding has to land to be taken as one. */
 const INTEGER_TOLERANCE = 1e-4;
@@ -95,9 +103,11 @@ interface Candidate {
 /**
  * The number of zeros minus the number of poles inside a circle.
  *
- * The contour is walked once, the argument of `f` is tracked continuously across
- * the samples — each step is wrapped into `(-π, π]`, the same convention the rest of
- * the project uses — and the total turn is divided by a full turn.
+ * The contour is walked once, counter-clockwise — the `contourOrientation`
+ * convention, and the reason a pole comes back *negative* rather than as a magnitude
+ * — and the argument of `f` is tracked continuously across the samples. Each step is
+ * wrapped into `(-π, π]`, the same convention the rest of the project uses, and the
+ * total turn is divided by a full turn.
  *
  * A function with no value anywhere on the contour cannot be counted, and says so.
  */

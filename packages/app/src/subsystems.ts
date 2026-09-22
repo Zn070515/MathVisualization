@@ -95,8 +95,9 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
       },
       {
         name: 'Zeros, poles and their orders',
-        summary: 'Special points found and marked in the plane, with the order reported.',
-        status: 'planned',
+        summary:
+          'Where a function vanishes and where it blows up, marked on the plane — filled for a zero, open for a pole — with the order reported. Found by the argument principle rather than by a threshold on |f|, so a double zero is reported as one of order two and not as a single one.',
+        status: 'implemented',
       },
       {
         name: 'Taylor and Laurent series',

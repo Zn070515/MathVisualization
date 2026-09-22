@@ -11,25 +11,74 @@
  * - the shared cursor, as the point `z`;
  * - for a function of one complex variable, the image `f(z)` as an open marker
  *   joined to `z` by a line, so the mapping is visible rather than asserted;
- * - for a function of a real variable taking complex values, the path it traces.
+ * - for a function of a real variable taking complex values, the path it traces;
+ * - where a function of one complex variable vanishes and where it blows up,
+ *   marked with the order the argument principle gives them.
  *
  * It draws the plane whether or not there is anything to put on it. An empty
  * plane is a true statement about a plane; a heatmap of nothing would not be.
  */
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { type Complex, cx, displayNumberToText } from '@mathviz/mathcore';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type Complex,
+  type Singularity,
+  cx,
+  displayComplex,
+  displayComplexToText,
+  displayNumberToText,
+  findZerosAndPoles,
+} from '@mathviz/mathcore';
 import { drawGridAndAxes } from '../render/axes2d';
 import { CANVAS_COLORS, prepareCanvas2d } from '../render/canvasSurface';
+import { TICK_FONT } from '../render/canvasText';
 import { viewNumber } from '../display/numbers';
 import { useStore } from '../state/store';
 import { selectActiveExpression, type ViewRendererProps } from '../state/workspaceStore';
 import { handleCameraKey } from './cameraKeys';
 import { makePointEvaluation } from './evaluation';
 import { useResizeVersion } from './useResizeVersion';
-import { fromScreen, planeWindow, toScreen } from './window2d';
+import { fromScreen, planeWindow, toScreen, type Window2d } from './window2d';
 
 /** Points sampled along a path, and along the line from `z` to `f(z)`. */
 const SAMPLES = 900;
+
+/** How near a marked point the pointer has to be for the cursor to take it. */
+const SNAP_RADIUS = 14;
+
+/**
+ * The radius a marked point is drawn at, before the pixel ratio scales it.
+ *
+ * A little larger than the cursor dot, so that when the cursor takes a mark the mark
+ * is still visible as a ring around it rather than disappearing underneath.
+ */
+const MARK_RADIUS = 4;
+
+/**
+ * A zero of order `k` is written out; order one is left unsaid.
+ *
+ * The coordinate is rounded to about a thousandth of what is on screen before it is
+ * written. The search *located* this point rather than solving for it, so the digit
+ * that matters is the one a reader could point at: `z²` has its zero at the origin,
+ * and the refinement puts it at `-1.06×10⁻¹⁶`, which is not a coordinate anyone
+ * wants to read and is not more true than `0`.
+ *
+ * Rounding to the visible scale rather than to a fixed number of places also means
+ * that zooming in keeps showing the detail that zooming in was for.
+ */
+function describe(point: Singularity, span: number): string {
+  const step = Math.max(span, 1e-12) / 1000;
+  const where = displayComplexToText(
+    displayComplex(
+      {
+        re: Math.round(point.z.re / step) * step,
+        im: Math.round(point.z.im / step) * step,
+      },
+      { digits: 4 },
+    ),
+  );
+  if (point.order === 1) return `${point.kind} at ${where}`;
+  return `${point.kind} of order ${point.order} at ${where}`;
+}
 
 export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -48,13 +97,62 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
   );
 
   const signature = active?.signature;
-  /** A map of the plane: the cursor's image is worth drawing. */
+  /** A map of the plane: the cursor's image is worth drawing, and so are its zeros. */
   const drawsMap = signature?.domain.kind === 'C' && signature.codomain.kind === 'C';
   /** A curve through the plane, parameterised by the variable on the real axis. */
   const drawsPath =
     signature?.domain.kind === 'R' && signature.domain.dim === 1 && signature.codomain.kind === 'C';
 
   const dragStart = useRef<{ x: number; y: number } | null>(null);
+  /** The marked point the cursor has taken, if any. Labelled; the rest are marks. */
+  const [snapped, setSnapped] = useState<Singularity | null>(null);
+
+  /**
+   * The canvas size, which the searching has to know and React cannot ask for.
+   *
+   * The region to search is the region on screen, and that depends on the shape of
+   * the canvas. So the size is held in state and updated from the draw — guarded, so
+   * that an unchanged size does not cause a render.
+   */
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+
+  const region = useMemo(
+    (): Window2d | null =>
+      size === null ? null : planeWindow(state.viewport, size.width, size.height),
+    [state.viewport, size],
+  );
+
+  /**
+   * Where the function vanishes and where it blows up, inside what is on screen.
+   *
+   * Memoised against the region rather than recomputed per frame, because finding
+   * them means hundreds of evaluations and the pointer moves at sixty hertz. Panning
+   * costs one search per new region, not one per pixel.
+   */
+  const singularities = useMemo((): readonly Singularity[] => {
+    if (!drawsMap || evaluation === null || region === null) return [];
+    return findZerosAndPoles((z) => evaluation.evaluate(z), {
+      xMin: region.xMin,
+      xMax: region.xMax,
+      yMin: region.yMin,
+      yMax: region.yMax,
+    });
+  }, [drawsMap, evaluation, region]);
+
+  const zeros = singularities.filter((point) => point.kind === 'zero').length;
+  const poles = singularities.length - zeros;
+
+  /**
+   * Let go of a taken point when the set of them changes.
+   *
+   * The marks are recomputed when the expression changes or the region moves, and a
+   * point that was held a moment ago belongs to the *previous* set — the label would
+   * go on describing a zero of a function that is no longer the one being drawn.
+   * Editing a line or focusing another does exactly that.
+   */
+  useEffect(() => {
+    setSnapped(null);
+  }, [singularities]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -62,6 +160,12 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
     const surface = prepareCanvas2d(canvas);
     if (surface === null) return;
     const { context, width, height, ratio } = surface;
+
+    setSize((previous) =>
+      previous !== null && previous.width === width && previous.height === height
+        ? previous
+        : { width, height },
+    );
 
     const window = planeWindow(state.viewport, width, height);
     drawGridAndAxes(context, { window, width, height, ratio, xName: 'Re z', yName: 'Im z' });
@@ -86,6 +190,45 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
         }
       }
       context.stroke();
+    }
+
+    // Where the function vanishes and where it blows up. A zero is filled and a pole
+    // is open, because the two are opposites of each other in the mathematics and the
+    // drawing should not have to be read twice to say so.
+    const radius = Math.max(MARK_RADIUS, ratio * MARK_RADIUS);
+    for (const point of singularities) {
+      const at = toScreen(window, { x: point.z.re, y: point.z.im }, width, height);
+      if (!Number.isFinite(at.x) || at.x < -20 || at.x > width + 20) continue;
+      if (!Number.isFinite(at.y) || at.y < -20 || at.y > height + 20) continue;
+
+      context.beginPath();
+      context.arc(at.x, at.y, radius, 0, Math.PI * 2);
+      context.lineWidth = Math.max(1.4, ratio * 1.6);
+      context.strokeStyle = CANVAS_COLORS.curve;
+      if (point.kind === 'zero') {
+        context.fillStyle = CANVAS_COLORS.curve;
+        context.fill();
+      }
+      context.stroke();
+    }
+
+    if (snapped !== null) {
+      const at = toScreen(window, { x: snapped.z.re, y: snapped.z.im }, width, height);
+      if (Number.isFinite(at.x)) {
+        const text = describe(snapped, window.xMax - window.xMin);
+        context.font = `${TICK_FONT.size}px ${TICK_FONT.family}`;
+        const textWidth = context.measureText(text).width;
+        // Beside the point, and inside the frame: flipped to the other side when
+        // there is no room on the right, and then clamped, because a label wider than
+        // the frame has no good side and sliding off the edge is worse than being
+        // pinned to it.
+        const preferred = at.x + 10 + textWidth > width - 4 ? at.x - 10 - textWidth : at.x + 10;
+        const left = Math.max(4, Math.min(preferred, width - textWidth - 4));
+        context.fillStyle = CANVAS_COLORS.curve;
+        context.textAlign = 'left';
+        context.textBaseline = 'bottom';
+        context.fillText(text, left, Math.max(TICK_FONT.size + 2, at.y - 8));
+      }
     }
 
     const cursor = state.hover ?? state.selection;
@@ -120,7 +263,16 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
     context.arc(at.x, at.y, Math.max(2.5, ratio * 3), 0, Math.PI * 2);
     context.fillStyle = CANVAS_COLORS.curveSecondary;
     context.fill();
-  }, [drawsMap, drawsPath, evaluation, state.hover, state.selection, state.viewport]);
+  }, [
+    drawsMap,
+    drawsPath,
+    evaluation,
+    singularities,
+    snapped,
+    state.hover,
+    state.selection,
+    state.viewport,
+  ]);
 
   useEffect(() => {
     draw();
@@ -141,6 +293,38 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
     return cx(point.x, point.y);
   };
 
+  /**
+   * The marked point under the pointer, if there is one.
+   *
+   * Taking the point exactly is what makes the mark readable rather than merely
+   * visible: the readout prints the coordinate and the order the argument principle
+   * found, not the nearest pixel's.
+   */
+  const markedNear = (event: { clientX: number; clientY: number }): Singularity | null => {
+    const canvas = canvasRef.current;
+    if (canvas === null || singularities.length === 0) return null;
+    const bounds = canvas.getBoundingClientRect();
+    if (bounds.width === 0 || bounds.height === 0) return null;
+
+    const window = planeWindow(state.viewport, bounds.width, bounds.height);
+    const pointerX = event.clientX - bounds.left;
+    const pointerY = event.clientY - bounds.top;
+
+    let best: Singularity | null = null;
+    let bestDistance = SNAP_RADIUS * SNAP_RADIUS;
+    for (const point of singularities) {
+      const at = toScreen(window, { x: point.z.re, y: point.z.im }, bounds.width, bounds.height);
+      const dx = at.x - pointerX;
+      const dy = at.y - pointerY;
+      const distance = dx * dx + dy * dy;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = point;
+      }
+    }
+    return best;
+  };
+
   return (
     <div className="view">
       <canvas
@@ -159,8 +343,10 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
           store.setSelection(planeAt(event));
         }}
         onPointerMove={(event) => {
-          const point = planeAt(event);
-          store.setHover(point);
+          // Snapping comes first: on a marked point the cursor takes *that* point.
+          const near = markedNear(event);
+          setSnapped(near);
+          store.setHover(near === null ? planeAt(event) : near.z);
 
           const start = dragStart.current;
           if (start === null) return;
@@ -180,6 +366,7 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
         }}
         onPointerLeave={() => {
           dragStart.current = null;
+          setSnapped(null);
           store.clearCursor();
         }}
         onWheel={(event) => {
@@ -194,6 +381,11 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
         <span className="legend__title">z-plane</span>
         {drawsMap && <span className="legend__range">z ↦ f(z)</span>}
         {drawsPath && <span className="legend__range">path of f(t)</span>}
+        {drawsMap && (zeros > 0 || poles > 0) && (
+          <span className="legend__range">
+            ● {zeros} zero{zeros === 1 ? '' : 's'} · ○ {poles} pole{poles === 1 ? '' : 's'}
+          </span>
+        )}
       </div>
     </div>
   );
