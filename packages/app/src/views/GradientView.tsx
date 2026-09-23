@@ -11,6 +11,7 @@ import {
   axisTicks,
   contourLines,
   cx,
+  directionalDerivativeAt,
   displayNumberToText,
   gradientAt,
   sampleSurface,
@@ -28,19 +29,29 @@ import {
   type ViewRendererProps,
 } from '../state/workspaceStore';
 import { handleCameraKey } from './cameraKeys';
+import { directionAngleFromPoints, directionHandlePoint, unitDirection } from './directionalHandle';
 import { makePointEvaluation } from './evaluation';
 import { useResizeVersion } from './useResizeVersion';
 import { fromScreen, planeWindow, toScreen } from './window2d';
 
 const CONTOUR_RESOLUTION = 65;
 const ARROW_RESOLUTION = 17;
+const DIRECTION_HANDLE_LENGTH_PX = 78;
+const DIRECTION_HANDLE_HIT_RADIUS_PX = 15;
 
-interface DragState {
+interface PanDragState {
+  readonly kind: 'pan';
   readonly originX: number;
   readonly originY: number;
   readonly lastX: number;
   readonly lastY: number;
 }
+
+interface DirectionDragState {
+  readonly kind: 'direction';
+}
+
+type DragState = PanDragState | DirectionDragState;
 
 interface GradientRange {
   readonly maxMagnitude: number;
@@ -57,6 +68,7 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const resizeVersion = useResizeVersion(canvasRef);
   const dragging = useRef<DragState | null>(null);
+  const [directionAngle, setDirectionAngle] = useState(Math.PI / 4);
   const [measured, setMeasured] = useState<GradientRange | null>(null);
   const state = useStore(store, (current) => current);
   const { workspace, focusedLineId } = state;
@@ -136,14 +148,23 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
       0,
     );
     setMeasured((previous) =>
-      previous !== null &&
-      previous.maxMagnitude === maxMagnitude &&
-      previous.maxError === maxError
+      previous !== null && previous.maxMagnitude === maxMagnitude && previous.maxError === maxError
         ? previous
         : { maxMagnitude, maxError },
     );
     drawArrows(context, arrows, window, width, height, ratio, maxMagnitude);
-  }, [drawable, evaluation, state.viewport]);
+    if (state.selection !== null) {
+      drawDirectionHandle(
+        context,
+        state.selection,
+        state.viewport,
+        directionAngle,
+        width,
+        height,
+        ratio,
+      );
+    }
+  }, [directionAngle, drawable, evaluation, state.selection, state.viewport]);
 
   useEffect(() => {
     draw();
@@ -174,6 +195,15 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
     );
     return result.ok ? result.value : null;
   }, [cursorPoint, drawable, evaluation]);
+  const selectedDirectionalDerivative = useMemo(() => {
+    if (!drawable || evaluation === null || state.selection === null) return null;
+    return directionalDerivativeAt(
+      (x, y) => evaluation.evaluate(cx(x, y)),
+      state.selection.re,
+      state.selection.im,
+      unitDirection(directionAngle),
+    );
+  }, [directionAngle, drawable, evaluation, state.selection]);
   const bounds = canvasRef.current?.getBoundingClientRect();
   const halfHeight =
     bounds === undefined || bounds.width === 0
@@ -190,7 +220,21 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
         aria-label="Gradient vectors of a scalar field over the plane"
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId);
+          if (
+            state.selection !== null &&
+            isNearDirectionHandle(
+              event,
+              canvasRef.current,
+              state.selection,
+              state.viewport,
+              directionAngle,
+            )
+          ) {
+            dragging.current = { kind: 'direction' };
+            return;
+          }
           dragging.current = {
+            kind: 'pan',
             originX: event.clientX,
             originY: event.clientY,
             lastX: event.clientX,
@@ -202,6 +246,15 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
           store.setHover(point);
           const drag = dragging.current;
           if (drag === null || point === null) return;
+          if (drag.kind === 'direction') {
+            if (state.selection === null) return;
+            const angle = directionAngleFromPoints(
+              { x: state.selection.re, y: state.selection.im },
+              { x: point.re, y: point.im },
+            );
+            if (angle !== null) setDirectionAngle(angle);
+            return;
+          }
           const canvas = canvasRef.current;
           if (canvas === null) return;
           const unitsPerPixel =
@@ -216,6 +269,7 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
           const drag = dragging.current;
           dragging.current = null;
           if (drag === null) return;
+          if (drag.kind === 'direction') return;
           const travelled =
             Math.abs(event.clientX - drag.originX) + Math.abs(event.clientY - drag.originY);
           if (travelled <= 3) store.setSelection(toPlane(event));
@@ -272,10 +326,36 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
           <span className="legend__range">
             max |∇f| ≈ <NumberText value={viewNumber(measured.maxMagnitude)} />
           </span>
-          <span className="legend__range">arrows scaled for the current window · contours underneath</span>
+          <span className="legend__range">
+            arrows scaled for the current window · contours underneath
+          </span>
           <span className="legend__range">
             sampling disagreement ≈ <NumberText value={viewNumber(measured.maxError)} />
           </span>
+          {state.selection !== null && selectedDirectionalDerivative !== null && (
+            <>
+              <span className="legend__range">
+                u = ({displayNumberToText(viewNumber(Math.cos(directionAngle)))},{' '}
+                {displayNumberToText(viewNumber(Math.sin(directionAngle)))})
+              </span>
+              {selectedDirectionalDerivative.ok ? (
+                <span className="legend__range">
+                  D<sub>u</sub>f ={' '}
+                  <NumberText value={viewNumber(selectedDirectionalDerivative.value.value)} />
+                  {' ± '}
+                  <NumberText
+                    value={viewNumber(selectedDirectionalDerivative.value.estimatedError)}
+                  />
+                  {' · '}drag the handle to change u
+                </span>
+              ) : (
+                <span className="legend__range">{selectedDirectionalDerivative.issue.message}</span>
+              )}
+            </>
+          )}
+          {state.selection === null && (
+            <span className="legend__range">select a point, then drag the handle to choose u</span>
+          )}
         </div>
       )}
     </div>
@@ -284,7 +364,12 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
 
 function collectArrows(
   evaluate: RealFieldEvaluator,
-  window: { readonly xMin: number; readonly xMax: number; readonly yMin: number; readonly yMax: number },
+  window: {
+    readonly xMin: number;
+    readonly xMax: number;
+    readonly yMin: number;
+    readonly yMax: number;
+  },
 ): readonly ArrowSample[] {
   const arrows: ArrowSample[] = [];
   for (let row = 0; row < ARROW_RESOLUTION; row += 1) {
@@ -303,7 +388,12 @@ function collectArrows(
 function drawArrows(
   context: CanvasRenderingContext2D,
   arrows: readonly ArrowSample[],
-  window: { readonly xMin: number; readonly xMax: number; readonly yMin: number; readonly yMax: number },
+  window: {
+    readonly xMin: number;
+    readonly xMax: number;
+    readonly yMin: number;
+    readonly yMax: number;
+  },
   width: number,
   height: number,
   ratio: number,
@@ -336,11 +426,84 @@ function drawArrows(
     context.moveTo(start.x, start.y);
     context.lineTo(end.x, end.y);
     context.moveTo(end.x, end.y);
-    context.lineTo(end.x - head * Math.cos(angle - Math.PI / 6), end.y - head * Math.sin(angle - Math.PI / 6));
+    context.lineTo(
+      end.x - head * Math.cos(angle - Math.PI / 6),
+      end.y - head * Math.sin(angle - Math.PI / 6),
+    );
     context.moveTo(end.x, end.y);
-    context.lineTo(end.x - head * Math.cos(angle + Math.PI / 6), end.y - head * Math.sin(angle + Math.PI / 6));
+    context.lineTo(
+      end.x - head * Math.cos(angle + Math.PI / 6),
+      end.y - head * Math.sin(angle + Math.PI / 6),
+    );
     context.stroke();
   }
+}
+
+function drawDirectionHandle(
+  context: CanvasRenderingContext2D,
+  selection: ReturnType<typeof cx>,
+  viewport: Viewport,
+  angle: number,
+  width: number,
+  height: number,
+  ratio: number,
+): void {
+  const window = planeWindow(viewport, width, height);
+  const start = toScreen(window, { x: selection.re, y: selection.im }, width, height);
+  const length = (DIRECTION_HANDLE_LENGTH_PX * ratio * (2 * viewport.halfWidth)) / width;
+  const endpoint = directionHandlePoint({ x: selection.re, y: selection.im }, angle, length);
+  const end = toScreen(window, endpoint, width, height);
+  const screenAngle = Math.atan2(end.y - start.y, end.x - start.x);
+  const head = 8 * ratio;
+
+  // A paper-coloured under-stroke keeps the control legible over dense arrows.
+  context.strokeStyle = CANVAS_COLORS.paper;
+  context.lineWidth = Math.max(3, ratio * 4);
+  context.beginPath();
+  context.moveTo(start.x, start.y);
+  context.lineTo(end.x, end.y);
+  context.stroke();
+
+  context.strokeStyle = CANVAS_COLORS.curve;
+  context.fillStyle = CANVAS_COLORS.paper;
+  context.lineWidth = Math.max(1, ratio * 1.4);
+  context.beginPath();
+  context.moveTo(start.x, start.y);
+  context.lineTo(end.x, end.y);
+  context.moveTo(end.x, end.y);
+  context.lineTo(
+    end.x - head * Math.cos(screenAngle - Math.PI / 6),
+    end.y - head * Math.sin(screenAngle - Math.PI / 6),
+  );
+  context.moveTo(end.x, end.y);
+  context.lineTo(
+    end.x - head * Math.cos(screenAngle + Math.PI / 6),
+    end.y - head * Math.sin(screenAngle + Math.PI / 6),
+  );
+  context.stroke();
+  context.beginPath();
+  context.arc(end.x, end.y, 6 * ratio, 0, 2 * Math.PI);
+  context.fill();
+  context.stroke();
+}
+
+function isNearDirectionHandle(
+  event: { readonly clientX: number; readonly clientY: number },
+  canvas: HTMLCanvasElement | null,
+  selection: ReturnType<typeof cx>,
+  viewport: Viewport,
+  angle: number,
+): boolean {
+  if (canvas === null) return false;
+  const bounds = canvas.getBoundingClientRect();
+  if (bounds.width === 0 || bounds.height === 0) return false;
+  const window = planeWindow(viewport, bounds.width, bounds.height);
+  const length = (DIRECTION_HANDLE_LENGTH_PX * (2 * viewport.halfWidth)) / bounds.width;
+  const endpoint = directionHandlePoint({ x: selection.re, y: selection.im }, angle, length);
+  const screen = toScreen(window, endpoint, bounds.width, bounds.height);
+  const x = event.clientX - bounds.left - screen.x;
+  const y = event.clientY - bounds.top - screen.y;
+  return Math.hypot(x, y) <= DIRECTION_HANDLE_HIT_RADIUS_PX;
 }
 
 function interpolate(minimum: number, maximum: number, fraction: number): number {
@@ -359,5 +522,7 @@ function GradientCrosshair({
   const left = 50 + ((point.re - viewport.centre.re) / (2 * viewport.halfWidth)) * 100;
   const top = 50 - ((point.im - viewport.centre.im) / (2 * halfHeight)) * 100;
   if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
-  return <div className="crosshair" style={{ left: `${left}%`, top: `${top}%` }} aria-hidden="true" />;
+  return (
+    <div className="crosshair" style={{ left: `${left}%`, top: `${top}%` }} aria-hidden="true" />
+  );
 }

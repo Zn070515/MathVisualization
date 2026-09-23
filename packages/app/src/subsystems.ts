@@ -237,8 +237,9 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
       },
       {
         name: 'Directional derivatives',
-        summary: 'The rate of change along a chosen direction, with the direction stated explicitly.',
-        status: 'planned',
+        summary:
+          'Select a point, drag an explicit unit-direction handle, and read the numerical rate of change D_u f = ∇f · u with its sampling uncertainty.',
+        status: 'implemented',
       },
       {
         name: 'Tangent planes and linear approximation',
