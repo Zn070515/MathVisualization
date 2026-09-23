@@ -114,7 +114,7 @@ function extractLevel(grid: ContourGrid, level: number): readonly ContourPath[] 
 
       const crossings = [0, 1, 2, 3].filter((side) => points[side] !== null);
       if (crossings.length === 2) {
-        segments.push({
+        addSegment(segments, {
           start: points[crossings[0] as number] as ContourPoint,
           end: points[crossings[1] as number] as ContourPoint,
         });
@@ -122,32 +122,34 @@ function extractLevel(grid: ContourGrid, level: number): readonly ContourPath[] 
       }
       if (crossings.length !== 4) continue;
 
-      const centre = (sw + se + ne + nw) / 4;
-      const swHigh = sw > level;
-      const seHigh = se > level;
-      const neHigh = ne > level;
-      const nwHigh = nw > level;
+      const swHigh = sw >= level;
+      const seHigh = se >= level;
+      const neHigh = ne >= level;
+      const nwHigh = nw >= level;
 
-      // Only alternating corner states have four crossings. The bilinear value
-      // at the cell centre is the asymptotic decider: it makes the saddle rule
-      // deterministic, including the exact-tie case.
+      // Only alternating corner states have four crossings. The bilinear
+      // asymptotic decider below makes the saddle rule deterministic, including
+      // the exact-tie case.
       const diagonalHigh = swHigh && neHigh;
       if (diagonalHigh || (seHigh && nwHigh)) {
-        const highConnected = centre > level;
-        const pairAroundLow = diagonalHigh ? highConnected : !highConnected;
-        const pairs = pairAroundLow
-          ? [
-              [0, 1],
-              [2, 3],
-            ]
-          : [
-              [0, 3],
-              [1, 2],
-            ];
+        // For a bilinear cell, Q = (sw-L)(ne-L) - (se-L)(nw-L) is the
+        // asymptotic-decider criterion. The arithmetic mean at the cell centre
+        // is not equivalent when the corner magnitudes differ.
+        const decider = (sw - level) * (ne - level) - (se - level) * (nw - level);
+        const pairs =
+          decider >= 0
+            ? [
+                [0, 1],
+                [2, 3],
+              ]
+            : [
+                [0, 3],
+                [1, 2],
+              ];
         for (const pair of pairs) {
           const first = pair[0] as number;
           const second = pair[1] as number;
-          segments.push({
+          addSegment(segments, {
             start: points[first] as ContourPoint,
             end: points[second] as ContourPoint,
           });
@@ -160,6 +162,16 @@ function extractLevel(grid: ContourGrid, level: number): readonly ContourPath[] 
     segments,
     Math.max(Math.abs(grid.xMax - grid.xMin), Math.abs(grid.yMax - grid.yMin)),
   );
+}
+
+function addSegment(segments: Segment[], segment: Segment): void {
+  // A tie at a sampled vertex can make two incident edge crossings coincide.
+  // It is a point, not a drawable contour segment, and keeping it creates a
+  // zero-length closed path that confuses stitching at the same vertex.
+  if (Math.hypot(segment.start.x - segment.end.x, segment.start.y - segment.end.y) <= EPSILON) {
+    return;
+  }
+  segments.push(segment);
 }
 
 function sample(grid: ContourGrid, column: number, row: number): number | null {
@@ -175,10 +187,13 @@ function interpolate(
   toValue: number,
   level: number,
 ): ContourPoint | null {
-  const fromHigh = fromValue > level;
-  const toHigh = toValue > level;
-  if (fromHigh === toHigh && fromValue !== level && toValue !== level) return null;
-  if (fromValue === level && toValue === level) return null;
+  // Treat an on-level sample as the high side consistently. This tie rule means
+  // a contour that passes through a sampled vertex is represented by the two
+  // incident edges that actually change sign, rather than producing three
+  // crossings and dropping the cell.
+  const fromHigh = fromValue >= level;
+  const toHigh = toValue >= level;
+  if (fromHigh === toHigh) return null;
 
   const denominator = toValue - fromValue;
   const fraction = Math.abs(denominator) < EPSILON ? 0.5 : (level - fromValue) / denominator;

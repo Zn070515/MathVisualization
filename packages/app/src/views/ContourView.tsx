@@ -6,7 +6,7 @@
  * decoration placed over a separately generated picture. The shared viewport
  * and cursor make it useful beside either the 3D surface or the heatmap.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   axisTicks,
   contourLines,
@@ -20,13 +20,24 @@ import { CANVAS_COLORS, prepareCanvas2d } from '../render/canvasSurface';
 import { NumberText } from '../display/NumberText';
 import { viewNumber } from '../display/numbers';
 import { useStore } from '../state/store';
-import { selectActiveExpression, type ViewRendererProps } from '../state/workspaceStore';
+import {
+  selectActiveExpression,
+  type Viewport,
+  type ViewRendererProps,
+} from '../state/workspaceStore';
 import { handleCameraKey } from './cameraKeys';
 import { makePointEvaluation } from './evaluation';
 import { useResizeVersion } from './useResizeVersion';
 import { fromScreen, planeWindow, toScreen } from './window2d';
 
 const RESOLUTION = 129;
+
+interface DragState {
+  readonly originX: number;
+  readonly originY: number;
+  readonly lastX: number;
+  readonly lastY: number;
+}
 
 interface Range {
   readonly min: number;
@@ -36,18 +47,27 @@ interface Range {
 export function ContourView({ store }: ViewRendererProps): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const resizeVersion = useResizeVersion(canvasRef);
-  const dragging = useRef<{ x: number; y: number } | null>(null);
+  const dragging = useRef<DragState | null>(null);
   const [measured, setMeasured] = useState<Range | null>(null);
   const state = useStore(store, (current) => current);
   const { workspace, focusedLineId } = state;
-  const active = selectActiveExpression(workspace, focusedLineId, store.drawableKinds);
-  const evaluation = makePointEvaluation(active, state.parameterValues, workspace.functions);
+  const active = useMemo(
+    () => selectActiveExpression(workspace, focusedLineId, store.drawableKinds),
+    [workspace, focusedLineId, store.drawableKinds],
+  );
+  const evaluation = useMemo(
+    () => makePointEvaluation(active, state.parameterValues, workspace.functions),
+    [active, state.parameterValues, workspace.functions],
+  );
 
-  const drawable =
-    active?.signature.domain.kind === 'R' &&
-    active.signature.domain.dim === 2 &&
-    active.signature.codomain.kind === 'R' &&
-    active.signature.codomain.dim === 1;
+  const drawable = useMemo(
+    () =>
+      active?.signature.domain.kind === 'R' &&
+      active.signature.domain.dim === 2 &&
+      active.signature.codomain.kind === 'R' &&
+      active.signature.codomain.dim === 1,
+    [active],
+  );
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -102,21 +122,7 @@ export function ContourView({ store }: ViewRendererProps): React.JSX.Element {
         context.stroke();
       }
     }
-
-    const cursor = state.hover ?? state.selection;
-    if (cursor !== null) {
-      const at = toScreen(window, { x: cursor.re, y: cursor.im }, width, height);
-      if (Number.isFinite(at.x) && Number.isFinite(at.y)) {
-        context.beginPath();
-        context.arc(at.x, at.y, Math.max(3, ratio * 4), 0, Math.PI * 2);
-        context.fillStyle = CANVAS_COLORS.paper;
-        context.fill();
-        context.strokeStyle = CANVAS_COLORS.cursor;
-        context.lineWidth = Math.max(1.2, ratio * 1.5);
-        context.stroke();
-      }
-    }
-  }, [drawable, evaluation, state.selection, state.hover, state.viewport]);
+  }, [drawable, evaluation, state.viewport]);
 
   useEffect(() => {
     draw();
@@ -143,6 +149,12 @@ export function ContourView({ store }: ViewRendererProps): React.JSX.Element {
       : `levels from ${displayNumberToText(viewNumber(measured.min))} to ${displayNumberToText(
           viewNumber(measured.max),
         )}`;
+  const cursorPoint = state.hover ?? state.selection;
+  const bounds = canvasRef.current?.getBoundingClientRect();
+  const halfHeight =
+    bounds === undefined || bounds.width === 0
+      ? state.viewport.halfWidth
+      : state.viewport.halfWidth * (bounds.height / bounds.width);
 
   return (
     <div className="view">
@@ -154,28 +166,34 @@ export function ContourView({ store }: ViewRendererProps): React.JSX.Element {
         aria-label={`Contour lines of a scalar field over ${rangeText}`}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId);
-          dragging.current = { x: event.clientX, y: event.clientY };
+          dragging.current = {
+            originX: event.clientX,
+            originY: event.clientY,
+            lastX: event.clientX,
+            lastY: event.clientY,
+          };
         }}
         onPointerMove={(event) => {
           const point = toPlane(event);
           store.setHover(point);
-          const start = dragging.current;
-          if (start === null || point === null) return;
+          const drag = dragging.current;
+          if (drag === null || point === null) return;
           const canvas = canvasRef.current;
           if (canvas === null) return;
           const unitsPerPixel =
             (2 * state.viewport.halfWidth) / Math.max(1, canvas.getBoundingClientRect().width);
           store.panViewport(
-            -(event.clientX - start.x) * unitsPerPixel,
-            (event.clientY - start.y) * unitsPerPixel,
+            -(event.clientX - drag.lastX) * unitsPerPixel,
+            (event.clientY - drag.lastY) * unitsPerPixel,
           );
-          dragging.current = { x: event.clientX, y: event.clientY };
+          dragging.current = { ...drag, lastX: event.clientX, lastY: event.clientY };
         }}
         onPointerUp={(event) => {
-          const start = dragging.current;
+          const drag = dragging.current;
           dragging.current = null;
-          if (start === null) return;
-          const travelled = Math.abs(event.clientX - start.x) + Math.abs(event.clientY - start.y);
+          if (drag === null) return;
+          const travelled =
+            Math.abs(event.clientX - drag.originX) + Math.abs(event.clientY - drag.originY);
           if (travelled <= 3) store.setSelection(toPlane(event));
         }}
         onPointerLeave={() => {
@@ -189,6 +207,10 @@ export function ContourView({ store }: ViewRendererProps): React.JSX.Element {
           handleCameraKey(event, store);
         }}
       />
+
+      {drawable && cursorPoint !== null && (
+        <ContourCrosshair point={cursorPoint} viewport={state.viewport} halfHeight={halfHeight} />
+      )}
 
       {active === null && (
         <div className="view__overlay">
@@ -218,6 +240,23 @@ export function ContourView({ store }: ViewRendererProps): React.JSX.Element {
         </div>
       )}
     </div>
+  );
+}
+
+function ContourCrosshair({
+  point,
+  viewport,
+  halfHeight,
+}: {
+  readonly point: ReturnType<typeof cx>;
+  readonly viewport: Viewport;
+  readonly halfHeight: number;
+}): React.JSX.Element | null {
+  const left = 50 + ((point.re - viewport.centre.re) / (2 * viewport.halfWidth)) * 100;
+  const top = 50 - ((point.im - viewport.centre.im) / (2 * halfHeight)) * 100;
+  if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
+  return (
+    <div className="crosshair" style={{ left: `${left}%`, top: `${top}%` }} aria-hidden="true" />
   );
 }
 
