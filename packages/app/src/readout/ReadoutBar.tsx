@@ -14,9 +14,9 @@
  * point: the number in this strip is the value of the function at the point being
  * pointed at, and it is the same number the picture was drawn from.
  */
+import { useMemo } from 'react';
 import {
   type Complex,
-  type Workspace,
   type UserFunctionDefinition,
   DEFAULT_DOMAIN_COLORING,
   cabs,
@@ -30,7 +30,12 @@ import {
 import { ComplexText, NumberText } from '../display/NumberText';
 import { useStore } from '../state/store';
 import { makePointEvaluation } from '../views/evaluation';
-import { estimateActiveFourierTransform, selectFourierTransform } from '../views/frequencyEvaluation';
+import {
+  estimateActiveFourierTransform,
+  selectFourierTransform,
+  snapFrequency,
+} from '../views/frequencyEvaluation';
+import type { FourierEstimate } from '@mathviz/mathcore';
 import type { ActiveExpression, WorkspaceStore } from '../state/workspaceStore';
 
 export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Element {
@@ -39,16 +44,15 @@ export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Elem
   const frequency = state.frequencyHover ?? state.frequencySelection;
   const active = store.sourceExpression();
   const transform = store.activeExpression();
+  const transformEstimate = useMemo(
+    () => estimateActiveFourierTransform(transform, state.workspace, state.parameterValues),
+    [transform, state.workspace, state.parameterValues],
+  );
 
   if (frequency !== null && selectFourierTransform(transform) !== null) {
     return (
       <div className="readout">
-        <FrequencyValueCells
-          active={transform as ActiveExpression}
-          frequency={frequency}
-          parameters={state.parameterValues}
-          workspace={state.workspace}
-        />
+        <FrequencyValueCells frequency={frequency} estimate={transformEstimate} />
         <span className="readout__spacer" />
         <span className="readout__held">
           {state.frequencySelection !== null ? 'held' : 'following the pointer'}
@@ -71,7 +75,7 @@ export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Elem
     <div className="readout">
       <Cell label="point" value={<ComplexText value={displayComplex(point, { digits: 5 })} />} />
 
-        {active === null ? (
+      {active === null ? (
         <Cell label="value" value="—" />
       ) : (
         <ValueCells
@@ -91,25 +95,22 @@ export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Elem
 }
 
 function FrequencyValueCells({
-  active,
   frequency,
-  parameters,
-  workspace,
+  estimate,
 }: {
-  active: ActiveExpression;
   frequency: number;
-  parameters: ReadonlyMap<string, number>;
-  workspace: Workspace;
+  estimate: FourierEstimate | null;
 }): React.JSX.Element {
-  const estimate = estimateActiveFourierTransform(active, workspace, parameters);
   if (estimate === null || estimate.values.length === 0) {
     return <Cell label="frequency" value="—" />;
   }
+  const snappedFrequency = snapFrequency(frequency, estimate.frequencies);
+  if (snappedFrequency === null) return <Cell label="frequency" value="—" />;
   let nearest = 0;
   for (let index = 1; index < estimate.frequencies.length; index += 1) {
     if (
-      Math.abs((estimate.frequencies[index] as number) - frequency) <
-      Math.abs((estimate.frequencies[nearest] as number) - frequency)
+      Math.abs((estimate.frequencies[index] as number) - snappedFrequency) <
+      Math.abs((estimate.frequencies[nearest] as number) - snappedFrequency)
     ) {
       nearest = index;
     }
@@ -118,7 +119,10 @@ function FrequencyValueCells({
   if (value === undefined) return <Cell label="frequency" value="—" />;
   return (
     <>
-      <Cell label="ω" value={<NumberText value={displayNumber(frequency, { digits: 5 })} />} />
+      <Cell
+        label="ω"
+        value={<NumberText value={displayNumber(snappedFrequency, { digits: 5 })} />}
+      />
       <Cell label="F(ω)" value={<ComplexText value={displayComplex(value, { digits: 6 })} />} />
       <Cell label="|F|" value={<NumberText value={displayNumber(cabs(value), { digits: 5 })} />} />
       <Cell

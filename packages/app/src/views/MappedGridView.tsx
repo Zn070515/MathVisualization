@@ -29,6 +29,7 @@ import {
   type WorkspaceStore,
 } from '../state/workspaceStore';
 import { makePointEvaluation } from './evaluation';
+import { splitMappedPolyline } from './mappedGrid';
 import { useResizeVersion } from './useResizeVersion';
 
 /** Points sampled along each grid line before mapping. */
@@ -82,24 +83,24 @@ export function MappedGridView({
     if (!drawable || evaluation === null) return;
 
     // Build the image of the grid.
-    const lines: { points: Complex[]; weight: number }[] = [];
+    const lines: { segments: readonly Complex[][]; weight: number }[] = [];
     for (let index = -LINES_EACH_SIDE; index <= LINES_EACH_SIDE; index += 1) {
-      const horizontal: Complex[] = [];
-      const vertical: Complex[] = [];
+      const horizontal: (Complex | null)[] = [];
+      const vertical: (Complex | null)[] = [];
       for (let step = 0; step <= SAMPLES_PER_LINE; step += 1) {
         const t = -LINES_EACH_SIDE + (step / SAMPLES_PER_LINE) * 2 * LINES_EACH_SIDE;
-        const alongReal = evaluation.valueAt({ re: t, im: index });
-        const alongImaginary = evaluation.valueAt({ re: index, im: t });
-        if (alongReal !== null) horizontal.push(alongReal);
-        if (alongImaginary !== null) vertical.push(alongImaginary);
+        horizontal.push(evaluation.valueAt({ re: t, im: index }));
+        vertical.push(evaluation.valueAt({ re: index, im: t }));
       }
       // Axis lines are emphasised; index 0 is the real and imaginary axis.
       const weight = index === 0 ? 1 : 0.42;
-      if (horizontal.length > 1) lines.push({ points: horizontal, weight });
-      if (vertical.length > 1) lines.push({ points: vertical, weight });
+      const horizontalSegments = splitMappedPolyline(horizontal);
+      const verticalSegments = splitMappedPolyline(vertical);
+      if (horizontalSegments.length > 0) lines.push({ segments: horizontalSegments, weight });
+      if (verticalSegments.length > 0) lines.push({ segments: verticalSegments, weight });
     }
 
-    const fitted = fitBounds(lines.flatMap((line) => line.points));
+    const fitted = fitBounds(lines.flatMap((line) => line.segments.flat()));
     if (fitted === null) return;
     const padded = padBounds(fitted, FIT_MARGIN);
 
@@ -122,21 +123,15 @@ export function MappedGridView({
     context.lineWidth = Math.max(1, ratio * 0.75);
     for (const line of lines) {
       context.strokeStyle = line.weight === 1 ? 'rgba(25, 23, 20, 0.55)' : 'rgba(25, 23, 20, 0.2)';
-      context.beginPath();
-      let started = false;
-      for (const point of line.points) {
-        const [x, y] = toScreen(point);
-        if (!Number.isFinite(x) || !Number.isFinite(y)) {
-          started = false;
-          continue;
+      for (const segment of line.segments) {
+        context.beginPath();
+        for (const [index, point] of segment.entries()) {
+          const [x, y] = toScreen(point);
+          if (index === 0) context.moveTo(x, y);
+          else context.lineTo(x, y);
         }
-        if (started) context.lineTo(x, y);
-        else {
-          context.moveTo(x, y);
-          started = true;
-        }
+        context.stroke();
       }
-      context.stroke();
     }
 
     // The shared cursor, mapped, so the two planes are visibly linked.

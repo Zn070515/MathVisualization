@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { latex, makeStore, makeStoreFromLatex, toLatex } from './helpers';
 import { cx } from '@mathviz/mathcore';
 import {
+  DEFAULT_FREQUENCY_VIEWPORT,
   DEFAULT_VIEWPORT,
   collectSliderValues,
   parametersUsedBy,
@@ -252,6 +253,46 @@ describe('the viewport', () => {
     store.resetViewport();
     expect(store.getState().viewport).toEqual(DEFAULT_VIEWPORT);
   });
+
+  it('resets every view frame, including frequency and 3D camera state', () => {
+    const store = makeStore(['f(x,y)=x^2-y^2'], 'calculus');
+    store.setViewport({ centre: cx(4, -3), halfWidth: 0.5 });
+    store.setFrequencyViewport({ xMin: -2, xMax: 2, yMin: -1, yMax: 1 });
+    store.setCamera3d({
+      azimuth: 1,
+      elevation: 0.4,
+      distance: 3,
+      target: { x: 1, y: 2, z: 3 },
+    });
+    store.resetViewport();
+
+    expect(store.getState().viewport).toEqual(DEFAULT_VIEWPORT);
+    expect(store.getState().frequencyViewport).toEqual(DEFAULT_FREQUENCY_VIEWPORT);
+    expect(store.getState().camera3d).toEqual({
+      azimuth: Math.PI / 4,
+      elevation: Math.PI / 7,
+      distance: 6,
+      target: { x: 0, y: 0, z: 0 },
+    });
+  });
+
+  it('stores one normalized directional vector for every linked gradient view', () => {
+    const store = makeStore(['f(x,y)=x^2-y^2'], 'calculus');
+    store.setDirection({ x: 3, y: 4 });
+    expect(store.getState().direction).toEqual({ x: 0.6, y: 0.8 });
+
+    const before = store.getState().direction;
+    store.setDirection({ x: 0, y: 0 });
+    expect(store.getState().direction).toBe(before);
+  });
+
+  it('keeps the selected contour level as shared mathematical state', () => {
+    const store = makeStore(['f(x,y)=x^2-y^2'], 'calculus');
+    store.setContourLevel(1.5);
+    expect(store.getState().contourLevel).toBe(1.5);
+    store.setContourLevel(Number.NaN);
+    expect(store.getState().contourLevel).toBe(1.5);
+  });
 });
 
 describe('multiple views', () => {
@@ -268,7 +309,10 @@ describe('multiple views', () => {
     expect(
       kindsOf(
         makeStoreFromLatex(
-          ['f(t)=\\exp\\left(-t^{2}\\right)', 'F(\\omega)=\\operatorname{Fourier}\\left(f(t)\\right)'],
+          [
+            'f(t)=\\exp\\left(-t^{2}\\right)',
+            'F(\\omega)=\\operatorname{Fourier}\\left(f(t)\\right)',
+          ],
           'transforms',
         ),
       ),
@@ -385,6 +429,30 @@ describe('choosing what to draw', () => {
   it('falls back to the first drawable expression', () => {
     const store = makeStore(['a=2', 'f(z)=z^2'], 'complex');
     expect(store.activeExpression()?.entry.source).toBe(latex('f(z)=z^2')[0]);
+  });
+
+  it('follows the focused Fourier pair instead of always using the first pair', () => {
+    const store = makeStoreFromLatex(
+      [
+        'f(t)=t',
+        'F(\\omega)=\\operatorname{Fourier}(f(t))',
+        'g(t)=t^{2}',
+        'G(\\omega)=\\operatorname{Fourier}(g(t))',
+      ],
+      'transforms',
+    );
+
+    const secondPair = store.getState().lines[3]?.id as string;
+    store.focusLine(secondPair);
+    const focusedPair = store.activeExpression()?.entry.statement;
+    expect(focusedPair?.kind).toBe('function-definition');
+    if (focusedPair?.kind === 'function-definition') expect(focusedPair.name).toBe('G');
+
+    const secondSource = store.getState().lines[2]?.id as string;
+    store.focusLine(secondSource);
+    const focusedSourcePair = store.activeExpression()?.entry.statement;
+    expect(focusedSourcePair?.kind).toBe('function-definition');
+    if (focusedSourcePair?.kind === 'function-definition') expect(focusedSourcePair.name).toBe('G');
   });
 
   it('skips expressions this subsystem cannot draw', () => {

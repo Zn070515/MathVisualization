@@ -25,7 +25,7 @@ import {
   type ViewSpec,
   type WorkspaceStore,
 } from '../state/workspaceStore';
-import { defaultModeFor, drawableViewKinds, nominalViewKind } from '../state/viewKinds';
+import { defaultModeForView, drawableViewKinds, nominalViewKind } from '../state/viewKinds';
 import { Cartesian3DView } from './Cartesian3DView';
 import { CartesianView } from './CartesianView';
 import { ComplexPlaneView } from './ComplexPlaneView';
@@ -137,7 +137,7 @@ export function ViewCanvas({
             type="button"
             className="canvas__add"
             onClick={() => {
-              store.addView(kind, defaultModeFor(active?.signature.codomain));
+              store.addView(kind, defaultModeForView(kind, active?.signature.codomain));
             }}
           >
             {VIEW_TITLES[kind]}

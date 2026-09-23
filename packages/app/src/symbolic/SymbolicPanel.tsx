@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   type CasAdapter,
   type SymbolicOutcome,
+  complexDerivativeIssue,
   lowerToSympy,
   sympyPreamble,
 } from '@mathviz/mathcore';
@@ -54,10 +55,28 @@ export function SymbolicPanel({
   const differentiate = useCallback(async () => {
     if (active === null || active.entry.statement === null) return;
     const body = active.entry.statement.body;
-    const symbols =
+    const declaredSymbols =
       active.entry.statement.kind === 'function-definition'
         ? [...active.entry.statement.parameters]
         : [...active.bindings.keys()];
+    const symbols = [...new Set([...declaredSymbols, ...active.parameterNames])];
+
+    const variable =
+      active.entry.statement.kind === 'function-definition'
+        ? active.entry.statement.parameters[0]
+        : symbols[0];
+
+    if (active.signature.domain.kind === 'C' && variable !== undefined) {
+      const issue = complexDerivativeIssue(body, variable);
+      if (issue !== null) {
+        setOutcome({
+          status: 'failed',
+          message: issue.message,
+          issue,
+        });
+        return;
+      }
+    }
 
     const lowered = lowerToSympy(body, symbols);
     if (!lowered.ok) {
@@ -69,7 +88,6 @@ export function SymbolicPanel({
       return;
     }
 
-    const variable = symbols[0];
     setPending(true);
     const result = await resolved.run({
       operation: 'differentiate',
@@ -106,8 +124,8 @@ export function SymbolicPanel({
       {availability === 'absent' && (
         <p className="symbolic__note">
           The symbolic engine is a separate service. Start it with{' '}
-          <span className="symbolic__mono">python services/symbolic/server.py</span>. Numeric
-          views work without it; nothing here is guessed when it is absent.
+          <span className="symbolic__mono">python services/symbolic/server.py</span>. Numeric views
+          work without it; nothing here is guessed when it is absent.
         </p>
       )}
 
@@ -123,7 +141,12 @@ export function SymbolicPanel({
           {pending ? 'Computing…' : 'Differentiate'}
         </button>
         {active !== null && (
-          <span className="symbolic__subject">d/d{firstSymbol(active.bindings.keys())}</span>
+          <span className="symbolic__subject">
+            d/d
+            {active.entry.statement?.kind === 'function-definition'
+              ? firstSymbol(active.entry.statement.parameters)
+              : firstSymbol(active.bindings.keys())}
+          </span>
         )}
       </div>
 
@@ -132,8 +155,8 @@ export function SymbolicPanel({
   );
 }
 
-function firstSymbol(names: IterableIterator<string>): string {
-  const first = names.next();
+function firstSymbol(names: Iterable<string>): string {
+  const first = names[Symbol.iterator]().next();
   return first.done === true ? 'x' : first.value;
 }
 

@@ -17,11 +17,7 @@
  * workspace has been built — and the workspace is built *in* the store.
  */
 import { useEffect, useMemo, type ReactNode } from 'react';
-import {
-  DEFAULT_VIEWPORT,
-  WorkspaceStore,
-  type ViewBlueprint,
-} from './workspaceStore';
+import { DEFAULT_VIEWPORT, WorkspaceStore, type ViewBlueprint } from './workspaceStore';
 import { WorkspaceStoreContext } from './storeContext';
 import { createWorkspaceWriter, loadWorkspace } from './persistence';
 import { cx, plainToLatex } from '@mathviz/mathcore';
@@ -81,6 +77,7 @@ export function WorkspaceProvider({
             ...(restored.frequencyViewport === undefined
               ? {}
               : { frequencyViewport: restored.frequencyViewport }),
+            ...(restored.contourLevel === undefined ? {} : { contourLevel: restored.contourLevel }),
             ...(restored.camera === null ? {} : { camera3d: restored.camera }),
             ...(storedViews.length > 0 ? { views: storedViews } : {}),
           }),
@@ -102,6 +99,7 @@ export function WorkspaceProvider({
           halfWidth: state.viewport.halfWidth,
         },
         frequencyViewport: state.frequencyViewport,
+        contourLevel: state.contourLevel,
         camera: {
           azimuth: state.camera3d.azimuth,
           elevation: state.camera3d.elevation,

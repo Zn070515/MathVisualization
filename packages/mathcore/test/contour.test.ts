@@ -63,6 +63,24 @@ function expectNear(actual: ResidueEstimate | null, expected: Complex, tolerance
 }
 
 describe('what the integral is', () => {
+  it('returns the refined quadrature rather than the coarse preview', () => {
+    const result = contourIntegral({
+      path: (t) => ok(cx(t, 0)),
+      integrand: (z) => ok(cx(z.re * z.re, 0)),
+      from: 0,
+      to: 1,
+      samples: 8,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // For t², the composite trapezoid errors at h=1/8 and h=1/16 are
+    // distinguishable. The returned value must be the latter.
+    expect(result.value.value.re).toBeCloseTo(1 / 3 + (1 / 16) ** 2 / 6, 12);
+    expect(result.value.samples).toBe(16);
+    expect(result.value.trajectory).toHaveLength(17);
+  });
+
   it('is 2 pi i around a closed contour that is not a circle', () => {
     const result = run(roundedTriangle, reciprocal);
     expect(result.ok).toBe(true);

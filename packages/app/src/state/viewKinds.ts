@@ -45,6 +45,11 @@ export function defaultModeFor(codomain: Space | undefined): FieldMode {
   return codomain.kind === 'C' ? 'complex' : 'real';
 }
 
+/** The initial projection is a property of the view, not only of the codomain. */
+export function defaultModeForView(kind: ViewKind, codomain: Space | undefined): FieldMode {
+  return kind === 'frequency-domain' ? 'magnitude' : defaultModeFor(codomain);
+}
+
 /**
  * Every view that can honestly draw this signature, most natural first.
  *
@@ -117,7 +122,7 @@ export function defaultViewKinds(
     .filter((kind) => VIEW_KIND_STATUS[kind] === 'available')
     .map((kind) => ({
       kind,
-      mode: kind === 'frequency-domain' ? 'magnitude' : defaultModeFor(signature?.codomain),
+      mode: defaultModeForView(kind, signature?.codomain),
     }));
 }
 

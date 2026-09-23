@@ -8,10 +8,10 @@ import {
   estimateFourierTransform,
   workspaceEnvironment,
 } from '@mathviz/mathcore';
-import type {
-  ActiveExpression,
-  FrequencyViewport,
-} from '../state/workspaceStore';
+import type { ActiveExpression, FrequencyViewport } from '../state/workspaceStore';
+
+/** Estimates are shared by the frequency canvas and the readout. */
+const estimateCache = new WeakMap<Workspace, Map<string, FourierEstimate | null>>();
 
 export type TransformMode = Exclude<FieldMode, 'complex'>;
 
@@ -35,7 +35,25 @@ export function frequencyGrid(
   );
 }
 
-export function selectFourierTransform(active: ActiveExpression | null): FourierTransformNode | null {
+/** Return the frequency bin whose sampled value is drawn and read out. */
+export function snapFrequency(frequency: number, frequencies: readonly number[]): number | null {
+  if (!Number.isFinite(frequency) || frequencies.length === 0) return null;
+  let nearest = frequencies[0] ?? null;
+  if (nearest === null) return null;
+  let distance = Math.abs(nearest - frequency);
+  for (const candidate of frequencies.slice(1)) {
+    const candidateDistance = Math.abs(candidate - frequency);
+    if (candidateDistance < distance) {
+      nearest = candidate;
+      distance = candidateDistance;
+    }
+  }
+  return nearest;
+}
+
+export function selectFourierTransform(
+  active: ActiveExpression | null,
+): FourierTransformNode | null {
   const statement = active?.entry.statement;
   if (statement?.kind !== 'function-definition') return null;
   return statement.body.kind === 'fourier-transform' ? statement.body : null;
@@ -48,11 +66,32 @@ export function estimateActiveFourierTransform(
 ): FourierEstimate | null {
   const transform = selectFourierTransform(active);
   if (transform === null) return null;
-  return estimateFourierTransform(transform, workspaceEnvironment(workspace, parameterValues), {
-    frequencies: frequencyGrid(),
-    timeWindow: DEFAULT_TIME_WINDOW,
-    timeSamples: DEFAULT_TIME_SAMPLES,
-  });
+  const key = `${active?.entry.id ?? 'none'}|${parameterKey(parameterValues)}`;
+  let workspaceCache = estimateCache.get(workspace);
+  if (workspaceCache === undefined) {
+    workspaceCache = new Map();
+    estimateCache.set(workspace, workspaceCache);
+  }
+  if (workspaceCache.has(key)) return workspaceCache.get(key) ?? null;
+
+  const estimate = estimateFourierTransform(
+    transform,
+    workspaceEnvironment(workspace, parameterValues),
+    {
+      frequencies: frequencyGrid(),
+      timeWindow: DEFAULT_TIME_WINDOW,
+      timeSamples: DEFAULT_TIME_SAMPLES,
+    },
+  );
+  workspaceCache.set(key, estimate);
+  return estimate;
+}
+
+function parameterKey(parameters: ReadonlyMap<string, number>): string {
+  return [...parameters.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([name, value]) => `${name}=${String(value)}`)
+    .join(';');
 }
 
 export function projectFourierValue(value: Complex, mode: TransformMode): number | null {

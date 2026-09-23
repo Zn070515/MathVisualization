@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 import { C1, R1, R2, R3, type Signature, type Space } from '@mathviz/mathcore';
 import {
   VIEW_KIND_STATUS,
+  defaultModeForView,
   defaultViewKinds,
   drawableViewKinds,
   nominalViewKind,
@@ -74,6 +75,11 @@ describe('the taxonomy', () => {
 });
 
 describe('what each object calls for', () => {
+  it('starts frequency views on a selectable projection', () => {
+    expect(defaultModeForView('frequency-domain', C1)).toBe('magnitude');
+    expect(defaultModeForView('cartesian-2d', C1)).toBe('complex');
+  });
+
   it('puts the plane first for a complex function, because a map of the plane lives on it', () => {
     expect(kindsOf(sig(C1, C1))).toEqual(['complex-plane', 'domain-coloring', 'mapped-grid']);
   });
@@ -98,7 +104,12 @@ describe('what each object calls for', () => {
   });
 
   it('asks for a surface for a scalar over the plane, with the heatmap behind it', () => {
-    expect(kindsOf(sig(R2, R1))).toEqual(['cartesian-3d', 'contour', 'gradient', 'domain-coloring']);
+    expect(kindsOf(sig(R2, R1))).toEqual([
+      'cartesian-3d',
+      'contour',
+      'gradient',
+      'domain-coloring',
+    ]);
   });
 
   it('offers nothing where there is no honest picture', () => {

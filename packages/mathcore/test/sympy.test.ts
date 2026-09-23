@@ -7,7 +7,13 @@
  */
 import { describe, expect, it } from 'vitest';
 import { parseExpression, parseStatement } from '../src/parser';
-import { lowerStatementToSympy, lowerToSympy, sympyPreamble, sympySymbolName } from '../src/sympy';
+import {
+  complexDerivativeIssue,
+  lowerStatementToSympy,
+  lowerToSympy,
+  sympyPreamble,
+  sympySymbolName,
+} from '../src/sympy';
 import type { Expr } from '../src/ast';
 
 function expr(source: string): Expr {
@@ -123,6 +129,22 @@ describe('symbol safety', () => {
   it('keeps an ordinary name as it is', () => {
     expect(sympySymbolName('z', 0)).toBe('z');
     expect(sympySymbolName('alpha', 0)).toBe('alpha');
+  });
+});
+
+describe('complex derivative semantics', () => {
+  it('rejects non-holomorphic operations as complex derivatives', () => {
+    const issue = complexDerivativeIssue(expr('conj(z) + abs(z)'), 'z');
+    expect(issue?.kind).toBe('unsupported');
+    expect(issue?.message).toMatch(/holomorphic|complex derivative/i);
+  });
+
+  it('allows elementary holomorphic operations', () => {
+    expect(complexDerivativeIssue(expr('sin(z) * exp(z)'), 'z')).toBeNull();
+  });
+
+  it('does not reject a non-holomorphic operation on a constant parameter', () => {
+    expect(complexDerivativeIssue(expr('conj(a) * z'), 'z')).toBeNull();
   });
 });
 

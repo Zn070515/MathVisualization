@@ -29,7 +29,7 @@ import {
   type ViewRendererProps,
 } from '../state/workspaceStore';
 import { handleCameraKey } from './cameraKeys';
-import { directionAngleFromPoints, directionHandlePoint, unitDirection } from './directionalHandle';
+import { directionAngleFromPoints, directionHandlePoint } from './directionalHandle';
 import { makePointEvaluation } from './evaluation';
 import { useResizeVersion } from './useResizeVersion';
 import { fromScreen, planeWindow, toScreen } from './window2d';
@@ -68,10 +68,10 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const resizeVersion = useResizeVersion(canvasRef);
   const dragging = useRef<DragState | null>(null);
-  const [directionAngle, setDirectionAngle] = useState(Math.PI / 4);
   const [measured, setMeasured] = useState<GradientRange | null>(null);
   const state = useStore(store, (current) => current);
   const { workspace, focusedLineId } = state;
+  const directionAngle = Math.atan2(state.direction.y, state.direction.x);
   const active = useMemo(
     () => selectActiveExpression(workspace, focusedLineId, store.drawableKinds),
     [workspace, focusedLineId, store.drawableKinds],
@@ -119,7 +119,10 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
       columns: CONTOUR_RESOLUTION,
       rows: CONTOUR_RESOLUTION,
     });
-    const levels = axisTicks(mesh.zMin, mesh.zMax, 8).major.map((tick) => tick.value);
+    const automaticLevels = axisTicks(mesh.zMin, mesh.zMax, 8).major.map((tick) => tick.value);
+    const levels = [...new Set([...automaticLevels, state.contourLevel])].sort(
+      (left, right) => left - right,
+    );
     const lines = contourLines(mesh, levels);
     context.strokeStyle = 'rgba(25, 23, 20, 0.18)';
     context.lineWidth = Math.max(1, ratio * 0.9);
@@ -164,7 +167,7 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
         ratio,
       );
     }
-  }, [directionAngle, drawable, evaluation, state.selection, state.viewport]);
+  }, [directionAngle, drawable, evaluation, state.contourLevel, state.selection, state.viewport]);
 
   useEffect(() => {
     draw();
@@ -201,9 +204,9 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
       (x, y) => evaluation.evaluate(cx(x, y)),
       state.selection.re,
       state.selection.im,
-      unitDirection(directionAngle),
+      state.direction,
     );
-  }, [directionAngle, drawable, evaluation, state.selection]);
+  }, [drawable, evaluation, state.direction, state.selection]);
   const bounds = canvasRef.current?.getBoundingClientRect();
   const halfHeight =
     bounds === undefined || bounds.width === 0
@@ -252,7 +255,9 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
               { x: state.selection.re, y: state.selection.im },
               { x: point.re, y: point.im },
             );
-            if (angle !== null) setDirectionAngle(angle);
+            if (angle !== null) {
+              store.setDirection({ x: Math.cos(angle), y: Math.sin(angle) });
+            }
             return;
           }
           const canvas = canvasRef.current;
@@ -335,8 +340,8 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
           {state.selection !== null && selectedDirectionalDerivative !== null && (
             <>
               <span className="legend__range">
-                u = ({displayNumberToText(viewNumber(Math.cos(directionAngle)))},{' '}
-                {displayNumberToText(viewNumber(Math.sin(directionAngle)))})
+                u = ({displayNumberToText(viewNumber(state.direction.x))},{' '}
+                {displayNumberToText(viewNumber(state.direction.y))})
               </span>
               {selectedDirectionalDerivative.ok ? (
                 <span className="legend__range">

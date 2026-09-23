@@ -22,12 +22,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   type Complex,
   type Singularity,
+  type SingularitySearchResult,
+  analyzeZerosAndPoles,
   cx,
   displayComplex,
   displayComplexToText,
   displayNumberToText,
   evaluateContourDetails,
-  findZerosAndPoles,
   workspaceEnvironment,
 } from '@mathviz/mathcore';
 import { drawGridAndAxes } from '../render/axes2d';
@@ -194,15 +195,16 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
    * them means hundreds of evaluations and the pointer moves at sixty hertz. Panning
    * costs one search per new region, not one per pixel.
    */
-  const singularities = useMemo((): readonly Singularity[] => {
-    if (!drawsMap || evaluation === null || region === null) return [];
-    return findZerosAndPoles((z) => evaluation.evaluate(z), {
+  const singularitySearch = useMemo((): SingularitySearchResult | null => {
+    if (!drawsMap || evaluation === null || region === null) return null;
+    return analyzeZerosAndPoles((z) => evaluation.evaluate(z), {
       xMin: region.xMin,
       xMax: region.xMax,
       yMin: region.yMin,
       yMax: region.yMax,
     });
   }, [drawsMap, evaluation, region]);
+  const singularities = useMemo(() => singularitySearch?.points ?? [], [singularitySearch]);
 
   const zeros = singularities.filter((point) => point.kind === 'zero').length;
   const poles = singularities.length - zeros;
@@ -219,7 +221,7 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
    */
   useEffect(() => {
     setSnapped(null);
-  }, [singularities]);
+  }, [singularitySearch]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -493,6 +495,16 @@ export function ComplexPlaneView({ store }: ViewRendererProps): React.JSX.Elemen
         {drawsMap && (zeros > 0 || poles > 0) && (
           <span className="legend__range">
             ● {zeros} zero{zeros === 1 ? '' : 's'} · ○ {poles} pole{poles === 1 ? '' : 's'}
+          </span>
+        )}
+        {drawsMap && singularitySearch !== null && !singularitySearch.complete && (
+          <span className="legend__range">
+            singularity search incomplete
+            {singularitySearch.unresolved.length > 0
+              ? ` · ${singularitySearch.unresolved.length} unresolved candidate${singularitySearch.unresolved.length === 1 ? '' : 's'}`
+              : ''}
+            {singularitySearch.truncated ? ' · search limit reached' : ''} · detected marks are not
+            exhaustive
           </span>
         )}
         {repeated && <span className="legend__range">×n marks a point of order n</span>}

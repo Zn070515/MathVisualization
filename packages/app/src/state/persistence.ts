@@ -101,6 +101,8 @@ export interface PersistedWorkspace {
   readonly parameterValues: Record<string, number>;
   readonly viewport: { centreRe: number; centreIm: number; halfWidth: number };
   readonly frequencyViewport?: PersistedFrequencyViewport;
+  /** The selected contour level, optional for records written before contours were linked. */
+  readonly contourLevel?: number;
   /**
    * Optional, and that is not a compromise: an older build wrote records without
    * it, and the reader already treats a missing field as "use the default". A new
@@ -135,6 +137,7 @@ export interface LoadedWorkspace {
   readonly parameterValues: Record<string, number>;
   readonly viewport: PersistedWorkspace['viewport'];
   readonly frequencyViewport: PersistedWorkspace['frequencyViewport'];
+  readonly contourLevel: PersistedWorkspace['contourLevel'];
   /** Null when nothing usable was stored, which is what the store's default is for. */
   readonly camera: Camera3d | null;
   readonly views: StoredViews;
@@ -234,6 +237,11 @@ function readFrequencyViewport(
   return usable ? { xMin, xMax, yMin, yMax } : undefined;
 }
 
+function readContourLevel(entry: Record<string, unknown>): number | undefined {
+  const level = entry['contourLevel'];
+  return typeof level === 'number' && Number.isFinite(level) ? level : undefined;
+}
+
 function readParameterValues(entry: Record<string, unknown>): Record<string, number> {
   const values: Record<string, number> = {};
   const stored = entry['parameterValues'];
@@ -305,6 +313,7 @@ function readEntry(
     parameterValues: readParameterValues(entry),
     viewport: readViewport(entry),
     frequencyViewport: readFrequencyViewport(entry),
+    contourLevel: readContourLevel(entry),
     camera: readCamera(entry),
     views: readViews(entry),
   };

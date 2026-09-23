@@ -3,10 +3,13 @@ import { cx, type FourierEstimate } from '@mathviz/mathcore';
 import {
   fitFrequencyViewport,
   frequencyRange,
+  estimateActiveFourierTransform,
   projectFourierValue,
+  snapFrequency,
   transformModeOf,
   type TransformMode,
 } from '../src/views/frequencyEvaluation';
+import { makeStoreFromLatex } from './helpers';
 
 describe('frequency-domain projections', () => {
   const value = cx(3, 4);
@@ -27,6 +30,10 @@ describe('frequency-domain projections', () => {
     expect(transformModeOf('phase')).toBe('phase');
   });
 
+  it('snaps the cursor to the frequency sample whose value is displayed', () => {
+    expect(snapFrequency(0.037, [-8, -0.1, 0, 0.1, 8])).toBe(0);
+  });
+
   it('uses a symmetric range for signed component modes', () => {
     const estimate: FourierEstimate = {
       values: [cx(-2, 1), cx(3, -1)],
@@ -38,10 +45,7 @@ describe('frequency-domain projections', () => {
       diagnostics: [],
     };
     for (const mode of ['real', 'imaginary'] as const satisfies readonly TransformMode[]) {
-      const range = frequencyRange(
-        estimate,
-        mode,
-      );
+      const range = frequencyRange(estimate, mode);
       expect(range?.min).toBe(-Math.max(Math.abs(mode === 'real' ? 3 : 1), 1e-6));
       expect(range?.max).toBe(Math.max(Math.abs(mode === 'real' ? 3 : 1), 1e-6));
     }
@@ -66,5 +70,20 @@ describe('frequency-domain projections', () => {
       yMax: 4.48,
     });
     expect(current).toEqual({ xMin: -8, xMax: 8, yMin: -2, yMax: 2 });
+  });
+
+  it('shares an estimate for the same transform and parameter state', () => {
+    const store = makeStoreFromLatex(
+      ['f(t)=\\exp\\left(-t^{2}\\right)', 'F(\\omega)=\\operatorname{Fourier}(f(t))'],
+      'transforms',
+    );
+    const active = store.activeExpression();
+    expect(active).not.toBeNull();
+    if (active === null) return;
+    const state = store.getState();
+    const first = estimateActiveFourierTransform(active, state.workspace, state.parameterValues);
+    const second = estimateActiveFourierTransform(active, state.workspace, state.parameterValues);
+    expect(first).not.toBeNull();
+    expect(second).toBe(first);
   });
 });

@@ -116,6 +116,8 @@ const SYMPY_FUNCTION_NAMES: Readonly<Record<string, string>> = {
   conj: 'conjugate',
 };
 
+const NON_HOLOMORPHIC_FUNCTIONS = new Set(['conj', 're', 'im', 'abs', 'arg']);
+
 const PYTHON_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
@@ -335,6 +337,84 @@ export function lowerToSympy(
     symbols.set(name, sympySymbolName(name, index));
   });
   return lower(expr, symbols);
+}
+
+/**
+ * Return a mathematical issue when an expression cannot be presented as a
+ * certified complex derivative with respect to `variable`.
+ *
+ * SymPy can emit formal objects such as `Derivative(conjugate(z), z)`, but that
+ * is not a value of df/dz. The UI must not label such an answer exact. A
+ * non-holomorphic operation applied only to a constant parameter is harmless,
+ * so the guard is dependency-aware rather than a blanket function-name check.
+ */
+export function complexDerivativeIssue(expr: Expr, variable: string): MathIssue | null {
+  let issue: MathIssue | null = null;
+
+  const dependsOn = (node: Expr, name: string): boolean => {
+    if (node.kind === 'variable') return node.name === name;
+    switch (node.kind) {
+      case 'unary':
+        return dependsOn(node.operand, name);
+      case 'binary':
+        return dependsOn(node.left, name) || dependsOn(node.right, name);
+      case 'call':
+        return node.args.some((argument) => dependsOn(argument, name));
+      case 'tuple':
+        return node.items.some((item) => dependsOn(item, name));
+      case 'contour-integral':
+        return dependsOn(node.integrand, name);
+      case 'fourier-transform':
+        return dependsOn(node.source, name);
+      default:
+        return false;
+    }
+  };
+
+  const visit = (node: Expr): void => {
+    if (issue !== null) return;
+    if (node.kind === 'call') {
+      if (NON_HOLOMORPHIC_FUNCTIONS.has(node.callee)) {
+        const depends = node.args.some((argument) => dependsOn(argument, variable));
+        if (depends) {
+          issue = {
+            kind: 'unsupported',
+            detail: `non-holomorphic operation ${node.callee}`,
+            message:
+              `A complex derivative is not certified through ${node.callee}(...). ` +
+              'The expression is not known to be holomorphic in the differentiation variable.',
+            span: node.span,
+          };
+          return;
+        }
+      }
+      for (const argument of node.args) visit(argument);
+      return;
+    }
+    switch (node.kind) {
+      case 'unary':
+        visit(node.operand);
+        break;
+      case 'binary':
+        visit(node.left);
+        visit(node.right);
+        break;
+      case 'tuple':
+        for (const item of node.items) visit(item);
+        break;
+      case 'contour-integral':
+        visit(node.integrand);
+        break;
+      case 'fourier-transform':
+        visit(node.source);
+        break;
+      default:
+        break;
+    }
+  };
+
+  visit(expr);
+  return issue;
 }
 
 /** Translate a whole statement, including the left-hand side of a definition. */

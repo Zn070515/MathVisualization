@@ -103,12 +103,15 @@ export function ContourView({ store }: ViewRendererProps): React.JSX.Element {
         : range,
     );
 
-    const levels = axisTicks(range.min, range.max, 9).major.map((tick) => tick.value);
+    const automaticLevels = axisTicks(range.min, range.max, 9).major.map((tick) => tick.value);
+    const levels = [...new Set([...automaticLevels, state.contourLevel])].sort(
+      (left, right) => left - right,
+    );
     const lines = contourLines(mesh, levels);
     for (const line of lines) {
-      context.strokeStyle =
-        Math.abs(line.level) < 1e-12 ? CANVAS_COLORS.curveSecondary : CANVAS_COLORS.curve;
-      context.lineWidth = Math.max(1, ratio * (Math.abs(line.level) < 1e-12 ? 1.7 : 1.1));
+      const highlighted = Math.abs(line.level - state.contourLevel) < 1e-12;
+      context.strokeStyle = highlighted ? CANVAS_COLORS.curveSecondary : CANVAS_COLORS.curve;
+      context.lineWidth = Math.max(1, ratio * (highlighted ? 1.7 : 1.1));
       for (const path of line.paths) {
         if (path.points.length < 2) continue;
         context.beginPath();
@@ -122,7 +125,7 @@ export function ContourView({ store }: ViewRendererProps): React.JSX.Element {
         context.stroke();
       }
     }
-  }, [drawable, evaluation, state.viewport]);
+  }, [drawable, evaluation, state.contourLevel, state.viewport]);
 
   useEffect(() => {
     draw();
@@ -236,7 +239,22 @@ export function ContourView({ store }: ViewRendererProps): React.JSX.Element {
             z ∈ [<NumberText value={viewNumber(measured.min)} />,{' '}
             <NumberText value={viewNumber(measured.max)} />]
           </span>
-          <span className="legend__range">zero level highlighted · undefined cells omitted</span>
+          <span className="legend__range">
+            selected level highlighted · undefined cells omitted
+          </span>
+          <label className="legend__range">
+            highlighted c ={' '}
+            <input
+              type="number"
+              value={state.contourLevel}
+              step="any"
+              aria-label="Highlighted contour level c"
+              onChange={(event) => {
+                const level = Number(event.target.value);
+                if (Number.isFinite(level)) store.setContourLevel(level);
+              }}
+            />
+          </label>
         </div>
       )}
     </div>

@@ -1,16 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import {
-  type FourierEstimate,
-  displayNumberToText,
-} from '@mathviz/mathcore';
+import { type FourierEstimate, displayNumberToText } from '@mathviz/mathcore';
 import { drawGridAndAxes } from '../render/axes2d';
 import { CANVAS_COLORS, prepareCanvas2d } from '../render/canvasSurface';
 import { viewNumber } from '../display/numbers';
 import { useStore } from '../state/store';
-import {
-  selectActiveExpression,
-  type ViewRendererProps,
-} from '../state/workspaceStore';
+import { selectActiveExpression, type ViewRendererProps } from '../state/workspaceStore';
 import type { FrequencyViewport } from '../state/workspaceStore';
 import { useResizeVersion } from './useResizeVersion';
 import {
@@ -18,6 +12,7 @@ import {
   fitFrequencyViewport,
   frequencyRange,
   projectFourierValue,
+  snapFrequency,
   transformModeOf,
   type TransformMode,
 } from './frequencyEvaluation';
@@ -118,13 +113,21 @@ export function FrequencyDomainView({ store, view }: ViewRendererProps): React.J
         aria-label={`Frequency-domain plot of ${MODE_LABELS[mode]} over angular frequency ω`}
         onPointerMove={(event) => {
           const frequency = frequencyAt(event, canvasRef.current, plotWindow(frequencyViewport));
-          if (frequency !== null) store.setFrequencyHover(frequency);
+          const snapped =
+            frequency === null || estimate === null
+              ? null
+              : snapFrequency(frequency, estimate.frequencies);
+          if (snapped !== null) store.setFrequencyHover(snapped);
         }}
         onPointerDown={(event) => {
           const frequency = frequencyAt(event, canvasRef.current, plotWindow(frequencyViewport));
-          if (frequency !== null) {
-            store.setFrequencySelection(frequency);
-            store.setFrequencyHover(frequency);
+          const snapped =
+            frequency === null || estimate === null
+              ? null
+              : snapFrequency(frequency, estimate.frequencies);
+          if (snapped !== null) {
+            store.setFrequencySelection(snapped);
+            store.setFrequencyHover(snapped);
           }
         }}
         onPointerLeave={() => {
@@ -189,7 +192,8 @@ function frequencyAt(
   if (canvas === null) return null;
   const bounds = canvas.getBoundingClientRect();
   if (bounds.width === 0) return null;
-  const x = window.xMin + ((event.clientX - bounds.left) / bounds.width) * (window.xMax - window.xMin);
+  const x =
+    window.xMin + ((event.clientX - bounds.left) / bounds.width) * (window.xMax - window.xMin);
   return Number.isFinite(x) ? x : null;
 }
 

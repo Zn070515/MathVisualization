@@ -80,6 +80,16 @@ export const DEFAULT_FREQUENCY_VIEWPORT: FrequencyViewport = {
   yMax: 2,
 };
 
+export interface Direction2d {
+  readonly x: number;
+  readonly y: number;
+}
+
+export const DEFAULT_DIRECTION: Direction2d = {
+  x: Math.SQRT1_2,
+  y: Math.SQRT1_2,
+};
+
 /**
  * What a canvas pane is showing.
  *
@@ -141,6 +151,10 @@ export interface WorkspaceState {
   readonly frequencyHover: number | null;
   readonly frequencySelection: number | null;
   readonly frequencyViewport: FrequencyViewport;
+  /** The shared unit direction used by directional-derivative views. */
+  readonly direction: Direction2d;
+  /** The explicitly selected level set c shared by contour-capable views. */
+  readonly contourLevel: number;
   readonly viewport: Viewport;
   /**
    * Where a three-dimensional view is looking from.
@@ -244,10 +258,30 @@ export function selectActiveExpression(
   if (drawable.length === 0) return null;
 
   const focused = drawable.find((entry) => entry.id === focusedLineId);
-  // A transform pair owns both panes: the source line remains visible as the
-  // time-domain expression, but the pair is the active mathematical object that
-  // supplies the frequency-domain view. Prefer it when the workspace contains
-  // one, even while the editor focus is still on the source line.
+  if (focused?.type?.classification.kind === 'transform-pair') {
+    return activeExpressionForEntry(focused, workspace);
+  }
+
+  // A focused source line belongs to its own transform pair. This keeps the
+  // time-domain editor focus and the frequency pane on the same mathematical
+  // object when a workspace contains several pairs.
+  if (focused?.statement?.kind === 'function-definition') {
+    const focusedFunctionName = focused.statement.name;
+    const matchingPair = drawable.find((entry) => {
+      const body = entry.statement?.kind === 'function-definition' ? entry.statement.body : null;
+      return (
+        entry.type?.classification.kind === 'transform-pair' &&
+        body?.kind === 'fourier-transform' &&
+        body.source.kind === 'call' &&
+        body.source.callee === focusedFunctionName
+      );
+    });
+    if (matchingPair !== undefined) return activeExpressionForEntry(matchingPair, workspace);
+  }
+
+  // If no focused line identifies a pair, use the first pair as the stable
+  // fallback. A focused non-transform expression still wins when it has no
+  // associated pair, so focus remains meaningful in mixed workspaces.
   const pair = drawable.find((entry) => entry.type?.classification.kind === 'transform-pair');
   const entry = pair ?? focused ?? (drawable[0] as WorkspaceEntry);
   if (entry.type === null) return null;
@@ -333,6 +367,8 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
       frequencyHover: null,
       frequencySelection: null,
       frequencyViewport: DEFAULT_FREQUENCY_VIEWPORT,
+      direction: DEFAULT_DIRECTION,
+      contourLevel: 0,
       viewport: DEFAULT_VIEWPORT,
       camera3d: DEFAULT_CAMERA_3D,
       views: withFreshIds(
@@ -359,6 +395,7 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
     parameterValues?: ReadonlyMap<string, number>;
     viewport?: Viewport;
     frequencyViewport?: FrequencyViewport;
+    contourLevel?: number;
     camera3d?: Camera3d;
     views?: readonly ViewBlueprint[];
   }): void {
@@ -370,6 +407,10 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
           : reconcileParameters(state.workspace, parts.parameterValues),
       viewport: parts.viewport ?? state.viewport,
       frequencyViewport: parts.frequencyViewport ?? state.frequencyViewport,
+      contourLevel:
+        parts.contourLevel !== undefined && Number.isFinite(parts.contourLevel)
+          ? parts.contourLevel
+          : state.contourLevel,
       camera3d: parts.camera3d ?? state.camera3d,
       views: parts.views === undefined ? state.views : withFreshIds(parts.views),
       // Restoring somebody's arrangement settles the question: from here on the
@@ -495,6 +536,21 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
     this.update((state) => ({ ...state, frequencyViewport }));
   }
 
+  /** Set the linked directional-derivative vector, preserving unit length. */
+  setDirection(direction: Direction2d): void {
+    const length = Math.hypot(direction.x, direction.y);
+    if (!Number.isFinite(length) || length === 0) return;
+    this.update((state) => ({
+      ...state,
+      direction: { x: direction.x / length, y: direction.y / length },
+    }));
+  }
+
+  setContourLevel(level: number): void {
+    if (!Number.isFinite(level)) return;
+    this.update((state) => ({ ...state, contourLevel: level }));
+  }
+
   panViewport(deltaRe: number, deltaIm: number): void {
     this.update((state) => ({
       ...state,
@@ -525,7 +581,12 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
   }
 
   resetViewport(): void {
-    this.setViewport(DEFAULT_VIEWPORT);
+    this.update((state) => ({
+      ...state,
+      viewport: DEFAULT_VIEWPORT,
+      frequencyViewport: DEFAULT_FREQUENCY_VIEWPORT,
+      camera3d: DEFAULT_CAMERA_3D,
+    }));
   }
 
   // ---------------------------------------------------------------- camera3d

@@ -306,17 +306,17 @@ export function contourIntegral(
   if (!fine.ok) return fine;
 
   const halving = cabs(csub(fine.value.total, coarse.value.total));
-  const floor = NUMERICS.contourDerivativeFloor * Math.max(1, cabs(coarse.value.total));
+  const floor = NUMERICS.contourDerivativeFloor * Math.max(1, cabs(fine.value.total));
 
   return ok({
-    value: coarse.value.total,
-    path: coarse.value.path,
-    trajectory: coarse.value.trajectory,
-    closed: coarse.value.closureGap <= NUMERICS.contourClosureTolerance * (1 + coarse.value.extent),
-    closureGap: coarse.value.closureGap,
+    value: fine.value.total,
+    path: fine.value.path,
+    trajectory: fine.value.trajectory,
+    closed: fine.value.closureGap <= NUMERICS.contourClosureTolerance * (1 + fine.value.extent),
+    closureGap: fine.value.closureGap,
     from,
     to,
-    samples,
+    samples: samples * 2,
     estimatedError: Math.max(halving, floor),
   });
 }
