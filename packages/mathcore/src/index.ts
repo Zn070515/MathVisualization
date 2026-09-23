@@ -37,6 +37,7 @@
  *   hessian.ts      numerical Hessians and critical-point classification
  *   fft.ts          radix-2 FFT implementation for the DFT
  *   aliasing.ts     sampling frequency folding and alias relations
+ *   convolution.ts  finite-window convolution and sampled DFT products
  *   linearization.ts numerical tangent planes and local approximation error
  *   surfaceGlsl.ts  the fixed shader a surface is drawn with
  *   workspace.ts    a document: many statements, analysed together
@@ -68,6 +69,7 @@ export * from './fourier';
 export * from './fft';
 export * from './aliasing';
 export * from './dft';
+export * from './convolution';
 export * from './surface';
 export * from './gradient';
 export * from './hessian';
