@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { displayNumberToText, type DftAlgorithm } from '@mathviz/mathcore';
 import { drawGridAndAxes } from '../render/axes2d';
 import { CANVAS_COLORS, prepareCanvas2d } from '../render/canvasSurface';
@@ -8,6 +8,7 @@ import {
   DFT_SAMPLE_COUNTS,
   isDftAlgorithm,
   selectActiveExpression,
+  type SamplingSettings,
   type ViewRendererProps,
 } from '../state/workspaceStore';
 import { useResizeVersion } from './useResizeVersion';
@@ -47,6 +48,16 @@ export function DftDomainView({ store, view }: ViewRendererProps): React.JSX.Ele
     () => estimateActiveDft(active, state.workspace, state.parameterValues, state.sampling),
     [active, state.workspace, state.parameterValues, state.sampling],
   );
+  const [timeWindowDraft, setTimeWindowDraft] = useState(() => ({
+    min: String(state.sampling.timeWindow.min),
+    max: String(state.sampling.timeWindow.max),
+  }));
+  useEffect(() => {
+    setTimeWindowDraft({
+      min: String(state.sampling.timeWindow.min),
+      max: String(state.sampling.timeWindow.max),
+    });
+  }, [state.sampling.timeWindow.max, state.sampling.timeWindow.min]);
   const frequencyVariable = dftFrequencyVariable(active);
   const mode: DftMode = view.mode === 'complex' ? 'magnitude' : view.mode;
   const frequencyCursor = state.frequencyHover ?? state.frequencySelection;
@@ -190,6 +201,39 @@ export function DftDomainView({ store, view }: ViewRendererProps): React.JSX.Ele
             <option value="fft">FFT</option>
           </select>
         </label>
+        <span className="legend__range legend__control">
+          t ∈ [
+          <input
+            aria-label="DFT time window minimum"
+            className="legend__number-input"
+            inputMode="decimal"
+            type="number"
+            step="any"
+            value={timeWindowDraft.min}
+            onChange={(event) => {
+              setTimeWindowDraft((draft) => ({ ...draft, min: event.target.value }));
+            }}
+            onBlur={() =>
+              commitTimeWindowDraft(store, state.sampling, timeWindowDraft, setTimeWindowDraft)
+            }
+          />
+          ,{' '}
+          <input
+            aria-label="DFT time window maximum"
+            className="legend__number-input"
+            inputMode="decimal"
+            type="number"
+            step="any"
+            value={timeWindowDraft.max}
+            onChange={(event) => {
+              setTimeWindowDraft((draft) => ({ ...draft, max: event.target.value }));
+            }}
+            onBlur={() =>
+              commitTimeWindowDraft(store, state.sampling, timeWindowDraft, setTimeWindowDraft)
+            }
+          />
+          ]
+        </span>
         {estimate !== null && (
           <span className="legend__range">
             Δt {displayNumberToText(viewNumber(estimate.sampleInterval))} · fₛ{' '}
@@ -224,6 +268,34 @@ export function DftDomainView({ store, view }: ViewRendererProps): React.JSX.Ele
       )}
     </div>
   );
+}
+
+function commitTimeWindowDraft(
+  store: ViewRendererProps['store'],
+  sampling: SamplingSettings,
+  draft: { readonly min: string; readonly max: string },
+  setDraft: (draft: { min: string; max: string }) => void,
+): void {
+  const min = Number(draft.min);
+  const max = Number(draft.max);
+  if (
+    draft.min.trim() === '' ||
+    draft.max.trim() === '' ||
+    !Number.isFinite(min) ||
+    !Number.isFinite(max) ||
+    max <= min
+  ) {
+    setDraft({
+      min: String(sampling.timeWindow.min),
+      max: String(sampling.timeWindow.max),
+    });
+    return;
+  }
+  if (min === sampling.timeWindow.min && max === sampling.timeWindow.max) return;
+  store.setSamplingSettings({
+    ...sampling,
+    timeWindow: { min, max },
+  });
 }
 
 function plotWindow(viewport: {

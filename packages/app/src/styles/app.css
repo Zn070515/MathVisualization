@@ -99,7 +99,8 @@ a {
   font-family: var(--font-math);
   font-size: var(--text-sm);
   text-decoration: none;
-  transition: color var(--motion-fast) var(--ease),
+  transition:
+    color var(--motion-fast) var(--ease),
     border-color var(--motion-fast) var(--ease);
 }
 
@@ -363,7 +364,8 @@ a {
 .expr-row {
   border-bottom: 1px solid var(--rule);
   border-left: 2px solid transparent;
-  transition: border-left-color var(--motion-fast) var(--ease),
+  transition:
+    border-left-color var(--motion-fast) var(--ease),
     background-color var(--motion-fast) var(--ease);
 }
 
@@ -611,7 +613,8 @@ math-field::part(virtual-keyboard-toggle) {
   color: var(--ink-soft);
   font-size: var(--text-base);
   cursor: pointer;
-  transition: border-color var(--motion-fast) var(--ease),
+  transition:
+    border-color var(--motion-fast) var(--ease),
     color var(--motion-fast) var(--ease);
 }
 
@@ -736,7 +739,8 @@ math-field::part(virtual-keyboard-toggle) {
   background: var(--paper-raised);
   color: var(--ink);
   cursor: pointer;
-  transition: background-color var(--motion-fast) var(--ease),
+  transition:
+    background-color var(--motion-fast) var(--ease),
     border-color var(--motion-fast) var(--ease);
 }
 
@@ -969,7 +973,6 @@ math-field::part(virtual-keyboard-toggle) {
 
 /* ----------------------------------------------------------------- views --- */
 
-
 .canvas__analysis {
   padding: 0.15rem 0.5rem;
   border: 1px solid var(--rule);
@@ -1041,7 +1044,8 @@ math-field::part(virtual-keyboard-toggle) {
   font-size: var(--text-xs);
   color: var(--ink-soft);
   cursor: pointer;
-  transition: border-color var(--motion-fast) var(--ease),
+  transition:
+    border-color var(--motion-fast) var(--ease),
     color var(--motion-fast) var(--ease);
 }
 
@@ -1287,6 +1291,21 @@ math-field::part(virtual-keyboard-toggle) {
 .legend__control {
   pointer-events: auto;
   cursor: pointer;
+}
+
+.legend__number-input {
+  width: 4.5rem;
+  padding: 0 var(--space-1);
+  border: 0;
+  border-bottom: 1px solid var(--rule-strong);
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+}
+
+.legend__number-input:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
 }
 
 /* Sits inside the range it acts on, because that is what it frames. Styled as
