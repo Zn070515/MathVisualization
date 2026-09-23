@@ -30,7 +30,6 @@
 - Create: `scripts/demo/scenarios/transforms.mjs`
 - Create: `scripts/demo/scenarios/calculus.mjs`
 - Create: `scripts/demo/contract.test.mjs`
-- Modify: `package.json: scripts`
 
 **Interfaces:**
 
@@ -105,29 +104,12 @@ export function scenarioGifPath(name) {
 
 `assertRecordable` must import `manifestFor` and throw `Scenario "transforms" is planned; no media will be created.` for a planned scenario. Keep `scenarioManifest.mjs` independent from executable scenarios so `config.mjs` does not form a circular import with scenario actions. Resolve `MATHVIZ_PLAYWRIGHT_REPO` from the environment, otherwise use `path.resolve(ROOT_DIR, '..', 'demo_ArtFlow')`. `loadPlaywright()` must use `createRequire(path.join(repo, 'package.json'))` and require `playwright`, so the host repo remains dependency-free.
 
-- [ ] **Step 4: Add root commands without adding dependencies**
-
-Add these scripts to `package.json`:
-
-```json
-{
-  "demo:check": "node scripts/demo/record.mjs --check",
-  "demo:rehearse": "node scripts/demo/record.mjs --rehearse all",
-  "demo:complex": "node scripts/demo/record.mjs complex",
-  "demo:calculus": "node scripts/demo/record.mjs calculus",
-  "demo:transforms": "node scripts/demo/record.mjs transforms",
-  "demo": "node scripts/demo/record.mjs all"
-}
-```
-
-- [ ] **Step 5: Run the contract and package script checks**
+- [ ] **Step 4: Run the contract check**
 
 Run: `node --test scripts/demo/contract.test.mjs`  
-Expected: PASS with three manifest tests.  
-Run: `pnpm demo:transforms`  
-Expected: a clear planned-capability message and no files under `docs/assets`.
+Expected: PASS with three manifest tests.
 
-- [ ] **Step 6: Commit the manifest contract**
+- [ ] **Step 5: Commit the manifest contract**
 
 ```powershell
 git add package.json scripts/demo/config.mjs scripts/demo/scenarioManifest.mjs scripts/demo/scenarios scripts/demo/contract.test.mjs
@@ -323,6 +305,7 @@ git commit -m "feat: script real complex and calculus demo flows"
 - Create: `scripts/demo/record.test.mjs`
 - Modify: `scripts/demo/helpers/app.mjs`
 - Modify: `scripts/demo/config.mjs`
+- Modify: `package.json: scripts`
 
 **Interfaces:**
 
@@ -353,7 +336,20 @@ test('CLI accepts one scenario or all', () => {
 Run: `node --test scripts/demo/record.test.mjs`  
 Expected: FAIL because `record.mjs` does not exist.
 
-- [ ] **Step 3: Implement check, rehearse and record modes**
+- [ ] **Step 3: Add root commands and implement check, rehearse and record modes**
+
+Add these scripts to `package.json` without adding dependencies:
+
+```json
+{
+  "demo:check": "node scripts/demo/record.mjs --check",
+  "demo:rehearse": "node scripts/demo/record.mjs --rehearse all",
+  "demo:complex": "node scripts/demo/record.mjs complex",
+  "demo:calculus": "node scripts/demo/record.mjs calculus",
+  "demo:transforms": "node scripts/demo/record.mjs transforms",
+  "demo": "node scripts/demo/record.mjs all"
+}
+```
 
 `record.mjs` must launch one Chromium instance per command, create one clean context per ready scenario, call `waitForAppReady`, run the scenario, close the context in a `finally` block, and kill the Vite child process in another `finally` block. When `page.video().path()` resolves, rename it to the exact source path only after `context.close()` completes. Rehearsal mode uses the same page actions and assertions but does not create `docs/assets/source` files. Export `parseDemoArgs` without starting a browser when imported by tests; guard CLI execution with an ESM main-module check. The record-mode conversion call may use a dynamic import of `gif.mjs`, so `--check` and `--rehearse` remain testable before Task 5 wires the converter.
 
