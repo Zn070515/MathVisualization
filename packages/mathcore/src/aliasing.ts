@@ -14,7 +14,7 @@ export interface AliasingRelation {
   readonly samplingAngularFrequency: number;
   readonly nyquistAngularFrequency: number;
   readonly sampleOrigin: number;
-  /** Phase multiplier for a +Ωs frequency shift on the indexed sample sequence. */
+  /** Signal-sample multiplier for a +Ωs frequency shift on the indexed sequence. */
   readonly phasePerSamplingFrequency: Complex;
   /** The representative and its nearest ± one sampling-frequency aliases. */
   readonly aliases: readonly number[];
@@ -70,7 +70,11 @@ export function describeAliasing(
     wrapped === -nyquistAngularFrequency
       ? nyquistAngularFrequency
       : wrapped;
-  const phaseAngle = -samplingAngularFrequency * sampleOrigin;
+  // For x_ω(t) = exp(iωt), increasing the signal frequency by Ωs gives
+  // x_{ω+Ωs}(t_n) = exp(iΩs t_min) x_ω(t_n), because the indexed part is
+  // exp(i2πn) = 1. The negative sign belongs to a DFT analysis kernel, not to
+  // the sampled signal alias relation described by this API.
+  const phaseAngle = samplingAngularFrequency * sampleOrigin;
   if (!Number.isFinite(phaseAngle)) {
     return fail({
       kind: 'invalid-parameter',

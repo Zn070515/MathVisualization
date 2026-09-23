@@ -44,7 +44,7 @@ describe('sampling aliasing', () => {
     if (!result.ok) return;
     expect(result.value.sampleOrigin).toBe(0.25);
     expect(result.value.phasePerSamplingFrequency.re).toBeCloseTo(0);
-    expect(result.value.phasePerSamplingFrequency.im).toBeCloseTo(-1);
+    expect(result.value.phasePerSamplingFrequency.im).toBeCloseTo(1);
   });
 
   it('does not fold a frequency merely because it is close to Nyquist', () => {
