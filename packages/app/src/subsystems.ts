@@ -230,9 +230,14 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
         status: 'implemented',
       },
       {
-        name: 'Gradient and directional derivatives',
+        name: 'Gradient field',
         summary:
-          'The gradient field, its relation to the level sets, and the rate of change along a chosen direction.',
+          'Numerical ∇f arrows are drawn over the same level sets, with the vector and its magnitude available at the linked point.',
+        status: 'implemented',
+      },
+      {
+        name: 'Directional derivatives',
+        summary: 'The rate of change along a chosen direction, with the direction stated explicitly.',
         status: 'planned',
       },
       {

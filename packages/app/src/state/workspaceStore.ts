@@ -97,7 +97,8 @@ export type ViewKind =
   | 'contour'
   | 'domain-coloring'
   | 'frequency-domain'
-  | 'mapped-grid';
+  | 'mapped-grid'
+  | 'gradient';
 
 /**
  * A view without an identity: what kind it is and what it shows.

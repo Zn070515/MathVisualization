@@ -36,6 +36,7 @@ export const VIEW_KIND_STATUS: Readonly<Record<ViewKind, ViewStatus>> = {
   'domain-coloring': 'available',
   'frequency-domain': 'available',
   'mapped-grid': 'available',
+  gradient: 'available',
 };
 
 /** Which mode is the natural default for a codomain. */
@@ -82,7 +83,7 @@ export function preferredViewKinds(
   // readings from above of the same sampled field.
   if (domain.dim === 2) {
     return codomain.kind === 'R' && codomain.dim === 1
-      ? ['cartesian-3d', 'contour', 'domain-coloring']
+      ? ['cartesian-3d', 'contour', 'gradient', 'domain-coloring']
       : [];
   }
 

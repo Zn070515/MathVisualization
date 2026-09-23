@@ -33,6 +33,7 @@
  *   zerosAndPoles.ts  where a complex function vanishes, by the argument principle
  *   contour.ts      the integral of a function along a path
  *   surface.ts      sampling a scalar field into a mesh
+ *   gradient.ts     numerical gradients and directional derivatives
  *   surfaceGlsl.ts  the fixed shader a surface is drawn with
  *   workspace.ts    a document: many statements, analysed together
  *   coloring.ts     domain colouring, the CPU reference implementation
@@ -61,6 +62,7 @@ export * from './zerosAndPoles';
 export * from './contour';
 export * from './fourier';
 export * from './surface';
+export * from './gradient';
 export * from './contours';
 export * from './surfaceGlsl';
 export * from './workspace';

@@ -43,6 +43,11 @@ test('Windows setup resolves installed Node, npm and pnpm outside the stale PATH
   assert.match(windowsScripts, /ProgramFiles/);
   assert.match(windowsScripts, /npm.*prefix.*-g/s);
   assert.match(windowsScripts, /pnpm\.cmd/);
+  assert.match(
+    helper,
+    /if \(-not \$KnownOnly\)[\s\S]*Get-Command[\s\S]*Get-StandardNodeDirectories/,
+  );
+  assert.match(bootstrap, /Resolve-NodeTool -Name 'node\.exe' -KnownOnly/);
   assert.match(bootstrap, /NpmGlobalBin.*NodeDirectory.*env:Path/s);
   assert.match(start, /Resolve-NodeTool/);
   assert.match(start, /Get-NpmGlobalExecutableDirectory/);

@@ -32,6 +32,7 @@ import { ComplexPlaneView } from './ComplexPlaneView';
 import { ContourView } from './ContourView';
 import { FieldView } from './FieldView';
 import { FrequencyDomainView } from './FrequencyDomainView';
+import { GradientView } from './GradientView';
 import { MappedGridView } from './MappedGridView';
 
 const VIEW_TITLES: Readonly<Record<ViewKind, string>> = {
@@ -42,6 +43,7 @@ const VIEW_TITLES: Readonly<Record<ViewKind, string>> = {
   'domain-coloring': 'Domain colouring',
   'frequency-domain': 'Frequency domain',
   'mapped-grid': 'Mapped grid',
+  gradient: 'Gradient field',
 };
 
 /**
@@ -72,6 +74,7 @@ const VIEW_RENDERERS: Readonly<Record<ViewKind, (props: ViewRendererProps) => Re
     'domain-coloring': FieldView,
     'frequency-domain': FrequencyDomainView,
     'mapped-grid': MappedGridView,
+    gradient: GradientView,
   };
 
 /**

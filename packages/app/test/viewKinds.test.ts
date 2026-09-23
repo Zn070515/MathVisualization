@@ -36,6 +36,7 @@ describe('the taxonomy', () => {
       'contour',
       'domain-coloring',
       'frequency-domain',
+      'gradient',
       'mapped-grid',
     ]);
   });
@@ -97,7 +98,7 @@ describe('what each object calls for', () => {
   });
 
   it('asks for a surface for a scalar over the plane, with the heatmap behind it', () => {
-    expect(kindsOf(sig(R2, R1))).toEqual(['cartesian-3d', 'contour', 'domain-coloring']);
+    expect(kindsOf(sig(R2, R1))).toEqual(['cartesian-3d', 'contour', 'gradient', 'domain-coloring']);
   });
 
   it('offers nothing where there is no honest picture', () => {

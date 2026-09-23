@@ -1,8 +1,8 @@
 # The merge gate.
 #
-# `pnpm verify` (root package.json) is the whole check: lint, typecheck, test and
-# build, in that order. It is the same command run locally, so a green run here
-# means the same thing it means on a developer's machine.
+# `pnpm verify` (root package.json) is the full Linux gate: lint, typecheck, test
+# and build, in that order. The Windows job separately exercises the PowerShell
+# setup path, which cannot be validated by an Ubuntu runner that skips it.
 #
 # Versions come from the repository rather than being repeated here: pnpm from
 # `packageManager`, Node from `engines.node`. Bumping either is then a one-line
@@ -44,3 +44,22 @@ jobs:
       - run: pnpm demo:test
 
       - run: pnpm verify
+
+  windows-tooling:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # This includes the PowerShell runtime check. It is intentionally separate
+      # from the Linux verification job so a skipped non-Windows test cannot make
+      # the Windows path look covered.
+      - run: pnpm test:tooling

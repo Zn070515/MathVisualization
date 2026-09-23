@@ -31,17 +31,24 @@ function Resolve-NodeTool {
     [switch]$KnownOnly
   )
 
+  # In a normal invocation, respect the user's active Node selection first. This
+  # matters for nvm, Volta and other version managers: a machine can have an old
+  # system Node beside a newer version deliberately placed on PATH.
+  if (-not $KnownOnly) {
+    $Command = Get-Command $Name -ErrorAction SilentlyContinue
+    if ($null -ne $Command) {
+      $CommandPath = if ($Command.Source) { $Command.Source } else { $Command.Path }
+      $PathResult = Resolve-ExecutablePath @($CommandPath)
+      if ($null -ne $PathResult) { return $PathResult }
+    }
+  }
+
+  # The known locations are the fallback for a freshly installed Node whose
+  # installer updated the machine but not this already-running PowerShell.
   $KnownCandidates = foreach ($Directory in Get-StandardNodeDirectories) {
     Join-Path $Directory $Name
   }
-  $KnownPath = Resolve-ExecutablePath $KnownCandidates
-  if ($null -ne $KnownPath) { return $KnownPath }
-  if ($KnownOnly) { return $null }
-
-  $Command = Get-Command $Name -ErrorAction SilentlyContinue
-  if ($null -eq $Command) { return $null }
-  $CommandPath = if ($Command.Source) { $Command.Source } else { $Command.Path }
-  return Resolve-ExecutablePath @($CommandPath)
+  return Resolve-ExecutablePath $KnownCandidates
 }
 
 function Resolve-UvTool {
