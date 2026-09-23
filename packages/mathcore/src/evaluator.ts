@@ -165,12 +165,15 @@ export function evaluate(
       return evaluateContour(expr, environment, depth, contourDepth);
 
     case 'fourier-transform':
+    case 'dft-transform': {
+      const transformName = expr.kind === 'fourier-transform' ? 'Fourier' : 'DFT';
       return fail({
         kind: 'unsupported',
-        detail: 'Fourier transforms are evaluated by estimateFourierTransform.',
-        message: 'A Fourier transform is a frequency-domain estimate, not a pointwise scalar value.',
+        detail: `${transformName} transforms are evaluated by a frequency-domain estimator.`,
+        message: `A ${transformName} transform is a frequency-domain estimate, not a pointwise scalar value.`,
         span: expr.span,
       });
+    }
 
     case 'constant': {
       const constant = builtinConstant(expr.name);

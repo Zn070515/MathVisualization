@@ -63,7 +63,7 @@ export const BUILTIN_FUNCTIONS: readonly BuiltinFunction[] = [
 ];
 
 export const BUILTIN_FUNCTION_NAMES: ReadonlySet<string> = new Set(
-  [...BUILTIN_FUNCTIONS.map((fn) => fn.name), 'Fourier'],
+  [...BUILTIN_FUNCTIONS.map((fn) => fn.name), 'Fourier', 'DFT'],
 );
 
 export function builtinFunction(name: string): BuiltinFunction | undefined {

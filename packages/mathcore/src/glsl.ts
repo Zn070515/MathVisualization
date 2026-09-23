@@ -346,13 +346,16 @@ class Lowering {
         });
 
       case 'fourier-transform':
+      case 'dft-transform': {
+        const transformName = expr.kind === 'fourier-transform' ? 'Fourier' : 'DFT';
         return fail({
           kind: 'unsupported',
-          detail: 'Fourier transform lowered to a shader',
+          detail: `${transformName} transform lowered to a shader`,
           message:
-            'A Fourier transform is a finite-window frequency-domain estimate, so it cannot be drawn by the pointwise shader backend.',
+            `A ${transformName} transform is a finite-window frequency-domain estimate, so it cannot be drawn by the pointwise shader backend.`,
           span: expr.span,
         });
+      }
     }
   }
 

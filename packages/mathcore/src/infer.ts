@@ -142,13 +142,15 @@ export function inferSpace(
       return ok(C1);
     }
 
-    case 'fourier-transform': {
+    case 'fourier-transform':
+    case 'dft-transform': {
+      const transformName = expr.kind === 'fourier-transform' ? 'Fourier' : 'DFT';
       const source = expr.source;
       if (source.kind !== 'call' || source.args.length !== 1) {
         return fail({
           kind: 'unsupported',
-          detail: 'Fourier source is not a unary function call.',
-          message: 'A Fourier transform needs a one-variable real source function.',
+          detail: `${transformName} source is not a unary function call.`,
+          message: `A ${transformName} transform needs a one-variable real source function.`,
           span: expr.span,
         });
       }
@@ -157,8 +159,8 @@ export function inferSpace(
       if (sourceVariable?.kind !== 'variable' || sourceVariable.name !== expr.sourceVariable) {
         return fail({
           kind: 'unsupported',
-          detail: 'Fourier source variable is not explicitly bound.',
-          message: 'A Fourier transform needs the source variable explicitly, as in Fourier(f(t)).',
+          detail: `${transformName} source variable is not explicitly bound.`,
+          message: `A ${transformName} transform needs the source variable explicitly, as in ${transformName}(f(t)).`,
           span: expr.span,
         });
       }
@@ -177,7 +179,7 @@ export function inferSpace(
         return fail({
           kind: 'unknown-function',
           name: source.callee,
-          message: `"${source.callee}" is not a known real source function for this Fourier transform.`,
+          message: `"${source.callee}" is not a known real source function for this ${transformName} transform.`,
           span: source.span,
         });
       }
@@ -189,7 +191,7 @@ export function inferSpace(
       ) {
         return fail({
           kind: 'dimension-mismatch',
-          message: `Fourier currently accepts a real signal f: R → R, but "${source.callee}" has signature ${spaceToString(signature.domain)} → ${spaceToString(signature.codomain)}.`,
+          message: `${transformName} currently accepts a real signal f: R → R, but "${source.callee}" has signature ${spaceToString(signature.domain)} → ${spaceToString(signature.codomain)}.`,
           span: source.span,
         });
       }
@@ -540,12 +542,15 @@ export function classifyDefinitionWith(
   signature: Signature,
   body: Expr,
 ): InferredType {
-  if (body.kind === 'fourier-transform') {
+  if (body.kind === 'fourier-transform' || body.kind === 'dft-transform') {
     return {
       signature,
       classification: {
         kind: 'transform-pair',
-        description: 'A real signal and its numerical Fourier transform',
+        description:
+          body.kind === 'dft-transform'
+            ? 'A sampled real signal and its discrete Fourier spectrum'
+            : 'A real signal and its numerical Fourier transform',
       },
     };
   }

@@ -762,11 +762,15 @@ class Parser {
     }
     this.advance();
 
-    if (callee.text === 'Fourier') {
+    if (callee.text === 'Fourier' || callee.text === 'DFT') {
+      const transformName = callee.text;
       if (args.length !== 1) {
         return {
           ok: false,
-          issue: this.errorAt(callee, 'Fourier needs one source function call, as in Fourier(f(t)).'),
+          issue: this.errorAt(
+            callee,
+            `${transformName} needs one source function call, as in ${transformName}(f(t)).`,
+          ),
         };
       }
       const source = args[0] as Expr;
@@ -775,7 +779,7 @@ class Parser {
           ok: false,
           issue: this.errorAt(
             callee,
-            'Fourier needs a one-variable source function call, as in Fourier(f(t)).',
+            `${transformName} needs a one-variable source function call, as in ${transformName}(f(t)).`,
           ),
         };
       }
@@ -785,14 +789,14 @@ class Parser {
           ok: false,
           issue: this.errorAt(
             callee,
-            'Fourier needs the source variable explicitly, as in Fourier(f(t)).',
+            `${transformName} needs the source variable explicitly, as in ${transformName}(f(t)).`,
           ),
         };
       }
       return {
         ok: true,
         value: {
-          kind: 'fourier-transform',
+          kind: callee.text === 'Fourier' ? 'fourier-transform' : 'dft-transform',
           source,
           sourceVariable: variable.name,
           span: span(callee.start, this.lastTokenEnd(args)),

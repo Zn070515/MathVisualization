@@ -131,6 +131,7 @@ const OPERATOR_NAMES: Readonly<Record<string, string>> = {
   conj: 'conj',
   sgn: 'sgn',
   Fourier: 'Fourier',
+  DFT: 'DFT',
 };
 
 /** Sizing and spacing commands carry no mathematical content. */
@@ -171,6 +172,7 @@ const OPERATOR_BY_FUNCTION: Readonly<Record<string, string>> = {
   im: 'Im',
   arg: 'arg',
   Fourier: 'Fourier',
+  DFT: 'DFT',
 };
 
 // ---------------------------------------------------------------------------
@@ -1467,11 +1469,15 @@ class LatexParser {
     const grouped = this.parseParenthesisedResult();
     if (!grouped.ok) return grouped;
     const args = grouped.value.kind === 'tuple' ? grouped.value.items : [grouped.value];
-    if (callee === 'Fourier') {
+    if (callee === 'Fourier' || callee === 'DFT') {
+      const transformName = callee;
       if (args.length !== 1) {
         return {
           ok: false,
-          issue: wrong(start, 'Fourier needs one source function call, as in Fourier(f(t)).'),
+          issue: wrong(
+            start,
+            `${transformName} needs one source function call, as in ${transformName}(f(t)).`,
+          ),
         };
       }
       const source = args[0] as Expr;
@@ -1480,7 +1486,7 @@ class LatexParser {
           ok: false,
           issue: wrong(
             start,
-            'Fourier needs a one-variable source function call, as in Fourier(f(t)).',
+            `${transformName} needs a one-variable source function call, as in ${transformName}(f(t)).`,
           ),
         };
       }
@@ -1488,13 +1494,16 @@ class LatexParser {
       if (variable.kind !== 'variable') {
         return {
           ok: false,
-          issue: wrong(start, 'Fourier needs the source variable explicitly, as in Fourier(f(t)).'),
+          issue: wrong(
+            start,
+            `${transformName} needs the source variable explicitly, as in ${transformName}(f(t)).`,
+          ),
         };
       }
       return {
         ok: true,
         value: {
-          kind: 'fourier-transform',
+          kind: callee === 'Fourier' ? 'fourier-transform' : 'dft-transform',
           source,
           sourceVariable: variable.name,
           span: { start: start.start, end: this.lastSpan().end },
@@ -1722,6 +1731,8 @@ function latexPrecedenceOf(expr: Expr): number {
       return 100;
     case 'fourier-transform':
       return 100;
+    case 'dft-transform':
+      return 100;
     default:
       return 100;
   }
@@ -1863,6 +1874,9 @@ function printLatex(expr: Expr, minimumPrecedence: number): string {
 
     case 'fourier-transform':
       return `\\operatorname{Fourier}\\left(${printLatex(expr.source, 0)}\\right)`;
+
+    case 'dft-transform':
+      return `\\operatorname{DFT}\\left(${printLatex(expr.source, 0)}\\right)`;
   }
 }
 

@@ -304,13 +304,16 @@ function lower(expr: Expr, symbols: Map<string, string>): Result<string, MathIss
       });
 
     case 'fourier-transform':
+    case 'dft-transform': {
+      const transformName = expr.kind === 'fourier-transform' ? 'Fourier' : 'DFT';
       return fail({
         kind: 'unsupported',
-        detail: 'Fourier transform handed to the symbolic engine',
+        detail: `${transformName} transform handed to the symbolic engine`,
         message:
-          'Fourier transforms are evaluated numerically over a finite window, so the symbolic engine is not given this node.',
+          `${transformName} transforms are evaluated numerically over a finite window, so the symbolic engine is not given this node.`,
         span: expr.span,
       });
+    }
   }
 }
 
@@ -365,6 +368,7 @@ export function complexDerivativeIssue(expr: Expr, variable: string): MathIssue 
       case 'contour-integral':
         return dependsOn(node.integrand, name);
       case 'fourier-transform':
+      case 'dft-transform':
         return dependsOn(node.source, name);
       default:
         return false;
@@ -406,6 +410,7 @@ export function complexDerivativeIssue(expr: Expr, variable: string): MathIssue 
         visit(node.integrand);
         break;
       case 'fourier-transform':
+      case 'dft-transform':
         visit(node.source);
         break;
       default:

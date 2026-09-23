@@ -133,6 +133,22 @@ export interface FourierTransformNode {
   readonly span: SourceSpan;
 }
 
+/**
+ * A forward discrete Fourier transform, `DFT(f(t))`.
+ *
+ * The source variable is bound by this node. Sampling settings are deliberately
+ * not part of the syntax: they are shared numerical state so the time-domain
+ * markers and the discrete spectrum cannot disagree about which samples exist.
+ */
+export interface DftTransformNode {
+  readonly kind: 'dft-transform';
+  /** The source call, normally `f(t)`. */
+  readonly source: Expr;
+  /** The real variable sampled by the transform. */
+  readonly sourceVariable: string;
+  readonly span: SourceSpan;
+}
+
 export type Expr =
   | NumberLiteralNode
   | VariableNode
@@ -142,7 +158,8 @@ export type Expr =
   | CallNode
   | TupleNode
   | ContourIntegralNode
-  | FourierTransformNode;
+  | FourierTransformNode
+  | DftTransformNode;
 
 export type ExprKind = Expr['kind'];
 
@@ -212,6 +229,7 @@ export function childNodes(expr: Expr): readonly Expr[] {
     case 'contour-integral':
       return [expr.integrand];
     case 'fourier-transform':
+    case 'dft-transform':
       return [expr.source];
   }
 }
@@ -252,6 +270,10 @@ export function collectVariableNames(expr: Expr): string[] {
       return;
     }
     if (node.kind === 'fourier-transform') {
+      visit(node.source, new Set([...bound, node.sourceVariable]));
+      return;
+    }
+    if (node.kind === 'dft-transform') {
       visit(node.source, new Set([...bound, node.sourceVariable]));
       return;
     }

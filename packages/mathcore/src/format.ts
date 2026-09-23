@@ -59,6 +59,7 @@ function precedenceOf(expr: Expr): number {
     case 'contour-integral':
       return PRECEDENCE_ATOM;
     case 'fourier-transform':
+    case 'dft-transform':
       return PRECEDENCE_ATOM;
     default:
       return PRECEDENCE_ATOM;
@@ -118,6 +119,9 @@ function print(expr: Expr, minimumPrecedence: number): string {
 
     case 'fourier-transform':
       return `Fourier(${print(expr.source, 0)})`;
+
+    case 'dft-transform':
+      return `DFT(${print(expr.source, 0)})`;
   }
 }
 
