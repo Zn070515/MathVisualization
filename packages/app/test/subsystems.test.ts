@@ -19,4 +19,17 @@ describe('subsystem capability registry', () => {
     expect(capability?.status).toBe('implemented');
     expect(implementedCapabilities(calculus)).toContain(capability);
   });
+
+  it('keeps convolution capabilities split by their actual completion level', () => {
+    const transforms = subsystemById('transforms');
+    expect(
+      transforms.capabilities.find((entry) => entry.name === 'Numerical convolution')?.status,
+    ).toBe('implemented');
+    expect(
+      transforms.capabilities.find((entry) => entry.name === 'Sampled convolution and DFT product')?.status,
+    ).toBe('implemented');
+    expect(
+      transforms.capabilities.find((entry) => entry.name === 'Interactive convolution construction')?.status,
+    ).toBe('planned');
+  });
 });

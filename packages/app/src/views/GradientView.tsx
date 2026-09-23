@@ -385,7 +385,12 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
                   <NumberText
                     value={viewNumber(selectedCriticalPoint.value.hessian.determinantEstimatedError)}
                   />
-                  {' · '}second-derivative test: {criticalPointLabel(selectedCriticalPoint.value.classification)}
+                  {' · '}stationarity: {selectedCriticalPoint.value.stationarity} · Hessian:{' '}
+                  {selectedCriticalPoint.value.hessianShape}
+                </span>
+                <span className="legend__range">
+                  analysis: {criticalPointLabel(selectedCriticalPoint.value.classification)} · tolerance ≈{' '}
+                  <NumberText value={viewNumber(selectedCriticalPoint.value.stationarityTolerance)} />
                 </span>
                 <span className="legend__range">
                   ‖∇f(p)‖ ≈ <NumberText value={viewNumber(selectedCriticalPoint.value.gradientMagnitude)} />
@@ -410,12 +415,12 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
 
 function criticalPointLabel(classification: CriticalPointClassification): string {
   switch (classification) {
-    case 'local-minimum':
-      return 'local minimum';
-    case 'local-maximum':
-      return 'local maximum';
-    case 'saddle':
-      return 'saddle point';
+    case 'near-critical-minimum':
+      return 'numerically near-critical; Hessian positive definite';
+    case 'near-critical-maximum':
+      return 'numerically near-critical; Hessian negative definite';
+    case 'near-critical-saddle':
+      return 'numerically near-critical; Hessian indefinite';
     case 'non-critical':
       return 'non-critical';
     case 'inconclusive':

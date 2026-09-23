@@ -2,9 +2,10 @@
  * Numerical second-order analysis for a real scalar field.
  *
  * The Hessian is estimated from central second differences at two resolutions.
- * A classification is only returned as a named critical-point type when the
- * gradient and determinant are separated from their respective uncertainty
- * bands; otherwise the result stays explicitly inconclusive.
+ * A point is only described as numerically near-critical when the gradient is
+ * small relative to the local derivative scale and its uncertainty band. The
+ * Hessian shape is reported separately, so a positive-definite Hessian is not
+ * presented as a proved local minimum at a merely selected point.
  */
 import { isFiniteComplex, type Complex } from './complex';
 import { fail, ok, type MathIssue, type Result } from './errors';
@@ -27,14 +28,17 @@ export interface HessianOptions {
 }
 
 export type CriticalPointClassification =
-  | 'local-minimum'
-  | 'local-maximum'
-  | 'saddle'
+  | 'near-critical-minimum'
+  | 'near-critical-maximum'
+  | 'near-critical-saddle'
   | 'non-critical'
   | 'inconclusive';
 
+export type StationarityStatus = 'near-critical' | 'non-critical' | 'inconclusive';
+export type HessianShape = 'positive-definite' | 'negative-definite' | 'indefinite' | 'inconclusive';
+
 export interface CriticalPointOptions extends HessianOptions {
-  /** Gradient magnitude below this scale may count as critical. */
+  /** Dimensionless tolerance applied to a locally measured derivative scale. */
   readonly criticalTolerance?: number;
 }
 
@@ -44,7 +48,12 @@ export interface CriticalPointAnalysis {
   readonly gradient: Gradient;
   readonly gradientMagnitude: number;
   readonly hessian: Hessian;
+  readonly stationarity: StationarityStatus;
+  /** The absolute gradient threshold after local field/coordinate scaling. */
+  readonly stationarityTolerance: number;
+  readonly hessianShape: HessianShape;
   readonly classification: CriticalPointClassification;
+  /** A dimensionless relative tolerance supplied by the caller or defaulted. */
   readonly criticalTolerance: number;
 }
 
@@ -117,25 +126,31 @@ export function criticalPointAt(
     });
   }
 
+  const step = options.step ?? defaultStep(x, y);
   const value = realValue(evaluate(x, y));
   if (!value.ok) return value;
   const gradient = gradientAt(evaluate, x, y, options);
   if (!gradient.ok) return gradient;
   const hessian = hessianAt(evaluate, x, y, options);
   if (!hessian.ok) return hessian;
+  const scale = localDerivativeScale(evaluate, x, y, step);
+  if (!scale.ok) return scale;
 
   const gradientMagnitude = Math.hypot(gradient.value.x, gradient.value.y);
   const gradientLower = Math.max(0, gradientMagnitude - gradient.value.estimatedError);
   const gradientUpper = gradientMagnitude + gradient.value.estimatedError;
-  let classification: CriticalPointClassification;
+  const stationarityTolerance = criticalTolerance * scale.value;
+  let stationarity: StationarityStatus;
 
-  if (gradientLower > criticalTolerance) {
-    classification = 'non-critical';
-  } else if (gradientUpper > criticalTolerance) {
-    classification = 'inconclusive';
+  if (gradientLower > stationarityTolerance) {
+    stationarity = 'non-critical';
+  } else if (gradientUpper > stationarityTolerance) {
+    stationarity = 'inconclusive';
   } else {
-    classification = classifyHessian(hessian.value);
+    stationarity = 'near-critical';
   }
+  const hessianShape = classifyHessian(hessian.value);
+  const classification = classifyCriticalPoint(stationarity, hessianShape);
 
   return ok({
     point: { x, y },
@@ -143,6 +158,9 @@ export function criticalPointAt(
     gradient: gradient.value,
     gradientMagnitude,
     hessian: hessian.value,
+    stationarity,
+    stationarityTolerance,
+    hessianShape,
     classification,
     criticalTolerance,
   });
@@ -215,7 +233,7 @@ function centralSecondDifferences(
   return ok({ xx, xy, yy });
 }
 
-function classifyHessian(hessian: Hessian): CriticalPointClassification {
+function classifyHessian(hessian: Hessian): HessianShape {
   const determinantError = hessian.determinantEstimatedError;
   const determinantLower = hessian.determinant - determinantError;
   const determinantUpper = hessian.determinant + determinantError;
@@ -223,10 +241,61 @@ function classifyHessian(hessian: Hessian): CriticalPointClassification {
   const xxLower = hessian.xx - xxError;
   const xxUpper = hessian.xx + xxError;
 
-  if (determinantLower > 0 && xxLower > 0) return 'local-minimum';
-  if (determinantLower > 0 && xxUpper < 0) return 'local-maximum';
-  if (determinantUpper < 0) return 'saddle';
+  if (determinantLower > 0 && xxLower > 0) return 'positive-definite';
+  if (determinantLower > 0 && xxUpper < 0) return 'negative-definite';
+  if (determinantUpper < 0) return 'indefinite';
   return 'inconclusive';
+}
+
+function classifyCriticalPoint(
+  stationarity: StationarityStatus,
+  shape: HessianShape,
+): CriticalPointClassification {
+  if (stationarity === 'non-critical') return 'non-critical';
+  if (stationarity === 'inconclusive' || shape === 'inconclusive') return 'inconclusive';
+  if (stationarity !== 'near-critical') return 'inconclusive';
+  switch (shape) {
+    case 'positive-definite':
+      return 'near-critical-minimum';
+    case 'negative-definite':
+      return 'near-critical-maximum';
+    case 'indefinite':
+      return 'near-critical-saddle';
+  }
+}
+
+function localDerivativeScale(
+  evaluate: RealFieldEvaluator,
+  x: number,
+  y: number,
+  step: number,
+): Result<number, MathIssue> {
+  const centre = realValue(evaluate(x, y));
+  if (!centre.ok) return centre;
+  const plusX = realValue(evaluate(x + step, y));
+  if (!plusX.ok) return plusX;
+  const minusX = realValue(evaluate(x - step, y));
+  if (!minusX.ok) return minusX;
+  const plusY = realValue(evaluate(x, y + step));
+  if (!plusY.ok) return plusY;
+  const minusY = realValue(evaluate(x, y - step));
+  if (!minusY.ok) return minusY;
+
+  // Use local variation rather than |f| so an arbitrary additive offset does
+  // not loosen the stationarity test. This scale has the same units as ∇f.
+  const derivativeScale = Math.max(
+    Math.abs(plusX.value - centre.value) / step,
+    Math.abs(minusX.value - centre.value) / step,
+    Math.abs(plusY.value - centre.value) / step,
+    Math.abs(minusY.value - centre.value) / step,
+  );
+  if (!Number.isFinite(derivativeScale)) {
+    return fail({
+      kind: 'singularity',
+      message: 'The local derivative scale is non-finite at the selected point.',
+    });
+  }
+  return ok(derivativeScale);
 }
 
 function determinant(second: SecondDifferences): number {

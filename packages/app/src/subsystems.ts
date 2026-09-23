@@ -172,10 +172,22 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
         status: 'implemented',
       },
       {
-        name: 'Convolution',
+        name: 'Numerical convolution',
         summary:
-          'A finite-window numerical convolution with integration refinement diagnostics, alongside the corresponding periodic sampled DFT product convention.',
+          'A finite-window numerical convolution with explicit primary/refined integration counts and refinement diagnostics.',
         status: 'implemented',
+      },
+      {
+        name: 'Sampled convolution and DFT product',
+        summary:
+          'Periodic sampled convolution is checked against the DFT product with origin-phase correction; fixed-grid identity evidence and sampling stability are reported separately.',
+        status: 'implemented',
+      },
+      {
+        name: 'Interactive convolution construction',
+        summary:
+          'The flip, shift, pointwise product, and accumulated integral for f(τ)g(t−τ) as t moves.',
+        status: 'planned',
       },
       {
         name: 'Laplace transform and the s-plane',

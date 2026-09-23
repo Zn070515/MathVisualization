@@ -38,28 +38,30 @@ describe('numerical Hessians', () => {
     expect(result.issue.kind).toBe('invalid-parameter');
   });
 
-  it('classifies a positive-definite quadratic as a local minimum', () => {
+  it('reports a positive-definite Hessian at a numerically near-critical minimum', () => {
     const result = criticalPointAt((x, y) => ok(cx(x * x + 2 * y * y, 0)), 0, 0);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.classification).toBe('local-minimum');
+    expect(result.value.classification).toBe('near-critical-minimum');
+    expect(result.value.stationarity).toBe('near-critical');
+    expect(result.value.hessianShape).toBe('positive-definite');
   });
 
-  it('classifies a negative-definite quadratic as a local maximum', () => {
+  it('reports a negative-definite Hessian at a numerically near-critical maximum', () => {
     const result = criticalPointAt((x, y) => ok(cx(-x * x - 2 * y * y, 0)), 0, 0);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.classification).toBe('local-maximum');
+    expect(result.value.classification).toBe('near-critical-maximum');
   });
 
-  it('classifies an indefinite quadratic as a saddle', () => {
+  it('reports an indefinite Hessian at a numerically near-critical saddle', () => {
     const result = criticalPointAt((x, y) => ok(cx(x * x - y * y, 0)), 0, 0);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.classification).toBe('saddle');
+    expect(result.value.classification).toBe('near-critical-saddle');
   });
 
   it('does not call a point critical when its gradient is non-zero', () => {
@@ -68,6 +70,29 @@ describe('numerical Hessians', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.classification).toBe('non-critical');
+  });
+
+  it('does not call a merely small scaled gradient a critical point', () => {
+    const result = criticalPointAt(
+      (x, y) => ok(cx(1e-8 * ((x - 10) * (x - 10) + y * y), 0)),
+      0,
+      0,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.classification).toBe('non-critical');
+    expect(result.value.stationarity).toBe('non-critical');
+    expect(result.value.hessianShape).toBe('positive-definite');
+  });
+
+  it('does not let an additive field offset hide a non-zero gradient', () => {
+    const result = criticalPointAt((x) => ok(cx(1e10 + x, 0)), 0, 0);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.classification).toBe('non-critical');
+    expect(result.value.stationarity).toBe('non-critical');
   });
 
   it('reports unresolved sampling instead of classifying an undefined Hessian', () => {
