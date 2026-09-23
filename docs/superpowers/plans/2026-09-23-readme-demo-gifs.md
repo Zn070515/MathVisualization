@@ -25,6 +25,7 @@
 **Files:**
 
 - Create: `scripts/demo/config.mjs`
+- Create: `scripts/demo/scenarioManifest.mjs`
 - Create: `scripts/demo/scenarios/complex.mjs`
 - Create: `scripts/demo/scenarios/transforms.mjs`
 - Create: `scripts/demo/scenarios/calculus.mjs`
@@ -33,7 +34,8 @@
 
 **Interfaces:**
 
-- `config.mjs` exports `DEMO_NAMES`, `VIDEO_SIZE`, `SOURCE_DIR`, `ASSET_DIR`, `resolvePlaywrightRepo()`, `loadPlaywright()`, `scenarioSourcePath(name)`, and `scenarioGifPath(name)`.
+- `scenarioManifest.mjs` exports `DEMO_NAMES`, `DEMO_MANIFEST`, and `manifestFor(name)`, with route/status data independent of executable scenario functions.
+- `config.mjs` exports `VIDEO_SIZE`, `SOURCE_DIR`, `ASSET_DIR`, `resolvePlaywrightRepo()`, `loadPlaywright()`, `scenarioSourcePath(name)`, and `scenarioGifPath(name)`.
 - Every scenario exports a default object with `{ name, route, status, skipReason?, run }`, where `status` is exactly `'ready'` or `'planned'`.
 - `transforms.mjs` exports `{ name: 'transforms', route: '/transforms', status: 'planned', skipReason: 'Fourier transform and frequency-domain view are planned.' }` and a `run` function that throws the same explicit skip error if called directly.
 - `contract.test.mjs` is executable with `node --test` and does not import Playwright.
@@ -43,7 +45,8 @@
 ```js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEMO_NAMES, scenarioGifPath, scenarioSourcePath } from './config.mjs';
+import { scenarioGifPath, scenarioSourcePath } from './config.mjs';
+import { DEMO_NAMES } from './scenarioManifest.mjs';
 import complex from './scenarios/complex.mjs';
 import transforms from './scenarios/transforms.mjs';
 import calculus from './scenarios/calculus.mjs';
@@ -100,7 +103,7 @@ export function scenarioGifPath(name) {
 }
 ```
 
-`assertRecordable` must import the manifest status and throw `Scenario "transforms" is planned; no media will be created.` for a planned scenario. Keep the scenario manifest in a separate module so `config.mjs` does not form a circular import with scenarios. Resolve `MATHVIZ_PLAYWRIGHT_REPO` from the environment, otherwise use `path.resolve(ROOT_DIR, '..', 'demo_ArtFlow')`. `loadPlaywright()` must use `createRequire(path.join(repo, 'package.json'))` and require `playwright`, so the host repo remains dependency-free.
+`assertRecordable` must import `manifestFor` and throw `Scenario "transforms" is planned; no media will be created.` for a planned scenario. Keep `scenarioManifest.mjs` independent from executable scenarios so `config.mjs` does not form a circular import with scenario actions. Resolve `MATHVIZ_PLAYWRIGHT_REPO` from the environment, otherwise use `path.resolve(ROOT_DIR, '..', 'demo_ArtFlow')`. `loadPlaywright()` must use `createRequire(path.join(repo, 'package.json'))` and require `playwright`, so the host repo remains dependency-free.
 
 - [ ] **Step 4: Add root commands without adding dependencies**
 
@@ -127,7 +130,7 @@ Expected: a clear planned-capability message and no files under `docs/assets`.
 - [ ] **Step 6: Commit the manifest contract**
 
 ```powershell
-git add package.json scripts/demo/config.mjs scripts/demo/scenarios scripts/demo/contract.test.mjs
+git add package.json scripts/demo/config.mjs scripts/demo/scenarioManifest.mjs scripts/demo/scenarios scripts/demo/contract.test.mjs
 git commit -m "chore: add honest demo scenario manifest"
 ```
 
