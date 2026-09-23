@@ -30,7 +30,7 @@
  */
 import { plainToLatex, type FieldMode } from '@mathviz/mathcore';
 import type { Camera3d } from '../render/camera3d';
-import type { ViewKind } from './workspaceStore';
+import { isDftSampleCount, type SamplingSettings, type ViewKind } from './workspaceStore';
 
 const STORAGE_KEY = 'mathviz.workspaces.v3';
 /** Version 2 also stored LaTeX. Version 1 stored plain text, converted on read. */
@@ -95,12 +95,15 @@ export interface PersistedFrequencyViewport {
   readonly yMax: number;
 }
 
+export type PersistedSampling = SamplingSettings;
+
 /** What is written. */
 export interface PersistedWorkspace {
   readonly lines: readonly string[];
   readonly parameterValues: Record<string, number>;
   readonly viewport: { centreRe: number; centreIm: number; halfWidth: number };
   readonly frequencyViewport?: PersistedFrequencyViewport;
+  readonly sampling?: PersistedSampling;
   /** The selected contour level, optional for records written before contours were linked. */
   readonly contourLevel?: number;
   /**
@@ -137,6 +140,7 @@ export interface LoadedWorkspace {
   readonly parameterValues: Record<string, number>;
   readonly viewport: PersistedWorkspace['viewport'];
   readonly frequencyViewport: PersistedWorkspace['frequencyViewport'];
+  readonly sampling: PersistedWorkspace['sampling'];
   readonly contourLevel: PersistedWorkspace['contourLevel'];
   /** Null when nothing usable was stored, which is what the store's default is for. */
   readonly camera: Camera3d | null;
@@ -237,6 +241,28 @@ function readFrequencyViewport(
   return usable ? { xMin, xMax, yMin, yMax } : undefined;
 }
 
+function readSampling(entry: Record<string, unknown>): PersistedWorkspace['sampling'] {
+  const stored = entry['sampling'];
+  if (!isRecord(stored)) return undefined;
+  const timeWindow = stored['timeWindow'];
+  const sampleCount = stored['sampleCount'];
+  if (!isRecord(timeWindow)) return undefined;
+  const min = timeWindow['min'];
+  const max = timeWindow['max'];
+  if (
+    typeof min !== 'number' ||
+    !Number.isFinite(min) ||
+    typeof max !== 'number' ||
+    !Number.isFinite(max) ||
+    max <= min ||
+    typeof sampleCount !== 'number' ||
+    !isDftSampleCount(sampleCount)
+  ) {
+    return undefined;
+  }
+  return { timeWindow: { min, max }, sampleCount };
+}
+
 function readContourLevel(entry: Record<string, unknown>): number | undefined {
   const level = entry['contourLevel'];
   return typeof level === 'number' && Number.isFinite(level) ? level : undefined;
@@ -313,6 +339,7 @@ function readEntry(
     parameterValues: readParameterValues(entry),
     viewport: readViewport(entry),
     frequencyViewport: readFrequencyViewport(entry),
+    sampling: readSampling(entry),
     contourLevel: readContourLevel(entry),
     camera: readCamera(entry),
     views: readViews(entry),

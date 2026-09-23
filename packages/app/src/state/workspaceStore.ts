@@ -80,6 +80,22 @@ export const DEFAULT_FREQUENCY_VIEWPORT: FrequencyViewport = {
   yMax: 2,
 };
 
+export interface SamplingSettings {
+  readonly timeWindow: { readonly min: number; readonly max: number };
+  readonly sampleCount: number;
+}
+
+export const DFT_SAMPLE_COUNTS = [16, 32, 64, 128, 256, 512] as const;
+
+export const DEFAULT_DFT_SAMPLING: SamplingSettings = {
+  timeWindow: { min: -8, max: 8 },
+  sampleCount: 64,
+};
+
+export function isDftSampleCount(value: number): boolean {
+  return DFT_SAMPLE_COUNTS.includes(value as (typeof DFT_SAMPLE_COUNTS)[number]);
+}
+
 export interface Direction2d {
   readonly x: number;
   readonly y: number;
@@ -151,6 +167,7 @@ export interface WorkspaceState {
   readonly frequencyHover: number | null;
   readonly frequencySelection: number | null;
   readonly frequencyViewport: FrequencyViewport;
+  readonly sampling: SamplingSettings;
   /** The shared unit direction used by directional-derivative views. */
   readonly direction: Direction2d;
   /** The explicitly selected level set c shared by contour-capable views. */
@@ -367,6 +384,7 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
       frequencyHover: null,
       frequencySelection: null,
       frequencyViewport: DEFAULT_FREQUENCY_VIEWPORT,
+      sampling: DEFAULT_DFT_SAMPLING,
       direction: DEFAULT_DIRECTION,
       contourLevel: 0,
       viewport: DEFAULT_VIEWPORT,
@@ -395,6 +413,7 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
     parameterValues?: ReadonlyMap<string, number>;
     viewport?: Viewport;
     frequencyViewport?: FrequencyViewport;
+    sampling?: SamplingSettings;
     contourLevel?: number;
     camera3d?: Camera3d;
     views?: readonly ViewBlueprint[];
@@ -407,6 +426,7 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
           : reconcileParameters(state.workspace, parts.parameterValues),
       viewport: parts.viewport ?? state.viewport,
       frequencyViewport: parts.frequencyViewport ?? state.frequencyViewport,
+      sampling: parts.sampling ?? state.sampling,
       contourLevel:
         parts.contourLevel !== undefined && Number.isFinite(parts.contourLevel)
           ? parts.contourLevel
@@ -534,6 +554,24 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
   /** Set the frequency frame explicitly; estimates never change its scale. */
   setFrequencyViewport(frequencyViewport: FrequencyViewport): void {
     this.update((state) => ({ ...state, frequencyViewport }));
+  }
+
+  setSamplingSettings(sampling: SamplingSettings): void {
+    if (
+      !Number.isFinite(sampling.timeWindow.min) ||
+      !Number.isFinite(sampling.timeWindow.max) ||
+      sampling.timeWindow.max <= sampling.timeWindow.min ||
+      !isDftSampleCount(sampling.sampleCount)
+    ) {
+      return;
+    }
+    this.update((state) => ({
+      ...state,
+      sampling: {
+        timeWindow: { ...sampling.timeWindow },
+        sampleCount: sampling.sampleCount,
+      },
+    }));
   }
 
   /** Set the linked directional-derivative vector, preserving unit length. */

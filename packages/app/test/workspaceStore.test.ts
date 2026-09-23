@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { latex, makeStore, makeStoreFromLatex, toLatex } from './helpers';
 import { cx } from '@mathviz/mathcore';
 import {
+  DEFAULT_DFT_SAMPLING,
   DEFAULT_FREQUENCY_VIEWPORT,
   DEFAULT_VIEWPORT,
   collectSliderValues,
@@ -140,6 +141,22 @@ describe('parameter updates', () => {
     const store = makeStore(['a=2i'], 'complex');
     expect(store.getState().parameterValues.has('a')).toBe(false);
     expect(store.getState().workspace.parameters[0]?.slider).toBe(false);
+  });
+});
+
+describe('DFT sampling state', () => {
+  it('starts with deterministic shared sampling settings', () => {
+    const store = makeStore([], 'transforms');
+    expect(store.getState().sampling).toEqual(DEFAULT_DFT_SAMPLING);
+  });
+
+  it('updates the shared time window and sample count together', () => {
+    const store = makeStore([], 'transforms');
+    store.setSamplingSettings({ timeWindow: { min: -4, max: 4 }, sampleCount: 32 });
+    expect(store.getState().sampling).toEqual({
+      timeWindow: { min: -4, max: 4 },
+      sampleCount: 32,
+    });
   });
 });
 

@@ -115,6 +115,13 @@ describe('which version is read', () => {
     expect(loadWorkspace('transforms')?.frequencyViewport).toEqual(frequencyViewport);
   });
 
+  it('round-trips shared DFT sampling settings', () => {
+    const sampling = { timeWindow: { min: -4, max: 4 }, sampleCount: 32 };
+    saveWorkspace('transforms', workspace({ sampling }));
+
+    expect(loadWorkspace('transforms')?.sampling).toEqual(sampling);
+  });
+
   it('round-trips a contour view as a current view kind', () => {
     saveWorkspace('calculus', workspace({ views: [{ kind: 'contour', mode: 'real' }] }));
 
