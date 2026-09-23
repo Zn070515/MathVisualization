@@ -22,7 +22,9 @@ function tail(text, size = 4000) {
 }
 
 function commandForPlatform() {
-  return process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+  return process.platform === 'win32'
+    ? { command: process.env.ComSpec ?? 'cmd.exe', args: ['/d', '/s', '/c', 'pnpm.cmd dev'] }
+    : { command: 'pnpm', args: ['dev'] };
 }
 
 async function terminateChild(child) {
@@ -65,7 +67,8 @@ export async function startAppServer({
     return { baseUrl: resolvedBaseUrl.replace(/\/$/, ''), close: async () => {} };
   }
 
-  const child = spawn(commandForPlatform(), ['dev'], {
+  const serverCommand = commandForPlatform();
+  const child = spawn(serverCommand.command, serverCommand.args, {
     cwd: ROOT_DIR,
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,

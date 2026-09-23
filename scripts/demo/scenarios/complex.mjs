@@ -43,6 +43,7 @@ export default {
 
     const contourField = fields.nth(2);
     await page.getByRole('button', { name: 'Show the mathematical keypad' }).click();
+    await page.getByRole('tab', { name: 'func' }).click();
     await contourField.click();
     await page.getByRole('button', { name: 'A contour integral around a path' }).click();
     await contourField.pressSequentially('gamma', { delay: 70 });

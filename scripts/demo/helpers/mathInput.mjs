@@ -10,7 +10,7 @@ export async function replaceMathField(page, index, value, { minDelay = 55, maxD
   const before = await fieldValue(field);
   await field.click();
   await field.press('Control+A');
-  await field.press('Backspace');
+  if (before !== '') await field.press('Backspace');
 
   const delays = typeDelays(value, { min: minDelay, max: maxDelay });
   for (const [characterIndex, character] of Array.from(value).entries()) {
