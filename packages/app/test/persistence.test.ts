@@ -108,6 +108,18 @@ describe('which version is read', () => {
     expect(loadWorkspace('transforms')?.lines).toEqual(['b']);
   });
 
+  it('normalizes an invalid complex mode on a frequency view', () => {
+    writeFile(V3, {
+      transforms: {
+        lines: ['f(t)=exp(-t^2)', 'F(ω)=Fourier(f(t))'],
+        views: [{ kind: 'frequency-domain', mode: 'complex' }],
+      },
+    });
+    expect(loadWorkspace('transforms')?.views.views).toEqual([
+      { kind: 'frequency-domain', mode: 'magnitude' },
+    ]);
+  });
+
   it('never writes to the older keys', () => {
     writeFile(V2, { complex: { lines: ['untouched'] } });
     saveWorkspace('complex', workspace({ lines: ['new'] }));

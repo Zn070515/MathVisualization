@@ -36,4 +36,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Demo validation probes the committed WebM/GIF assets. CI does not record
+      # browser video or load the developer's sibling Playwright repository.
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - run: pnpm demo:test
+
       - run: pnpm verify

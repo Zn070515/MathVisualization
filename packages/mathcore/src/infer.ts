@@ -142,6 +142,61 @@ export function inferSpace(
       return ok(C1);
     }
 
+    case 'fourier-transform': {
+      const source = expr.source;
+      if (source.kind !== 'call' || source.args.length !== 1) {
+        return fail({
+          kind: 'unsupported',
+          detail: 'Fourier source is not a unary function call.',
+          message: 'A Fourier transform needs a one-variable real source function.',
+          span: expr.span,
+        });
+      }
+
+      const sourceVariable = source.args[0];
+      if (sourceVariable?.kind !== 'variable' || sourceVariable.name !== expr.sourceVariable) {
+        return fail({
+          kind: 'unsupported',
+          detail: 'Fourier source variable is not explicitly bound.',
+          message: 'A Fourier transform needs the source variable explicitly, as in Fourier(f(t)).',
+          span: expr.span,
+        });
+      }
+
+      const signature = context.functions.get(source.callee);
+      if (signature === undefined) {
+        const builtin = builtinFunction(source.callee);
+        if (builtin !== undefined && builtin.arity === 1) {
+          const sourceSpace = inferSpace(source, {
+            variables: new Map([...context.variables, [expr.sourceVariable, R1]]),
+            functions: context.functions,
+          });
+          if (!sourceSpace.ok) return sourceSpace;
+          if (sourceSpace.value.kind === 'R' && sourceSpace.value.dim === 1) return ok(C1);
+        }
+        return fail({
+          kind: 'unknown-function',
+          name: source.callee,
+          message: `"${source.callee}" is not a known real source function for this Fourier transform.`,
+          span: source.span,
+        });
+      }
+      if (
+        signature.domain.kind !== 'R' ||
+        signature.domain.dim !== 1 ||
+        signature.codomain.kind !== 'R' ||
+        signature.codomain.dim !== 1
+      ) {
+        return fail({
+          kind: 'dimension-mismatch',
+          message: `Fourier currently accepts a real signal f: R → R, but "${source.callee}" has signature ${spaceToString(signature.domain)} → ${spaceToString(signature.codomain)}.`,
+          span: source.span,
+        });
+      }
+
+      return ok(C1);
+    }
+
     case 'unary':
       return inferSpace(expr.operand, context);
 
@@ -478,4 +533,21 @@ export interface InferredType {
 
 export function classifySignatureWith(signature: Signature): InferredType {
   return { signature, classification: classifySignature(signature) };
+}
+
+/** Classify a valid definition body without changing generic signature rules. */
+export function classifyDefinitionWith(
+  signature: Signature,
+  body: Expr,
+): InferredType {
+  if (body.kind === 'fourier-transform') {
+    return {
+      signature,
+      classification: {
+        kind: 'transform-pair',
+        description: 'A real signal and its numerical Fourier transform',
+      },
+    };
+  }
+  return classifySignatureWith(signature);
 }

@@ -58,6 +58,8 @@ function precedenceOf(expr: Expr): number {
     // to see that a decision was made, not guess that one was forgotten.
     case 'contour-integral':
       return PRECEDENCE_ATOM;
+    case 'fourier-transform':
+      return PRECEDENCE_ATOM;
     default:
       return PRECEDENCE_ATOM;
   }
@@ -113,6 +115,9 @@ function print(expr: Expr, minimumPrecedence: number): string {
       const integrand = print(expr.integrand, PRECEDENCE_MULTIPLICATIVE + 1);
       return `∮_${expr.path} ${integrand} d${expr.variable}`;
     }
+
+    case 'fourier-transform':
+      return `Fourier(${print(expr.source, 0)})`;
   }
 }
 

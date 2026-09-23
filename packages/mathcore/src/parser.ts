@@ -762,6 +762,44 @@ class Parser {
     }
     this.advance();
 
+    if (callee.text === 'Fourier') {
+      if (args.length !== 1) {
+        return {
+          ok: false,
+          issue: this.errorAt(callee, 'Fourier needs one source function call, as in Fourier(f(t)).'),
+        };
+      }
+      const source = args[0] as Expr;
+      if (source.kind !== 'call' || source.args.length !== 1) {
+        return {
+          ok: false,
+          issue: this.errorAt(
+            callee,
+            'Fourier needs a one-variable source function call, as in Fourier(f(t)).',
+          ),
+        };
+      }
+      const variable = source.args[0] as Expr;
+      if (variable.kind !== 'variable') {
+        return {
+          ok: false,
+          issue: this.errorAt(
+            callee,
+            'Fourier needs the source variable explicitly, as in Fourier(f(t)).',
+          ),
+        };
+      }
+      return {
+        ok: true,
+        value: {
+          kind: 'fourier-transform',
+          source,
+          sourceVariable: variable.name,
+          span: span(callee.start, this.lastTokenEnd(args)),
+        },
+      };
+    }
+
     return {
       ok: true,
       value: {
@@ -771,6 +809,11 @@ class Parser {
         span: span(callee.start, closing.end),
       },
     };
+  }
+
+  private lastTokenEnd(args: readonly Expr[]): number {
+    const token = this.tokens[this.index - 1];
+    return token?.end ?? args[args.length - 1]?.span.end ?? this.source.length;
   }
 }
 

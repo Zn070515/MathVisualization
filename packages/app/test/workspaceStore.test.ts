@@ -7,7 +7,7 @@
  * tested here without a DOM, without rendering, and without timing.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { latex, makeStore, toLatex } from './helpers';
+import { latex, makeStore, makeStoreFromLatex, toLatex } from './helpers';
 import { cx } from '@mathviz/mathcore';
 import {
   DEFAULT_VIEWPORT,
@@ -149,6 +149,21 @@ describe('the shared cursor', () => {
     expect(store.getState().hover).toEqual(point);
   });
 
+  it('keeps frequency cursors separate from plane cursors', () => {
+    const store = makeStore([], 'transforms');
+    store.setFrequencyHover(2.5);
+    store.setFrequencySelection(-1.25);
+
+    expect(store.getState().frequencyHover).toBe(2.5);
+    expect(store.getState().frequencySelection).toBe(-1.25);
+    expect(store.getState().hover).toBeNull();
+    expect(store.getState().selection).toBeNull();
+
+    store.setHover(cx(1, 0));
+    expect(store.getState().frequencyHover).toBeNull();
+    expect(store.getState().frequencySelection).toBe(-1.25);
+  });
+
   it('clears the hover without touching the selection', () => {
     const store = makeStore([], 'complex');
     store.setHover(cx(1, 2));
@@ -233,6 +248,14 @@ describe('multiple views', () => {
     ]);
     // A function of one real variable opens on a pair of axes.
     expect(kindsOf(makeStore(['f(t)=exp(-t^2)'], 'transforms'))).toEqual(['cartesian-2d']);
+    expect(
+      kindsOf(
+        makeStoreFromLatex(
+          ['f(t)=\\exp\\left(-t^{2}\\right)', 'F(\\omega)=\\operatorname{Fourier}\\left(f(t)\\right)'],
+          'transforms',
+        ),
+      ),
+    ).toEqual(['cartesian-2d', 'frequency-domain']);
     // A scalar over the plane opens on a surface, not on the same numbers read
     // from above.
     expect(kindsOf(makeStore(['f(x,y)=x^2+y^2'], 'calculus'))).toEqual(['cartesian-3d']);

@@ -130,6 +130,7 @@ const OPERATOR_NAMES: Readonly<Record<string, string>> = {
   Arg: 'arg',
   conj: 'conj',
   sgn: 'sgn',
+  Fourier: 'Fourier',
 };
 
 /** Sizing and spacing commands carry no mathematical content. */
@@ -169,6 +170,7 @@ const OPERATOR_BY_FUNCTION: Readonly<Record<string, string>> = {
   re: 'Re',
   im: 'Im',
   arg: 'arg',
+  Fourier: 'Fourier',
 };
 
 // ---------------------------------------------------------------------------
@@ -758,6 +760,48 @@ class LatexParser {
       if (token.kind === 'letter') {
         text += token.text;
         this.advance();
+        continue;
+      }
+      // MathLive commonly serializes an operator name inserted through the
+      // keypad as `\\operatorname{\\mathrm{Fourier}}`. Treat the styling
+      // command as presentation markup while keeping the operator-name
+      // grammar strict.
+      if (token.kind === 'command' && token.text === 'mathrm') {
+        this.advance();
+        const styledOpen = this.peek();
+        if (styledOpen?.kind !== 'braceOpen') {
+          return {
+            ok: false,
+            issue: incomplete(styledOpen?.span ?? token.span, '\\mathrm needs a name.'),
+          };
+        }
+        this.advance();
+        let styledText = '';
+        for (;;) {
+          const styledToken = this.peek();
+          if (styledToken === undefined) {
+            return {
+              ok: false,
+              issue: incomplete(styledOpen.span, '\\mathrm is missing its closing brace.'),
+            };
+          }
+          if (styledToken.kind === 'braceClose') {
+            this.advance();
+            break;
+          }
+          if (styledToken.kind !== 'letter') {
+            return {
+              ok: false,
+              issue: wrong(styledToken.span, 'An operator name must be letters.'),
+            };
+          }
+          styledText += styledToken.text;
+          this.advance();
+        }
+        if (styledText === '') {
+          return { ok: false, issue: incomplete(styledOpen.span, '\\mathrm needs a name.') };
+        }
+        text += styledText;
         continue;
       }
       return { ok: false, issue: wrong(token.span, 'An operator name must be letters.') };
@@ -1423,6 +1467,41 @@ class LatexParser {
     const grouped = this.parseParenthesisedResult();
     if (!grouped.ok) return grouped;
     const args = grouped.value.kind === 'tuple' ? grouped.value.items : [grouped.value];
+    if (callee === 'Fourier') {
+      if (args.length !== 1) {
+        return {
+          ok: false,
+          issue: wrong(start, 'Fourier needs one source function call, as in Fourier(f(t)).'),
+        };
+      }
+      const source = args[0] as Expr;
+      if (source.kind !== 'call' || source.args.length !== 1) {
+        return {
+          ok: false,
+          issue: wrong(
+            start,
+            'Fourier needs a one-variable source function call, as in Fourier(f(t)).',
+          ),
+        };
+      }
+      const variable = source.args[0] as Expr;
+      if (variable.kind !== 'variable') {
+        return {
+          ok: false,
+          issue: wrong(start, 'Fourier needs the source variable explicitly, as in Fourier(f(t)).'),
+        };
+      }
+      return {
+        ok: true,
+        value: {
+          kind: 'fourier-transform',
+          source,
+          sourceVariable: variable.name,
+          span: { start: start.start, end: this.lastSpan().end },
+        },
+      };
+    }
+
     return {
       ok: true,
       value: {
@@ -1641,6 +1720,8 @@ function latexPrecedenceOf(expr: Expr): number {
     // decision rather than guess that it was forgotten.
     case 'contour-integral':
       return 100;
+    case 'fourier-transform':
+      return 100;
     default:
       return 100;
   }
@@ -1779,6 +1860,9 @@ function printLatex(expr: Expr, minimumPrecedence: number): string {
       const integrand = printLatex(expr.integrand, 1);
       return `\\oint_{${nameToLatex(expr.path)}}${integrand}\\,d${nameToLatex(expr.variable)}`;
     }
+
+    case 'fourier-transform':
+      return `\\operatorname{Fourier}\\left(${printLatex(expr.source, 0)}\\right)`;
   }
 }
 

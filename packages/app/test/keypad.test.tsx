@@ -311,8 +311,21 @@ describe('keys for mathematics the language does not have yet', () => {
             // on its own, as an infix operator between two expressions, between two
             // digits (the decimal point), or between two list entries (the comma).
             const contexts = [filled, `z${filled}z`, `3${filled}5`, `\\left(z${filled}z\\right)`];
+            if (entry.title === 'A numerical Fourier transform') {
+              // The transform binds a source function call, so its natural valid
+              // context includes the source definition name that the workspace
+              // resolves before parsing.
+              contexts.push('\\operatorname{Fourier}\\left(f(t)\\right)');
+            }
             expect(
-              contexts.some((candidate) => parseLatexStatement(candidate).ok),
+              contexts.some((candidate) =>
+                parseLatexStatement(
+                  candidate,
+                  entry.title === 'A numerical Fourier transform'
+                    ? { knownFunctions: new Set(['f']) }
+                    : undefined,
+                ).ok,
+              ),
               `${subsystem} key "${entry.title}" inserts ${entry.insert}`,
             ).toBe(true);
           }

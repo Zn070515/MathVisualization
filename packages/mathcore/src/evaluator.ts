@@ -164,6 +164,14 @@ export function evaluate(
     case 'contour-integral':
       return evaluateContour(expr, environment, depth, contourDepth);
 
+    case 'fourier-transform':
+      return fail({
+        kind: 'unsupported',
+        detail: 'Fourier transforms are evaluated by estimateFourierTransform.',
+        message: 'A Fourier transform is a frequency-domain estimate, not a pointwise scalar value.',
+        span: expr.span,
+      });
+
     case 'constant': {
       const constant = builtinConstant(expr.name);
       if (constant === undefined) {

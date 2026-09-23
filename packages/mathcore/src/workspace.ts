@@ -34,6 +34,7 @@ import {
 import {
   type InferenceContext,
   type InferredType,
+  classifyDefinitionWith,
   classifySignatureWith,
   inferSignature,
   inferSpace,
@@ -440,7 +441,7 @@ function analyzeStatement(
     };
     const bodyCheck = inferSpace(statement.body, context);
     if (!bodyCheck.ok) return { type: null, issue: bodyCheck.issue };
-    return { type: classifySignatureWith(signature), issue: null };
+    return { type: classifyDefinitionWith(signature, statement.body), issue: null };
   }
 
   // A bare expression: it is a function of its free variables.

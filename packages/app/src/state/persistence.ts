@@ -51,6 +51,7 @@ const VIEW_KIND_MIGRATION: Readonly<Record<string, ViewKind>> = {
   'cartesian-3d': 'cartesian-3d',
   'complex-plane': 'complex-plane',
   'domain-coloring': 'domain-coloring',
+  'frequency-domain': 'frequency-domain',
   'mapped-grid': 'mapped-grid',
   // The old `field` view *is* the fragment-shader view with its modes, so it
   // becomes domain colouring. A returning user keeps the heatmap they had; a
@@ -165,7 +166,12 @@ function parseView(value: unknown): PersistedView | null {
   const migrated = VIEW_KIND_MIGRATION[kind];
   if (migrated === undefined) return null;
   if (typeof mode !== 'string' || !FIELD_MODES.includes(mode as FieldMode)) return null;
-  return { kind: migrated, mode: mode as FieldMode };
+  return {
+    kind: migrated,
+    // Frequency frames never had a complex projection; normalize a malformed
+    // or hand-edited persisted value to the visible default.
+    mode: migrated === 'frequency-domain' && mode === 'complex' ? 'magnitude' : (mode as FieldMode),
+  };
 }
 
 function readLines(entry: Record<string, unknown>, migrate: (line: string) => string): string[] {

@@ -8,6 +8,6 @@ const readme = fs.readFileSync(new URL('../../README.md', import.meta.url), 'utf
 test('README embeds only recorded demo GIFs', () => {
   assert.match(readme, /docs\/assets\/complex-demo\.gif/);
   assert.match(readme, /docs\/assets\/calculus-demo\.gif/);
-  assert.doesNotMatch(readme, /docs\/assets\/transforms-demo\.gif/);
-  assert.match(readme, /Fourier|frequency-domain|planned/i);
+  assert.match(readme, /docs\/assets\/transforms-demo\.gif/);
+  assert.match(readme, /finite-window|frequency-domain|Fourier/i);
 });

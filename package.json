@@ -11,6 +11,7 @@
     "test": "pnpm -r test",
     "test:watch": "pnpm -r test:watch",
     "demo:check": "node scripts/demo/record.mjs --check",
+    "demo:test": "node --test scripts/demo/*.test.mjs",
     "demo:rehearse": "node scripts/demo/record.mjs --rehearse",
     "demo:complex": "node scripts/demo/record.mjs complex",
     "demo:calculus": "node scripts/demo/record.mjs calculus",

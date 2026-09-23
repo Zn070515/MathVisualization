@@ -1,7 +1,7 @@
 /** The public demo routes and the vertical slices that are safe to record. */
 export const DEMO_MANIFEST = Object.freeze([
   Object.freeze({ name: 'complex', route: '/complex', status: 'ready' }),
-  Object.freeze({ name: 'transforms', route: '/transforms', status: 'planned' }),
+  Object.freeze({ name: 'transforms', route: '/transforms', status: 'ready' }),
   Object.freeze({ name: 'calculus', route: '/calculus', status: 'ready' }),
 ]);
 

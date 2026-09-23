@@ -17,8 +17,8 @@ test('calculus scenario declares the actual surface workflow', () => {
   assert.match(calculus.description, /surface|slider|hover/i);
 });
 
-test('transforms scenario cannot be accidentally recorded', () => {
-  assert.equal(transforms.status, 'planned');
+test('transforms scenario declares the real Fourier workflow', () => {
+  assert.equal(transforms.status, 'ready');
   assert.equal(typeof transforms.run, 'function');
-  assert.throws(() => transforms.run({}), /Fourier|planned/i);
+  assert.match(transforms.description, /Fourier|frequency|parameter/i);
 });

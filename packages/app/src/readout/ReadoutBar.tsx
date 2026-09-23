@@ -16,6 +16,7 @@
  */
 import {
   type Complex,
+  type Workspace,
   type UserFunctionDefinition,
   DEFAULT_DOMAIN_COLORING,
   cabs,
@@ -29,12 +30,32 @@ import {
 import { ComplexText, NumberText } from '../display/NumberText';
 import { useStore } from '../state/store';
 import { makePointEvaluation } from '../views/evaluation';
+import { estimateActiveFourierTransform, selectFourierTransform } from '../views/frequencyEvaluation';
 import type { ActiveExpression, WorkspaceStore } from '../state/workspaceStore';
 
 export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Element {
   const state = useStore(store, (current) => current);
   const point = state.hover ?? state.selection;
-  const active = store.activeExpression();
+  const frequency = state.frequencyHover ?? state.frequencySelection;
+  const active = store.sourceExpression();
+  const transform = store.activeExpression();
+
+  if (frequency !== null && selectFourierTransform(transform) !== null) {
+    return (
+      <div className="readout">
+        <FrequencyValueCells
+          active={transform as ActiveExpression}
+          frequency={frequency}
+          parameters={state.parameterValues}
+          workspace={state.workspace}
+        />
+        <span className="readout__spacer" />
+        <span className="readout__held">
+          {state.frequencySelection !== null ? 'held' : 'following the pointer'}
+        </span>
+      </div>
+    );
+  }
 
   if (point === null) {
     return (
@@ -50,7 +71,7 @@ export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Elem
     <div className="readout">
       <Cell label="point" value={<ComplexText value={displayComplex(point, { digits: 5 })} />} />
 
-      {active === null ? (
+        {active === null ? (
         <Cell label="value" value="—" />
       ) : (
         <ValueCells
@@ -66,6 +87,51 @@ export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Elem
         {state.selection !== null ? 'held' : 'following the pointer'}
       </span>
     </div>
+  );
+}
+
+function FrequencyValueCells({
+  active,
+  frequency,
+  parameters,
+  workspace,
+}: {
+  active: ActiveExpression;
+  frequency: number;
+  parameters: ReadonlyMap<string, number>;
+  workspace: Workspace;
+}): React.JSX.Element {
+  const estimate = estimateActiveFourierTransform(active, workspace, parameters);
+  if (estimate === null || estimate.values.length === 0) {
+    return <Cell label="frequency" value="—" />;
+  }
+  let nearest = 0;
+  for (let index = 1; index < estimate.frequencies.length; index += 1) {
+    if (
+      Math.abs((estimate.frequencies[index] as number) - frequency) <
+      Math.abs((estimate.frequencies[nearest] as number) - frequency)
+    ) {
+      nearest = index;
+    }
+  }
+  const value = estimate.values[nearest];
+  if (value === undefined) return <Cell label="frequency" value="—" />;
+  return (
+    <>
+      <Cell label="ω" value={<NumberText value={displayNumber(frequency, { digits: 5 })} />} />
+      <Cell label="F(ω)" value={<ComplexText value={displayComplex(value, { digits: 6 })} />} />
+      <Cell label="|F|" value={<NumberText value={displayNumber(cabs(value), { digits: 5 })} />} />
+      <Cell
+        label="arg"
+        value={
+          cabs(value) === 0 ? (
+            <NumberText value={{ kind: 'undefined' }} />
+          ) : (
+            <NumberText value={displayNumber(principalArg(value), { digits: 5 })} />
+          )
+        }
+      />
+    </>
   );
 }
 

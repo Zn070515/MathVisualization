@@ -20,13 +20,15 @@ export function gifAttemptPlan() {
 export function gifFilter({ fps, width }) {
   return [
     `fps=${fps},scale=${width}:-1:flags=lanczos,split[paletteSource][gifSource]`,
-    `[paletteSource]palettegen=max_colors=256[palette]`,
+    // 128 colors keeps the committed README media inside the size gate while
+    // preserving the application's thin strokes and neutral background.
+    `[paletteSource]palettegen=max_colors=128[palette]`,
     `[gifSource][palette]paletteuse=dither=none:diff_mode=rectangle`,
   ].join(';');
 }
 
 export function paletteGenerationFilter({ fps, width }) {
-  return `fps=${fps},scale=${width}:-1:flags=lanczos,palettegen=max_colors=256`;
+  return `fps=${fps},scale=${width}:-1:flags=lanczos,palettegen=max_colors=128`;
 }
 
 export function paletteUseFilter({ fps, width }) {

@@ -344,6 +344,15 @@ class Lowering {
             'A contour integral is one number rather than a value at each point of the plane, so this view cannot draw it. Its value belongs beside the line that asked for it.',
           span: expr.span,
         });
+
+      case 'fourier-transform':
+        return fail({
+          kind: 'unsupported',
+          detail: 'Fourier transform lowered to a shader',
+          message:
+            'A Fourier transform is a finite-window frequency-domain estimate, so it cannot be drawn by the pointwise shader backend.',
+          span: expr.span,
+        });
     }
   }
 

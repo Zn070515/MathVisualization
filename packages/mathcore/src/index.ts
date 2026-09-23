@@ -59,6 +59,7 @@ export * from './ticks';
 export * from './pointsOfInterest';
 export * from './zerosAndPoles';
 export * from './contour';
+export * from './fourier';
 export * from './surface';
 export * from './surfaceGlsl';
 export * from './workspace';

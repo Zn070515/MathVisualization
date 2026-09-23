@@ -26,7 +26,7 @@ import { TICK_FONT } from '../render/canvasText';
 import { NumberText } from '../display/NumberText';
 import { roundForScale, viewNumber } from '../display/numbers';
 import { useStore } from '../state/store';
-import { selectActiveExpression, type ViewRendererProps } from '../state/workspaceStore';
+import { selectSourceExpression, type ViewRendererProps } from '../state/workspaceStore';
 import { handleCameraKey } from './cameraKeys';
 import { makePointEvaluation } from './evaluation';
 import { useResizeVersion } from './useResizeVersion';
@@ -94,7 +94,7 @@ export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
   const { workspace, focusedLineId } = state;
   const functions = workspace.functions;
   const active = useMemo(
-    () => selectActiveExpression(workspace, focusedLineId, store.drawableKinds),
+    () => selectSourceExpression(workspace, focusedLineId, store.drawableKinds),
     [workspace, focusedLineId, store.drawableKinds],
   );
 

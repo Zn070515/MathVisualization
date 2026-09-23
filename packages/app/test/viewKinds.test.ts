@@ -34,6 +34,7 @@ describe('the taxonomy', () => {
       'cartesian-3d',
       'complex-plane',
       'domain-coloring',
+      'frequency-domain',
       'mapped-grid',
     ]);
   });
@@ -80,6 +81,18 @@ describe('what each object calls for', () => {
     // A complex-valued signal is still a curve over one real axis; the plane is
     // the second thing you might want, not the first.
     expect(kindsOf(sig(R1, C1))).toEqual(['cartesian-2d', 'complex-plane']);
+  });
+
+  it('gives a Fourier transform pair its time and frequency views', () => {
+    expect(preferredViewKinds(sig(R1, C1), 'transform-pair')).toEqual([
+      'cartesian-2d',
+      'frequency-domain',
+    ]);
+    expect(defaultViewKinds(sig(R1, C1), 'transform-pair').map((view) => view.kind)).toEqual([
+      'cartesian-2d',
+      'frequency-domain',
+    ]);
+    expect(defaultViewKinds(sig(R1, C1), 'transform-pair')[1]?.mode).toBe('magnitude');
   });
 
   it('asks for a surface for a scalar over the plane, with the heatmap behind it', () => {

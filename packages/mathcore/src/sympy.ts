@@ -300,6 +300,15 @@ function lower(expr: Expr, symbols: Map<string, string>): Result<string, MathIss
           'A contour integral is evaluated numerically, so the symbolic engine is not given it. The number beside the line is a quadrature, and it states how accurate it is.',
         span: expr.span,
       });
+
+    case 'fourier-transform':
+      return fail({
+        kind: 'unsupported',
+        detail: 'Fourier transform handed to the symbolic engine',
+        message:
+          'Fourier transforms are evaluated numerically over a finite window, so the symbolic engine is not given this node.',
+        span: expr.span,
+      });
   }
 }
 

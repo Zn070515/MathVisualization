@@ -116,6 +116,23 @@ export interface ContourIntegralNode {
   readonly span: SourceSpan;
 }
 
+/**
+ * A forward continuous Fourier transform, `Fourier(f(t))`.
+ *
+ * The source variable is bound by this node. The frequency variable belongs to
+ * the containing one-argument function definition, e.g. `F(ω)=Fourier(f(t))`.
+ * Keeping the binding here means the transform is an expression in the same
+ * sense as a contour integral, rather than a UI instruction attached to a row.
+ */
+export interface FourierTransformNode {
+  readonly kind: 'fourier-transform';
+  /** The source call, normally `f(t)`. */
+  readonly source: Expr;
+  /** The real variable integrated over the time domain. */
+  readonly sourceVariable: string;
+  readonly span: SourceSpan;
+}
+
 export type Expr =
   | NumberLiteralNode
   | VariableNode
@@ -124,7 +141,8 @@ export type Expr =
   | BinaryNode
   | CallNode
   | TupleNode
-  | ContourIntegralNode;
+  | ContourIntegralNode
+  | FourierTransformNode;
 
 export type ExprKind = Expr['kind'];
 
@@ -193,6 +211,8 @@ export function childNodes(expr: Expr): readonly Expr[] {
       return expr.items;
     case 'contour-integral':
       return [expr.integrand];
+    case 'fourier-transform':
+      return [expr.source];
   }
 }
 
@@ -229,6 +249,10 @@ export function collectVariableNames(expr: Expr): string[] {
     }
     if (node.kind === 'contour-integral') {
       visit(node.integrand, new Set([...bound, node.variable]));
+      return;
+    }
+    if (node.kind === 'fourier-transform') {
+      visit(node.source, new Set([...bound, node.sourceVariable]));
       return;
     }
     for (const child of childNodes(node)) visit(child, bound);

@@ -16,16 +16,15 @@ test('the demo manifest covers the three public routes', () => {
   );
 });
 
-test('only implemented vertical slices are recordable', () => {
+test('all three public vertical slices are recordable', () => {
   assert.equal(complex.status, 'ready');
   assert.equal(calculus.status, 'ready');
-  assert.equal(transforms.status, 'planned');
-  assert.match(transforms.skipReason, /planned/i);
+  assert.equal(transforms.status, 'ready');
 });
 
-test('planned transforms have no media output contract', () => {
+test('every ready scenario has a source and GIF output contract', () => {
   assert.match(scenarioSourcePath('complex'), /complex-demo\.webm$/);
   assert.match(scenarioGifPath('calculus'), /calculus-demo\.gif$/);
-  assert.throws(() => scenarioSourcePath('transforms'), /planned/i);
-  assert.throws(() => scenarioGifPath('transforms'), /planned/i);
+  assert.match(scenarioSourcePath('transforms'), /transforms-demo\.webm$/);
+  assert.match(scenarioGifPath('transforms'), /transforms-demo\.gif$/);
 });

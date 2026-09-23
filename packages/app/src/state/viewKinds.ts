@@ -13,7 +13,7 @@
  * as a heatmap because that is what the calculus subsystem had. The signature is
  * already computed, and it is a better answer than the subsystem is.
  */
-import type { FieldMode, Signature, Space } from '@mathviz/mathcore';
+import type { FieldMode, MathObjectKind, Signature, Space } from '@mathviz/mathcore';
 import type { SubsystemId } from '../subsystems';
 import type { ViewBlueprint, ViewKind } from './workspaceStore';
 
@@ -33,6 +33,7 @@ export const VIEW_KIND_STATUS: Readonly<Record<ViewKind, ViewStatus>> = {
   'cartesian-3d': 'available',
   'complex-plane': 'available',
   'domain-coloring': 'available',
+  'frequency-domain': 'available',
   'mapped-grid': 'available',
 };
 
@@ -50,9 +51,18 @@ export function defaultModeFor(codomain: Space | undefined): FieldMode {
  * rather than drawing something that does not mean what it appears to: an `R³`
  * scalar field would need a fourth dimension, and there is none.
  */
-export function preferredViewKinds(signature: Signature | undefined): readonly ViewKind[] {
+export function preferredViewKinds(
+  signature: Signature | undefined,
+  classification?: MathObjectKind,
+): readonly ViewKind[] {
   if (signature === undefined) return [];
   const { domain, codomain } = signature;
+
+  if (classification === 'transform-pair') {
+    return domain.kind === 'R' && domain.dim === 1 && codomain.kind === 'C'
+      ? ['cartesian-2d', 'frequency-domain']
+      : [];
+  }
 
   // A complex function is a map of the plane, so the plane is its home. Domain
   // colouring and the mapped grid are then two ways of *showing* that map, which
@@ -77,8 +87,13 @@ export function preferredViewKinds(signature: Signature | undefined): readonly V
 }
 
 /** The subset of {@link preferredViewKinds} that can actually be drawn today. */
-export function drawableViewKinds(signature: Signature | undefined): readonly ViewKind[] {
-  return preferredViewKinds(signature).filter((kind) => VIEW_KIND_STATUS[kind] === 'available');
+export function drawableViewKinds(
+  signature: Signature | undefined,
+  classification?: MathObjectKind,
+): readonly ViewKind[] {
+  return preferredViewKinds(signature, classification).filter(
+    (kind) => VIEW_KIND_STATUS[kind] === 'available',
+  );
 }
 
 /**
@@ -90,15 +105,30 @@ export function drawableViewKinds(signature: Signature | undefined): readonly Vi
  * plane and the colouring; the mapped grid is a fine thing to add and a poor
  * thing to be handed.
  */
-export function defaultViewKinds(signature: Signature | undefined): readonly ViewBlueprint[] {
-  return intendedDefaults(signature)
+export function defaultViewKinds(
+  signature: Signature | undefined,
+  classification?: MathObjectKind,
+): readonly ViewBlueprint[] {
+  return intendedDefaults(signature, classification)
     .filter((kind) => VIEW_KIND_STATUS[kind] === 'available')
-    .map((kind) => ({ kind, mode: defaultModeFor(signature?.codomain) }));
+    .map((kind) => ({
+      kind,
+      mode: kind === 'frequency-domain' ? 'magnitude' : defaultModeFor(signature?.codomain),
+    }));
 }
 
-function intendedDefaults(signature: Signature | undefined): readonly ViewKind[] {
+function intendedDefaults(
+  signature: Signature | undefined,
+  classification?: MathObjectKind,
+): readonly ViewKind[] {
   if (signature === undefined) return [];
   const { domain, codomain } = signature;
+
+  if (classification === 'transform-pair') {
+    return domain.kind === 'R' && domain.dim === 1 && codomain.kind === 'C'
+      ? ['cartesian-2d', 'frequency-domain']
+      : [];
+  }
 
   if (domain.kind === 'C') return codomain.kind === 'C' ? ['complex-plane', 'domain-coloring'] : [];
   if (domain.dim === 1) return ['cartesian-2d'];

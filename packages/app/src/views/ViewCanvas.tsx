@@ -30,6 +30,7 @@ import { Cartesian3DView } from './Cartesian3DView';
 import { CartesianView } from './CartesianView';
 import { ComplexPlaneView } from './ComplexPlaneView';
 import { FieldView } from './FieldView';
+import { FrequencyDomainView } from './FrequencyDomainView';
 import { MappedGridView } from './MappedGridView';
 
 const VIEW_TITLES: Readonly<Record<ViewKind, string>> = {
@@ -37,6 +38,7 @@ const VIEW_TITLES: Readonly<Record<ViewKind, string>> = {
   'cartesian-3d': '3D surface',
   'complex-plane': 'Complex plane',
   'domain-coloring': 'Domain colouring',
+  'frequency-domain': 'Frequency domain',
   'mapped-grid': 'Mapped grid',
 };
 
@@ -47,7 +49,10 @@ const VIEW_TITLES: Readonly<Record<ViewKind, string>> = {
  * the reason in one place: the others show what they show, and offering them a
  * mode selector would be offering a control that changes nothing.
  */
-const MODED_KINDS: ReadonlySet<ViewKind> = new Set<ViewKind>(['domain-coloring']);
+const MODED_KINDS: ReadonlySet<ViewKind> = new Set<ViewKind>([
+  'domain-coloring',
+  'frequency-domain',
+]);
 
 /**
  * The dispatch, exhaustive over the taxonomy.
@@ -62,6 +67,7 @@ const VIEW_RENDERERS: Readonly<Record<ViewKind, (props: ViewRendererProps) => Re
     'cartesian-3d': Cartesian3DView,
     'complex-plane': ComplexPlaneView,
     'domain-coloring': FieldView,
+    'frequency-domain': FrequencyDomainView,
     'mapped-grid': MappedGridView,
   };
 
@@ -105,7 +111,7 @@ export function ViewCanvas({
   );
 
   const addable = useMemo((): readonly ViewKind[] => {
-    const preferred = drawableViewKinds(active?.signature);
+    const preferred = drawableViewKinds(active?.signature, active?.entry.type?.classification.kind);
     // With nothing drawable there is no signature to consult, and a row of "Add
     // view" with nothing under it is a dead end. A nominal view is offered
     // instead, and it renders its own explanation rather than an empty frame.
@@ -195,7 +201,10 @@ function ViewFrame({
                 store.setViewMode(view.id, event.target.value as FieldMode);
               }}
             >
-              {FIELD_MODES.map((mode) => (
+              {(view.kind === 'frequency-domain'
+                ? FIELD_MODES.filter((mode) => mode !== 'complex')
+                : FIELD_MODES
+              ).map((mode) => (
                 <option key={mode} value={mode} title={FIELD_MODE_DESCRIPTIONS[mode]}>
                   {FIELD_MODE_LABELS[mode]}
                 </option>

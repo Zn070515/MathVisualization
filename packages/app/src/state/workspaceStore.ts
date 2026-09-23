@@ -76,7 +76,12 @@ export const DEFAULT_VIEWPORT: Viewport = {
  * on the plane the same choice.
  */
 export type ViewKind =
-  'cartesian-2d' | 'cartesian-3d' | 'complex-plane' | 'domain-coloring' | 'mapped-grid';
+  | 'cartesian-2d'
+  | 'cartesian-3d'
+  | 'complex-plane'
+  | 'domain-coloring'
+  | 'frequency-domain'
+  | 'mapped-grid';
 
 /**
  * A view without an identity: what kind it is and what it shows.
@@ -115,6 +120,9 @@ export interface WorkspaceState {
   readonly parameterValues: ReadonlyMap<string, number>;
   readonly hover: Complex | null;
   readonly selection: Complex | null;
+  /** Frequency-domain cursor, kept numeric so ω is never mistaken for a plane point. */
+  readonly frequencyHover: number | null;
+  readonly frequencySelection: number | null;
   readonly viewport: Viewport;
   /**
    * Where a three-dimensional view is looking from.
@@ -218,15 +226,56 @@ export function selectActiveExpression(
   if (drawable.length === 0) return null;
 
   const focused = drawable.find((entry) => entry.id === focusedLineId);
-  const entry = focused ?? (drawable[0] as WorkspaceEntry);
+  // A transform pair owns both panes: the source line remains visible as the
+  // time-domain expression, but the pair is the active mathematical object that
+  // supplies the frequency-domain view. Prefer it when the workspace contains
+  // one, even while the editor focus is still on the source line.
+  const pair = drawable.find((entry) => entry.type?.classification.kind === 'transform-pair');
+  const entry = pair ?? focused ?? (drawable[0] as WorkspaceEntry);
   if (entry.type === null) return null;
 
+  return activeExpressionForEntry(entry, workspace);
+}
+
+function activeExpressionForEntry(
+  entry: WorkspaceEntry,
+  workspace: Workspace,
+): ActiveExpression | null {
+  if (entry.type === null) return null;
   return {
     entry,
     signature: entry.type.signature,
     bindings: variableBindingsFor(entry),
     parameterNames: parametersUsedBy(entry, workspace),
   };
+}
+
+/**
+ * The source expression drawn by the time-domain pane of a transform pair.
+ *
+ * A transform definition is the active object for view inference, but its body is
+ * an operation over a whole signal and cannot be sampled as a pointwise curve. The
+ * time pane therefore follows the source function named by the Fourier node.
+ */
+export function selectSourceExpression(
+  workspace: Workspace,
+  focusedLineId: string | null,
+  drawableKinds: ReadonlySet<MathObjectKind>,
+): ActiveExpression | null {
+  const active = selectActiveExpression(workspace, focusedLineId, drawableKinds);
+  const statement = active?.entry.statement;
+  const body = statement?.kind === 'function-definition' ? statement.body : null;
+  if (body?.kind !== 'fourier-transform') return active;
+
+  const source = body.source;
+  if (source.kind !== 'call') return active;
+  const sourceEntry = workspace.entries.find(
+    (entry) =>
+      entry.statement?.kind === 'function-definition' &&
+      entry.statement.name === source.callee &&
+      entry.type?.classification.kind === 'real-function',
+  );
+  return sourceEntry === undefined ? active : activeExpressionForEntry(sourceEntry, workspace);
 }
 
 /** Lowering options for an expression, or null when nothing is being drawn. */
@@ -263,6 +312,8 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
       parameterValues: collectSliderValues(workspace),
       hover: null,
       selection: null,
+      frequencyHover: null,
+      frequencySelection: null,
       viewport: DEFAULT_VIEWPORT,
       camera3d: DEFAULT_CAMERA_3D,
       views: withFreshIds(
@@ -382,16 +433,34 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
    * update one without the other, and every view observes both.
    */
   setHover(point: Complex | null): void {
-    this.update((state) => ({ ...state, hover: point }));
+    this.update((state) => ({ ...state, hover: point, frequencyHover: null }));
   }
 
   setSelection(point: Complex | null): void {
-    this.update((state) => ({ ...state, selection: point }));
+    this.update((state) => ({ ...state, selection: point, frequencySelection: null }));
+  }
+
+  setFrequencyHover(frequency: number | null): void {
+    this.update((state) => ({ ...state, frequencyHover: frequency, hover: null }));
+  }
+
+  setFrequencySelection(frequency: number | null): void {
+    this.update((state) => ({ ...state, frequencySelection: frequency, selection: null }));
   }
 
   /** Clear the cursor, for when the pointer leaves every view. */
   clearCursor(): void {
-    this.update((state) => (state.hover === null ? state : { ...state, hover: null }));
+    this.update((state) =>
+      state.hover === null && state.frequencyHover === null
+        ? state
+        : { ...state, hover: null, frequencyHover: null },
+    );
+  }
+
+  clearFrequencyCursor(): void {
+    this.update((state) =>
+      state.frequencyHover === null ? state : { ...state, frequencyHover: null },
+    );
   }
 
   // ------------------------------------------------------------- the viewport
@@ -509,6 +578,12 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
     return selectActiveExpression(workspace, focusedLineId, this.drawableKinds);
   }
 
+  /** The pointwise source used by the time-domain readout and curve renderer. */
+  sourceExpression(): ActiveExpression | null {
+    const { workspace, focusedLineId } = this.getState();
+    return selectSourceExpression(workspace, focusedLineId, this.drawableKinds);
+  }
+
   /** Lowering options for the GLSL emitter, for the active expression. */
   loweringOptions(): GlslLoweringOptions | null {
     return loweringOptionsFor(this.activeExpression());
@@ -568,7 +643,7 @@ function planOpeningViews(
   subsystem: SubsystemId,
 ): readonly ViewBlueprint[] {
   const active = selectActiveExpression(workspace, focusedLineId, drawableKinds);
-  const blueprints = defaultViewKinds(active?.signature);
+  const blueprints = defaultViewKinds(active?.signature, active?.entry.type?.classification.kind);
   if (blueprints.length > 0) return blueprints;
   // Nothing drawable to infer from: open on a pane that can explain itself.
   return [{ kind: nominalViewKind(subsystem), mode: defaultModeFor(active?.signature.codomain) }];

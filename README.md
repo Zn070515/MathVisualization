@@ -54,8 +54,13 @@ contour integral together with its accumulated value.
 
 ## Integral Transforms
 
-The time-domain graph is available today. Fourier transforms and a linked
-frequency-domain view are planned, so there is no transform demo GIF yet.
+Enter a real-valued signal, inspect its finite-window numerical Fourier spectrum,
+switch between magnitude, phase, real and imaginary views, and change a live
+parameter while the time and frequency views update together.
+
+<p align="center">
+  <img src="docs/assets/transforms-demo.gif" alt="Integral Transforms in MathVisualization" width="100%" />
+</p>
 
 ## Multivariable Calculus
 
@@ -524,7 +529,9 @@ across views; parameters as live sliders; the symbolic derivative.
 
 **Integral Transforms** — expression typing; a graph of the signal on graduated
 axes, with real and imaginary parts separated for a complex signal, pan, zoom about
-the pointer, and a control that frames the measured range; the shared cursor.
+the pointer, and a control that frames the measured range; a finite-window numerical
+Fourier transform with magnitude, phase, real and imaginary projections; the shared
+time-domain cursor and an independent frequency-domain cursor.
 
 **Multivariable Calculus** — a surface for `z = f(x, y)` on a camera of its own,
 with orbit, pan and zoom, and with a point where the function has no value drawn as
@@ -535,9 +542,9 @@ The complex subsystem also now includes numerical contour integrals, accumulated
 integral trajectories, detected zero/pole orders, numerical residues, and an
 uncertainty-aware residue-theorem cross-check. Still not implemented, and not
 approximated: Taylor and Laurent series, branch cuts, Cauchy–Riemann residual
-fields in the complex subsystem; Fourier series and transforms, the DFT and FFT,
-sampling and aliasing, convolution, the Laplace transform, the s-plane and the
-region of convergence in the transforms subsystem; contours, gradients,
+fields in the complex subsystem; Fourier series, the DFT and FFT, sampling and
+aliasing, convolution, the Laplace transform, the s-plane and the region of
+convergence in the transforms subsystem; contours, gradients,
 directional derivatives, tangent planes, critical points, multiple integrals,
 coordinate changes, vector fields, divergence, curl, and the three integral
 theorems in the calculus subsystem.

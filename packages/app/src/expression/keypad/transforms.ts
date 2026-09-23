@@ -2,10 +2,9 @@
  * The keypad for integral transforms.
  *
  * A signal in this subsystem is a function of a real variable, so what is added here
- * is the vocabulary of signals rather than the vocabulary of operators. The
- * transforms themselves — the Fourier and Laplace integrals, the convolution
- * operator, the impulse — are not in the expression language yet, and their keys say
- * so instead of inserting something unreadable.
+ * is the vocabulary of signals rather than the vocabulary of operators. Fourier is
+ * now a live expression operation; the other transform operators remain planned
+ * until their AST and numerical semantics exist.
  */
 import { functionKey, key, plannedKey, type KeypadRow } from './types';
 
@@ -32,6 +31,17 @@ export const TRANSFORMS_FUNCTION_ROWS: readonly KeypadRow[] = [
       functionKey('exp', 'Exponential in t'),
     ],
   },
+  { kind: 'heading', title: 'Transform operations' },
+  {
+    kind: 'wrap',
+    keys: [
+      key(
+        'ℱ',
+        '\\operatorname{Fourier}\\left(#?\\right)',
+        'A numerical Fourier transform',
+      ),
+    ],
+  },
 ];
 
 export const TRANSFORMS_PLANNED_ROWS: readonly KeypadRow[] = [
@@ -39,7 +49,6 @@ export const TRANSFORMS_PLANNED_ROWS: readonly KeypadRow[] = [
   {
     kind: 'wrap',
     keys: [
-      plannedKey('ℱ', 'the Fourier transform'),
       plannedKey('ℱ⁻¹', 'the inverse Fourier transform'),
       plannedKey('ℒ', 'the Laplace transform'),
       plannedKey('ℒ⁻¹', 'the inverse Laplace transform'),
