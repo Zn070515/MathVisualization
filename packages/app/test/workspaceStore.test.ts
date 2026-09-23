@@ -96,6 +96,23 @@ describe('parameter updates', () => {
     expect(store.evaluationValues().get('a')).toEqual(cx(5, 0));
   });
 
+  it('keeps an explicit frequency viewport when parameters change', () => {
+    const store = makeStoreFromLatex(
+      [
+        'a=1',
+        'f(t)=\\exp\\left(-a\\cdot t^{2}\\right)',
+        'F(\\omega)=\\operatorname{Fourier}\\left(f(t)\\right)',
+      ],
+      'transforms',
+    );
+    const viewport = { ...store.getState().frequencyViewport, yMax: 3 };
+
+    store.setFrequencyViewport(viewport);
+    store.setParameter('a', 2);
+
+    expect(store.getState().frequencyViewport).toEqual(viewport);
+  });
+
   it('keeps a dragged value when an unrelated line changes', () => {
     const store = makeStore(['a=2', 'b=3'], 'complex');
     store.setParameter('a', 9);

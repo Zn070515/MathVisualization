@@ -56,7 +56,8 @@ contour integral together with its accumulated value.
 
 Enter a real-valued signal, inspect its finite-window numerical Fourier spectrum,
 switch between magnitude, phase, real and imaginary views, and change a live
-parameter while the time and frequency views update together.
+parameter while the time and frequency views update together. The frequency frame
+persists while values change; reframing is an explicit **Fit** action.
 
 <p align="center">
   <img src="docs/assets/transforms-demo.gif" alt="Integral Transforms in MathVisualization" width="100%" />
@@ -478,6 +479,17 @@ pnpm typecheck     # tsc, both packages
 pnpm test          # the suite
 pnpm build         # production build of the application
 ```
+
+To record the README demos locally, install Chromium for the repository-owned
+Playwright dependency once, then run the prerequisite check:
+
+```bash
+pnpm demo:setup
+pnpm demo:check
+```
+
+The intermediate WebM recordings stay in `docs/assets/source/` locally and are
+ignored by Git; the committed GIFs are the CI-checked README artifacts.
 
 `pnpm verify` runs all four in order, and GitHub Actions runs that same command on
 every push to `main` and every pull request (`.github/workflows/ci.yml`) — the gate

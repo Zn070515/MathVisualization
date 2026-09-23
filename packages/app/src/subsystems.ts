@@ -151,7 +151,7 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
       {
         name: 'Fourier transform',
         summary:
-          'A finite-window numerical transform with magnitude, phase, real and imaginary frequency views, with the angular-frequency convention stated.',
+          'A finite-window numerical transform with magnitude, phase, real and imaginary frequency views, a persistent frequency frame with an explicit Fit action, and the angular-frequency convention stated.',
         status: 'implemented',
       },
       {

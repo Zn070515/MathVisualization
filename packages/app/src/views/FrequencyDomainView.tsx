@@ -11,10 +11,11 @@ import {
   selectActiveExpression,
   type ViewRendererProps,
 } from '../state/workspaceStore';
+import type { FrequencyViewport } from '../state/workspaceStore';
 import { useResizeVersion } from './useResizeVersion';
 import {
-  DEFAULT_FREQUENCY_WINDOW,
   estimateActiveFourierTransform,
+  fitFrequencyViewport,
   frequencyRange,
   projectFourierValue,
   transformModeOf,
@@ -43,10 +44,11 @@ export function FrequencyDomainView({ store, view }: ViewRendererProps): React.J
   );
   const mode = transformModeOf(view.mode);
   const frequencyCursor = state.frequencyHover ?? state.frequencySelection;
-  const range = useMemo(
+  const measuredRange = useMemo(
     () => (estimate === null ? null : frequencyRange(estimate, mode)),
     [estimate, mode],
   );
+  const frequencyViewport = state.frequencyViewport;
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -54,7 +56,7 @@ export function FrequencyDomainView({ store, view }: ViewRendererProps): React.J
     const surface = prepareCanvas2d(canvas);
     if (surface === null) return;
     const { context, width, height, ratio } = surface;
-    const window = plotWindow(range);
+    const window = plotWindow(frequencyViewport);
     drawGridAndAxes(context, {
       window,
       width,
@@ -100,7 +102,7 @@ export function FrequencyDomainView({ store, view }: ViewRendererProps): React.J
         context.stroke();
       }
     }
-  }, [estimate, frequencyCursor, mode, range]);
+  }, [estimate, frequencyCursor, frequencyViewport, mode]);
 
   useEffect(() => {
     draw();
@@ -115,11 +117,11 @@ export function FrequencyDomainView({ store, view }: ViewRendererProps): React.J
         role="img"
         aria-label={`Frequency-domain plot of ${MODE_LABELS[mode]} over angular frequency ω`}
         onPointerMove={(event) => {
-          const frequency = frequencyAt(event, canvasRef.current, plotWindow(range));
+          const frequency = frequencyAt(event, canvasRef.current, plotWindow(frequencyViewport));
           if (frequency !== null) store.setFrequencyHover(frequency);
         }}
         onPointerDown={(event) => {
-          const frequency = frequencyAt(event, canvasRef.current, plotWindow(range));
+          const frequency = frequencyAt(event, canvasRef.current, plotWindow(frequencyViewport));
           if (frequency !== null) {
             store.setFrequencySelection(frequency);
             store.setFrequencyHover(frequency);
@@ -141,6 +143,24 @@ export function FrequencyDomainView({ store, view }: ViewRendererProps): React.J
             )}
           </span>
         )}
+        {measuredRange !== null && (
+          <span className="legend__range">
+            measured y {displayNumberToText(viewNumber(measuredRange.min))} …{' '}
+            {displayNumberToText(viewNumber(measuredRange.max))}
+            <button
+              type="button"
+              className="legend__action"
+              onClick={() => {
+                if (estimate === null) return;
+                const fitted = fitFrequencyViewport(frequencyViewport, estimate, mode);
+                if (fitted !== null) store.setFrequencyViewport(fitted);
+              }}
+              title="Move the frequency frame to the measured range"
+            >
+              Fit
+            </button>
+          </span>
+        )}
       </div>
 
       {diagnostic !== null && (
@@ -152,15 +172,12 @@ export function FrequencyDomainView({ store, view }: ViewRendererProps): React.J
   );
 }
 
-function plotWindow(range: { min: number; max: number } | null): Window2d {
-  const yMin = range?.min ?? -1;
-  const yMax = range?.max ?? 1;
-  const padding = Math.max((yMax - yMin) * 0.12, 0.1);
+function plotWindow(viewport: FrequencyViewport): Window2d {
   return {
-    xMin: DEFAULT_FREQUENCY_WINDOW.min,
-    xMax: DEFAULT_FREQUENCY_WINDOW.max,
-    yMin: yMin - padding,
-    yMax: yMax + padding,
+    xMin: viewport.xMin,
+    xMax: viewport.xMax,
+    yMin: viewport.yMin,
+    yMax: viewport.yMax,
   };
 }
 

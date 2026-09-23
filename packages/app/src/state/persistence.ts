@@ -86,11 +86,19 @@ export interface PersistedCamera3d {
   readonly targetZ: number;
 }
 
+export interface PersistedFrequencyViewport {
+  readonly xMin: number;
+  readonly xMax: number;
+  readonly yMin: number;
+  readonly yMax: number;
+}
+
 /** What is written. */
 export interface PersistedWorkspace {
   readonly lines: readonly string[];
   readonly parameterValues: Record<string, number>;
   readonly viewport: { centreRe: number; centreIm: number; halfWidth: number };
+  readonly frequencyViewport?: PersistedFrequencyViewport;
   /**
    * Optional, and that is not a compromise: an older build wrote records without
    * it, and the reader already treats a missing field as "use the default". A new
@@ -124,6 +132,7 @@ export interface LoadedWorkspace {
   readonly lines: readonly string[];
   readonly parameterValues: Record<string, number>;
   readonly viewport: PersistedWorkspace['viewport'];
+  readonly frequencyViewport: PersistedWorkspace['frequencyViewport'];
   /** Null when nothing usable was stored, which is what the store's default is for. */
   readonly camera: Camera3d | null;
   readonly views: StoredViews;
@@ -199,6 +208,30 @@ function readViewport(entry: Record<string, unknown>): PersistedWorkspace['viewp
   return usable ? { centreRe, centreIm, halfWidth } : fallback;
 }
 
+function readFrequencyViewport(
+  entry: Record<string, unknown>,
+): PersistedWorkspace['frequencyViewport'] {
+  const stored = entry['frequencyViewport'];
+  if (!isRecord(stored)) return undefined;
+
+  const xMin = stored['xMin'];
+  const xMax = stored['xMax'];
+  const yMin = stored['yMin'];
+  const yMax = stored['yMax'];
+  const usable =
+    typeof xMin === 'number' &&
+    Number.isFinite(xMin) &&
+    typeof xMax === 'number' &&
+    Number.isFinite(xMax) &&
+    xMax > xMin &&
+    typeof yMin === 'number' &&
+    Number.isFinite(yMin) &&
+    typeof yMax === 'number' &&
+    Number.isFinite(yMax) &&
+    yMax > yMin;
+  return usable ? { xMin, xMax, yMin, yMax } : undefined;
+}
+
 function readParameterValues(entry: Record<string, unknown>): Record<string, number> {
   const values: Record<string, number> = {};
   const stored = entry['parameterValues'];
@@ -269,6 +302,7 @@ function readEntry(
     lines: readLines(entry, migrateLines),
     parameterValues: readParameterValues(entry),
     viewport: readViewport(entry),
+    frequencyViewport: readFrequencyViewport(entry),
     camera: readCamera(entry),
     views: readViews(entry),
   };

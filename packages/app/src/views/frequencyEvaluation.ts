@@ -8,7 +8,10 @@ import {
   estimateFourierTransform,
   workspaceEnvironment,
 } from '@mathviz/mathcore';
-import type { ActiveExpression } from '../state/workspaceStore';
+import type {
+  ActiveExpression,
+  FrequencyViewport,
+} from '../state/workspaceStore';
 
 export type TransformMode = Exclude<FieldMode, 'complex'>;
 
@@ -78,6 +81,22 @@ export function frequencyRange(
   if (mode === 'magnitude') return { min: 0, max: Math.max(max, 1e-6) };
   const extent = Math.max(Math.abs(min), Math.abs(max), 1e-6);
   return { min: -extent, max: extent };
+}
+
+/** Return a requested frame for the explicit Fit action, never for rendering. */
+export function fitFrequencyViewport(
+  current: FrequencyViewport,
+  estimate: FourierEstimate,
+  mode: TransformMode,
+): FrequencyViewport | null {
+  const range = frequencyRange(estimate, mode);
+  if (range === null) return null;
+  const padding = Math.max((range.max - range.min) * 0.12, 0.1);
+  return {
+    ...current,
+    yMin: range.min - padding,
+    yMax: range.max + padding,
+  };
 }
 
 /** A type-only helper for consumers that need to construct the same environment. */

@@ -1,6 +1,7 @@
 import { manifestFor } from '../scenarioManifest.mjs';
 
 const manifest = manifestFor('transforms');
+const SLIDER_DRAG_STEPS = 18;
 
 export default {
   ...manifest,
@@ -54,21 +55,32 @@ export default {
     await slider.waitFor();
     const sliderBounds = await slider.boundingBox();
     if (sliderBounds === null) throw new Error('Fourier parameter slider has no visible bounds.');
-    const min = Number(await slider.getAttribute('min'));
-    const max = Number(await slider.getAttribute('max'));
     const current = Number(await slider.inputValue());
     // Keep the drag inside the initial slider range. The product deliberately
     // expands a range when a value leaves it; staying inside that range keeps
     // the thumb visually stable while the recording shows a real drag.
     const target = 1.35;
-    const xFor = (value) => sliderBounds.x + ((value - min) / (max - min)) * sliderBounds.width;
-    let pointer = { x: xFor(current), y: sliderBounds.y + sliderBounds.height / 2 };
+    const initialMin = Number(await slider.getAttribute('min'));
+    const initialMax = Number(await slider.getAttribute('max'));
+    const xFor = (value, bounds, min, max) =>
+      bounds.x + ((value - min) / (max - min)) * bounds.width;
+    let pointer = {
+      x: xFor(current, sliderBounds, initialMin, initialMax),
+      y: sliderBounds.y + sliderBounds.height / 2,
+    };
     await page.mouse.move(pointer.x, pointer.y);
     await page.mouse.down();
-    for (let step = 1; step <= 1; step += 1) {
-      const value = current + ((target - current) * step) / 1;
-      const next = { x: xFor(value), y: pointer.y };
-      await moveHumanLike(page, pointer, next, { steps: 1, durationMs: 600 });
+    for (let step = 1; step <= SLIDER_DRAG_STEPS; step += 1) {
+      const value = current + ((target - current) * step) / SLIDER_DRAG_STEPS;
+      const liveBounds = await slider.boundingBox();
+      if (liveBounds === null) throw new Error('Fourier parameter slider left the page.');
+      const liveMin = Number(await slider.getAttribute('min'));
+      const liveMax = Number(await slider.getAttribute('max'));
+      const next = { x: xFor(value, liveBounds, liveMin, liveMax), y: liveBounds.y + liveBounds.height / 2 };
+      await moveHumanLike(page, pointer, next, {
+        steps: 1,
+        durationMs: 600 / SLIDER_DRAG_STEPS,
+      });
       pointer = next;
     }
     await page.mouse.up();

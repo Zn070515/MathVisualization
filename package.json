@@ -11,6 +11,7 @@
     "test": "pnpm -r test",
     "test:watch": "pnpm -r test:watch",
     "demo:check": "node scripts/demo/record.mjs --check",
+    "demo:setup": "playwright install chromium",
     "demo:test": "node --test scripts/demo/*.test.mjs",
     "demo:rehearse": "node scripts/demo/record.mjs --rehearse",
     "demo:complex": "node scripts/demo/record.mjs complex",
@@ -31,6 +32,7 @@
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.14",
     "globals": "^15.12.0",
+    "playwright": "1.63.0",
     "prettier": "^3.4.1",
     "typescript": "^5.9.0",
     "typescript-eslint": "^8.16.0"

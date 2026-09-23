@@ -108,6 +108,13 @@ describe('which version is read', () => {
     expect(loadWorkspace('transforms')?.lines).toEqual(['b']);
   });
 
+  it('round-trips the explicit frequency viewport', () => {
+    const frequencyViewport = { xMin: -8, xMax: 8, yMin: -1, yMax: 3 };
+    saveWorkspace('transforms', workspace({ frequencyViewport }));
+
+    expect(loadWorkspace('transforms')?.frequencyViewport).toEqual(frequencyViewport);
+  });
+
   it('normalizes an invalid complex mode on a frequency view', () => {
     writeFile(V3, {
       transforms: {

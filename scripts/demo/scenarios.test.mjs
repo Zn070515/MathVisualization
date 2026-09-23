@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { test } from 'node:test';
+import { URL } from 'node:url';
 
 import calculus from './scenarios/calculus.mjs';
 import complex from './scenarios/complex.mjs';
@@ -21,4 +23,8 @@ test('transforms scenario declares the real Fourier workflow', () => {
   assert.equal(transforms.status, 'ready');
   assert.equal(typeof transforms.run, 'function');
   assert.match(transforms.description, /Fourier|frequency|parameter/i);
+  assert.match(
+    fs.readFileSync(new URL('./scenarios/transforms.mjs', import.meta.url), 'utf8'),
+    /SLIDER_DRAG_STEPS = (?:1[5-9]|20)/,
+  );
 });

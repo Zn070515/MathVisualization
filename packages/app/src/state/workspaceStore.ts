@@ -65,6 +65,21 @@ export const DEFAULT_VIEWPORT: Viewport = {
   halfWidth: 2.4,
 };
 
+/** A frequency-domain frame whose scale survives parameter changes. */
+export interface FrequencyViewport {
+  readonly xMin: number;
+  readonly xMax: number;
+  readonly yMin: number;
+  readonly yMax: number;
+}
+
+export const DEFAULT_FREQUENCY_VIEWPORT: FrequencyViewport = {
+  xMin: -8,
+  xMax: 8,
+  yMin: -0.25,
+  yMax: 2,
+};
+
 /**
  * What a canvas pane is showing.
  *
@@ -123,6 +138,7 @@ export interface WorkspaceState {
   /** Frequency-domain cursor, kept numeric so ω is never mistaken for a plane point. */
   readonly frequencyHover: number | null;
   readonly frequencySelection: number | null;
+  readonly frequencyViewport: FrequencyViewport;
   readonly viewport: Viewport;
   /**
    * Where a three-dimensional view is looking from.
@@ -314,6 +330,7 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
       selection: null,
       frequencyHover: null,
       frequencySelection: null,
+      frequencyViewport: DEFAULT_FREQUENCY_VIEWPORT,
       viewport: DEFAULT_VIEWPORT,
       camera3d: DEFAULT_CAMERA_3D,
       views: withFreshIds(
@@ -339,6 +356,7 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
   restore(parts: {
     parameterValues?: ReadonlyMap<string, number>;
     viewport?: Viewport;
+    frequencyViewport?: FrequencyViewport;
     camera3d?: Camera3d;
     views?: readonly ViewBlueprint[];
   }): void {
@@ -349,6 +367,7 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
           ? state.parameterValues
           : reconcileParameters(state.workspace, parts.parameterValues),
       viewport: parts.viewport ?? state.viewport,
+      frequencyViewport: parts.frequencyViewport ?? state.frequencyViewport,
       camera3d: parts.camera3d ?? state.camera3d,
       views: parts.views === undefined ? state.views : withFreshIds(parts.views),
       // Restoring somebody's arrangement settles the question: from here on the
@@ -467,6 +486,11 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
 
   setViewport(viewport: Viewport): void {
     this.update((state) => ({ ...state, viewport }));
+  }
+
+  /** Set the frequency frame explicitly; estimates never change its scale. */
+  setFrequencyViewport(frequencyViewport: FrequencyViewport): void {
+    this.update((state) => ({ ...state, frequencyViewport }));
   }
 
   panViewport(deltaRe: number, deltaIm: number): void {

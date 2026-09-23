@@ -1,6 +1,5 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import process from 'node:process';
 import { fileURLToPath, URL } from 'node:url';
 import { manifestFor } from './scenarioManifest.mjs';
 
@@ -10,20 +9,13 @@ export const VIDEO_SIZE = Object.freeze({ width: 1440, height: 900 });
 export const ASSET_DIR = path.join(ROOT_DIR, 'docs', 'assets');
 export const SOURCE_DIR = path.join(ASSET_DIR, 'source');
 
-export function resolvePlaywrightRepo() {
-  return path.resolve(
-    process.env.MATHVIZ_PLAYWRIGHT_REPO ?? path.join(ROOT_DIR, '..', 'demo_ArtFlow'),
-  );
-}
-
 export function loadPlaywright() {
-  const repo = resolvePlaywrightRepo();
-  const requireFromRepo = createRequire(path.join(repo, 'package.json'));
+  const requireFromRepo = createRequire(path.join(ROOT_DIR, 'package.json'));
   try {
     return requireFromRepo('playwright');
   } catch (error) {
     throw new Error(
-      `Could not load Playwright from ${repo}. Set MATHVIZ_PLAYWRIGHT_REPO to the external repo containing node_modules.`,
+      'Playwright is not installed in this repository. Run `pnpm install` and `pnpm demo:setup`.',
       { cause: error },
     );
   }

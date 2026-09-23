@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cx, type FourierEstimate } from '@mathviz/mathcore';
 import {
+  fitFrequencyViewport,
   frequencyRange,
   projectFourierValue,
   transformModeOf,
@@ -44,5 +45,26 @@ describe('frequency-domain projections', () => {
       expect(range?.min).toBe(-Math.max(Math.abs(mode === 'real' ? 3 : 1), 1e-6));
       expect(range?.max).toBe(Math.max(Math.abs(mode === 'real' ? 3 : 1), 1e-6));
     }
+  });
+
+  it('fits only when the caller explicitly requests a new frame', () => {
+    const estimate: FourierEstimate = {
+      values: [cx(0, 0), cx(4, 0)],
+      frequencies: [-1, 1],
+      timeWindow: { min: -1, max: 1 },
+      timeSamples: 4,
+      estimatedError: 0,
+      convergence: 'converged',
+      diagnostics: [],
+    };
+    const current = { xMin: -8, xMax: 8, yMin: -2, yMax: 2 };
+
+    expect(fitFrequencyViewport(current, estimate, 'magnitude')).toEqual({
+      xMin: -8,
+      xMax: 8,
+      yMin: -0.48,
+      yMax: 4.48,
+    });
+    expect(current).toEqual({ xMin: -8, xMax: 8, yMin: -2, yMax: 2 });
   });
 });

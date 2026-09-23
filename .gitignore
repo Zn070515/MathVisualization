@@ -4,6 +4,7 @@ coverage/
 *.tsbuildinfo
 .vite/
 .worktrees/
+docs/assets/source/*.webm
 
 # Python
 __pycache__/
