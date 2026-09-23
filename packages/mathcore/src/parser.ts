@@ -804,6 +804,65 @@ class Parser {
       };
     }
 
+    if (callee.text === 'Convolution') {
+      if (args.length !== 2) {
+        return {
+          ok: false,
+          issue: this.errorAt(
+            callee,
+            'Convolution needs two source function calls, as in Convolution(f(t), g(t)).',
+          ),
+        };
+      }
+      const left = args[0] as Expr;
+      const right = args[1] as Expr;
+      if (left.kind !== 'call' || left.args.length !== 1) {
+        return {
+          ok: false,
+          issue: this.errorAt(
+            callee,
+            'Convolution needs a unary left source function call, as in Convolution(f(t), g(t)).',
+          ),
+        };
+      }
+      if (right.kind !== 'call' || right.args.length !== 1) {
+        return {
+          ok: false,
+          issue: this.errorAt(
+            callee,
+            'Convolution needs a unary right source function call, as in Convolution(f(t), g(t)).',
+          ),
+        };
+      }
+      const leftVariable = left.args[0] as Expr;
+      const rightVariable = right.args[0] as Expr;
+      if (leftVariable.kind !== 'variable' || rightVariable.kind !== 'variable') {
+        return {
+          ok: false,
+          issue: this.errorAt(
+            callee,
+            'Convolution needs explicit real source variables, as in Convolution(f(t), g(t)).',
+          ),
+        };
+      }
+      if (leftVariable.name !== rightVariable.name) {
+        return {
+          ok: false,
+          issue: this.errorAt(callee, 'Convolution source calls must use the same variable.'),
+        };
+      }
+      return {
+        ok: true,
+        value: {
+          kind: 'convolution',
+          left,
+          right,
+          sourceVariable: leftVariable.name,
+          span: span(callee.start, this.lastTokenEnd(args)),
+        },
+      };
+    }
+
     return {
       ok: true,
       value: {

@@ -22,7 +22,7 @@
  * forces a widening, the type system widens. Callers that need a narrower type
  * must prove non-negativity to get it.
  */
-import { type Expr, asIntegerLiteral } from './ast';
+import { type ConvolutionNode, type Expr, asIntegerLiteral } from './ast';
 import { builtinFunction } from './builtins';
 import { builtinConstant } from './conventions';
 import { fail, ok, type MathIssue, type Result } from './errors';
@@ -199,6 +199,9 @@ export function inferSpace(
       return ok(C1);
     }
 
+    case 'convolution':
+      return inferConvolutionSpace(expr, context);
+
     case 'unary':
       return inferSpace(expr.operand, context);
 
@@ -260,6 +263,56 @@ export function inferSpace(
       });
     }
   }
+}
+
+function inferConvolutionSpace(
+  expr: ConvolutionNode,
+  context: InferenceContext,
+): Result<Space, MathIssue> {
+  const sourceCalls = [expr.left, expr.right] as const;
+  const sourceSpaces: Space[] = [];
+
+  for (const source of sourceCalls) {
+    if (source.kind !== 'call' || source.args.length !== 1) {
+      return fail({
+        kind: 'unsupported',
+        detail: 'Convolution source is not a unary function call.',
+        message: 'A convolution needs two one-variable real source functions.',
+        span: expr.span,
+      });
+    }
+    const variable = source.args[0];
+    if (variable?.kind !== 'variable' || variable.name !== expr.sourceVariable) {
+      return fail({
+        kind: 'unsupported',
+        detail: 'Convolution source variable is not explicitly bound.',
+        message:
+          'A convolution needs both source functions to use the same explicit real variable.',
+        span: expr.span,
+      });
+    }
+
+    const sourceSpace = inferSpace(source, {
+      variables: new Map([...context.variables, [expr.sourceVariable, R1]]),
+      functions: context.functions,
+    });
+    if (!sourceSpace.ok) return sourceSpace;
+
+    const signature = context.functions.get(source.callee);
+    if (
+      signature !== undefined &&
+      (signature.domain.kind !== 'R' || signature.domain.dim !== 1)
+    ) {
+      return fail({
+        kind: 'dimension-mismatch',
+        message: `Convolution currently accepts one-real-variable sources, but "${source.callee}" has signature ${spaceToString(signature.domain)} → ${spaceToString(signature.codomain)}.`,
+        span: source.span,
+      });
+    }
+    sourceSpaces.push(sourceSpace.value);
+  }
+
+  return sourceSpaces.some((space) => space.kind === 'C') ? ok(C1) : ok(R1);
 }
 
 function inferPowerSpace(
@@ -555,6 +608,15 @@ export function classifyDefinitionWith(
   signature: Signature,
   body: Expr,
 ): InferredType {
+  if (body.kind === 'convolution') {
+    return {
+      signature,
+      classification: {
+        kind: 'convolution-pair',
+        description: 'Two real signals and their finite-window numerical convolution',
+      },
+    };
+  }
   if (body.kind === 'fourier-transform' || body.kind === 'dft-transform') {
     return {
       signature,

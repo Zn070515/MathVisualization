@@ -175,6 +175,14 @@ export function evaluate(
       });
     }
 
+    case 'convolution':
+      return fail({
+        kind: 'unsupported',
+        detail: 'Convolution is evaluated by a finite-window numerical estimator.',
+        message: 'A convolution is a finite-window numerical estimate, not a pointwise scalar value.',
+        span: expr.span,
+      });
+
     case 'constant': {
       const constant = builtinConstant(expr.name);
       if (constant === undefined) {

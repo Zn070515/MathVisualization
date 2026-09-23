@@ -149,6 +149,22 @@ export interface DftTransformNode {
   readonly span: SourceSpan;
 }
 
+/**
+ * A finite-window numerical convolution, `Convolution(f(t), g(t))`.
+ *
+ * The source variable is bound by this node. The output variable belongs to the
+ * containing one-variable function definition, just as the frequency variable
+ * belongs to a Fourier or DFT transform definition.
+ */
+export interface ConvolutionNode {
+  readonly kind: 'convolution';
+  readonly left: Expr;
+  readonly right: Expr;
+  /** The real variable used by both source calls and bound by this node. */
+  readonly sourceVariable: string;
+  readonly span: SourceSpan;
+}
+
 export type Expr =
   | NumberLiteralNode
   | VariableNode
@@ -159,7 +175,8 @@ export type Expr =
   | TupleNode
   | ContourIntegralNode
   | FourierTransformNode
-  | DftTransformNode;
+  | DftTransformNode
+  | ConvolutionNode;
 
 export type ExprKind = Expr['kind'];
 
@@ -231,6 +248,8 @@ export function childNodes(expr: Expr): readonly Expr[] {
     case 'fourier-transform':
     case 'dft-transform':
       return [expr.source];
+    case 'convolution':
+      return [expr.left, expr.right];
   }
 }
 
@@ -275,6 +294,12 @@ export function collectVariableNames(expr: Expr): string[] {
     }
     if (node.kind === 'dft-transform') {
       visit(node.source, new Set([...bound, node.sourceVariable]));
+      return;
+    }
+    if (node.kind === 'convolution') {
+      const convolutionBound = new Set([...bound, node.sourceVariable]);
+      visit(node.left, convolutionBound);
+      visit(node.right, convolutionBound);
       return;
     }
     for (const child of childNodes(node)) visit(child, bound);

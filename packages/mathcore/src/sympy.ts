@@ -314,6 +314,15 @@ function lower(expr: Expr, symbols: Map<string, string>): Result<string, MathIss
         span: expr.span,
       });
     }
+
+    case 'convolution':
+      return fail({
+        kind: 'unsupported',
+        detail: 'Convolution handed to the symbolic engine',
+        message:
+          'A convolution is evaluated numerically over a finite window, so the symbolic engine is not given this node.',
+        span: expr.span,
+      });
   }
 }
 
@@ -370,6 +379,8 @@ export function complexDerivativeIssue(expr: Expr, variable: string): MathIssue 
       case 'fourier-transform':
       case 'dft-transform':
         return dependsOn(node.source, name);
+      case 'convolution':
+        return dependsOn(node.left, name) || dependsOn(node.right, name);
       default:
         return false;
     }
@@ -412,6 +423,10 @@ export function complexDerivativeIssue(expr: Expr, variable: string): MathIssue 
       case 'fourier-transform':
       case 'dft-transform':
         visit(node.source);
+        break;
+      case 'convolution':
+        visit(node.left);
+        visit(node.right);
         break;
       default:
         break;

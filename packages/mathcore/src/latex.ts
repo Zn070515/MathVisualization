@@ -132,6 +132,7 @@ const OPERATOR_NAMES: Readonly<Record<string, string>> = {
   sgn: 'sgn',
   Fourier: 'Fourier',
   DFT: 'DFT',
+  Convolution: 'Convolution',
 };
 
 /** Sizing and spacing commands carry no mathematical content. */
@@ -173,6 +174,7 @@ const OPERATOR_BY_FUNCTION: Readonly<Record<string, string>> = {
   arg: 'arg',
   Fourier: 'Fourier',
   DFT: 'DFT',
+  Convolution: 'Convolution',
 };
 
 // ---------------------------------------------------------------------------
@@ -1511,6 +1513,62 @@ class LatexParser {
       };
     }
 
+    if (callee === 'Convolution') {
+      if (args.length !== 2) {
+        return {
+          ok: false,
+          issue: wrong(
+            start,
+            'Convolution needs two source function calls, as in Convolution(f(t), g(t)).',
+          ),
+        };
+      }
+      const left = args[0] as Expr;
+      const right = args[1] as Expr;
+      if (left.kind !== 'call' || left.args.length !== 1) {
+        return {
+          ok: false,
+          issue: wrong(
+            start,
+            'Convolution needs a unary left source function call, as in Convolution(f(t), g(t)).',
+          ),
+        };
+      }
+      if (right.kind !== 'call' || right.args.length !== 1) {
+        return {
+          ok: false,
+          issue: wrong(
+            start,
+            'Convolution needs a unary right source function call, as in Convolution(f(t), g(t)).',
+          ),
+        };
+      }
+      const leftVariable = left.args[0] as Expr;
+      const rightVariable = right.args[0] as Expr;
+      if (leftVariable.kind !== 'variable' || rightVariable.kind !== 'variable') {
+        return {
+          ok: false,
+          issue: wrong(
+            start,
+            'Convolution needs explicit real source variables, as in Convolution(f(t), g(t)).',
+          ),
+        };
+      }
+      if (leftVariable.name !== rightVariable.name) {
+        return { ok: false, issue: wrong(start, 'Convolution source calls must use the same variable.') };
+      }
+      return {
+        ok: true,
+        value: {
+          kind: 'convolution',
+          left,
+          right,
+          sourceVariable: leftVariable.name,
+          span: { start: start.start, end: this.lastSpan().end },
+        },
+      };
+    }
+
     return {
       ok: true,
       value: {
@@ -1733,6 +1791,8 @@ function latexPrecedenceOf(expr: Expr): number {
       return 100;
     case 'dft-transform':
       return 100;
+    case 'convolution':
+      return 100;
     default:
       return 100;
   }
@@ -1877,6 +1937,9 @@ function printLatex(expr: Expr, minimumPrecedence: number): string {
 
     case 'dft-transform':
       return `\\operatorname{DFT}\\left(${printLatex(expr.source, 0)}\\right)`;
+
+    case 'convolution':
+      return `\\operatorname{Convolution}\\left(${printLatex(expr.left, 0)},${printLatex(expr.right, 0)}\\right)`;
   }
 }
 

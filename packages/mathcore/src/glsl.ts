@@ -356,6 +356,14 @@ class Lowering {
           span: expr.span,
         });
       }
+
+      case 'convolution':
+        return fail({
+          kind: 'unsupported',
+          detail: 'Convolution lowered to a shader',
+          message: 'A convolution is a finite-window estimate, so it cannot be drawn by the pointwise shader backend.',
+          span: expr.span,
+        });
     }
   }
 

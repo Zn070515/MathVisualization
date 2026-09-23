@@ -153,7 +153,7 @@ it('classifies a real convolution definition', () => {
   expect(workspace.entries[2]?.type?.classification.kind).toBe('convolution-pair');
   expect(workspace.entries[2]?.type?.signature).toEqual({
     domain: { kind: 'R', dim: 1 },
-    codomain: { kind: 'C', dim: 1 },
+    codomain: { kind: 'R', dim: 1 },
   });
 });
 
