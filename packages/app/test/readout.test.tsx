@@ -110,6 +110,8 @@ describe('at a discrete Fourier frequency', () => {
     expect(readCell(container, 'D[k]')).toBe('16');
     expect(readCell(container, '|D[k]|')).toBe('16');
     expect(readCell(container, 'Δt')).toBe('0.25');
+    expect(readCell(container, 'alias representatives')).toContain('0');
+    expect(screen.getByText(/same samples for ω \+ k·Ωs/)).toBeTruthy();
   });
 
   it('keeps the raw array index distinct from the signed frequency index', () => {
@@ -127,10 +129,7 @@ describe('at a discrete Fourier frequency', () => {
   });
 
   it('uses the expression frequency variable in the coordinate readout', () => {
-    const store = makeStoreFromLatex(
-      ['f(t)=1', 'D(q)=\\operatorname{DFT}(f(t))'],
-      'transforms',
-    );
+    const store = makeStoreFromLatex(['f(t)=1', 'D(q)=\\operatorname{DFT}(f(t))'], 'transforms');
     store.focusLine(store.getState().lines[1]?.id as string);
     store.setFrequencyHover(0.03);
     const { container } = render(<ReadoutBar store={store} />);

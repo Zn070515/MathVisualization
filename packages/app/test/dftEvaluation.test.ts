@@ -102,6 +102,25 @@ describe('DFT app evaluation', () => {
     expect(readout?.value).toEqual(estimate.values[0]);
   });
 
+  it('attaches the sampling alias family to a snapped bin', () => {
+    const store = dftStore();
+    const state = store.getState();
+    const estimate = estimateActiveDft(
+      store.activeExpression(),
+      state.workspace,
+      state.parameterValues,
+      DEFAULT_DFT_SAMPLING,
+    );
+    if (estimate === null) throw new Error('expected a DFT estimate');
+
+    const readout = readoutAtFrequency(0.03, estimate);
+    expect(readout?.aliasing.samplingAngularFrequency).toBeCloseTo(8 * Math.PI);
+    expect(readout?.aliasing.representative).toBeCloseTo(0);
+    expect(readout?.aliasing.aliases[0]).toBeCloseTo(-8 * Math.PI);
+    expect(readout?.aliasing.aliases[1]).toBeCloseTo(0);
+    expect(readout?.aliasing.aliases[2]).toBeCloseTo(8 * Math.PI);
+  });
+
   it('does not invent a phase for a zero-magnitude bin', () => {
     expect(projectDftValue({ re: 0, im: 0 }, 'phase')).toBeNull();
   });

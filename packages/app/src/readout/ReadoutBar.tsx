@@ -147,7 +147,10 @@ function DftFrequencyValueCells({
         label={frequencyVariable}
         value={<NumberText value={displayNumber(readout.frequency, { digits: 5 })} />}
       />
-      <Cell label="D[k]" value={<ComplexText value={displayComplex(readout.value, { digits: 6 })} />} />
+      <Cell
+        label="D[k]"
+        value={<ComplexText value={displayComplex(readout.value, { digits: 6 })} />}
+      />
       <Cell
         label="|D[k]|"
         value={<NumberText value={displayNumber(readout.magnitude, { digits: 5 })} />}
@@ -160,7 +163,34 @@ function DftFrequencyValueCells({
         label="Nyquist"
         value={<NumberText value={displayNumber(readout.nyquistAngularFrequency, { digits: 5 })} />}
       />
+      <Cell
+        label="Ωs"
+        value={
+          <NumberText
+            value={displayNumber(readout.aliasing.samplingAngularFrequency, { digits: 5 })}
+          />
+        }
+      />
+      <Cell
+        label="alias representatives"
+        value={
+          <span>
+            {readout.aliasing.aliases.map((alias, index) => (
+              <span key={alias}>
+                {index > 0 ? ', ' : null}
+                <NumberText value={displayNumber(alias, { digits: 5 })} />
+              </span>
+            ))}
+          </span>
+        }
+      />
       <span className="readout__reason">
+        same samples for {frequencyVariable} + k·Ωs
+        {' · '}Ωs ={' '}
+        <NumberText
+          value={displayNumber(readout.aliasing.samplingAngularFrequency, { digits: 5 })}
+        />
+        {' · '}
         {readout.stability === 'stable'
           ? 'stable under N→2N refinement'
           : readout.stability === 'sampling-sensitive'

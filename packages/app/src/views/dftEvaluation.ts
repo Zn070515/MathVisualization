@@ -5,7 +5,9 @@ import {
   type DftTransformNode,
   type EvaluationEnvironment,
   type FieldMode,
+  type AliasingRelation,
   type Workspace,
+  describeAliasing,
   cabs,
   estimateDft,
   workspaceEnvironment,
@@ -174,17 +176,21 @@ export interface DftBinReadout extends SnappedDftBin {
   readonly sampleInterval: number;
   readonly nyquistAngularFrequency: number;
   readonly stability: DftEstimate['stability'];
+  readonly aliasing: AliasingRelation;
 }
 
 export function readoutAtFrequency(frequency: number, estimate: DftEstimate): DftBinReadout | null {
   const snapped = snapDftBin(frequency, estimate);
   if (snapped === null) return null;
+  const aliasing = describeAliasing(snapped.frequency, estimate.sampleInterval);
+  if (!aliasing.ok) return null;
   return {
     ...snapped,
     magnitude: cabs(snapped.value),
     sampleInterval: estimate.sampleInterval,
     nyquistAngularFrequency: estimate.nyquistAngularFrequency,
     stability: estimate.stability,
+    aliasing: aliasing.value,
   };
 }
 
