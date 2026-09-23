@@ -71,6 +71,7 @@ const KIND_LABELS: Readonly<Record<MathObjectKind, string>> = {
   'parametric-curve': 'a parametric curve',
   'parametric-surface': 'a parametric surface',
   'transform-pair': 'a transform pair',
+  'convolution-pair': 'a convolution pair',
   unknown: 'of a kind not recognised yet',
 };
 

@@ -124,7 +124,7 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
     title: 'Integral Transforms',
     summary: 'Signals in the time domain and what they become in the transform domain.',
     examples: ['f(t)=exp(-t^2)', 'g(t)=exp(-t)', 'h(t)=sin(t)', 'p(t)=1/(1+t^2)'],
-    drawableKinds: ['real-function', 'complex-path', 'transform-pair'],
+    drawableKinds: ['real-function', 'complex-path', 'transform-pair', 'convolution-pair'],
     capabilities: [
       {
         name: 'Expression typing',

@@ -290,7 +290,10 @@ export function selectActiveExpression(
   if (drawable.length === 0) return null;
 
   const focused = drawable.find((entry) => entry.id === focusedLineId);
-  if (focused?.type?.classification.kind === 'transform-pair') {
+  if (
+    focused?.type?.classification.kind === 'transform-pair' ||
+    focused?.type?.classification.kind === 'convolution-pair'
+  ) {
     return activeExpressionForEntry(focused, workspace);
   }
 
@@ -301,12 +304,19 @@ export function selectActiveExpression(
     const focusedFunctionName = focused.statement.name;
     const matchingPair = drawable.find((entry) => {
       const body = entry.statement?.kind === 'function-definition' ? entry.statement.body : null;
-      return (
-        entry.type?.classification.kind === 'transform-pair' &&
-        (body?.kind === 'fourier-transform' || body?.kind === 'dft-transform') &&
-        body.source.kind === 'call' &&
-        body.source.callee === focusedFunctionName
-      );
+      if (entry.type?.classification.kind === 'transform-pair') {
+        return (
+          (body?.kind === 'fourier-transform' || body?.kind === 'dft-transform') &&
+          body.source.kind === 'call' &&
+          body.source.callee === focusedFunctionName
+        );
+      }
+      if (entry.type?.classification.kind === 'convolution-pair' && body?.kind === 'convolution') {
+        return [body.left, body.right].some(
+          (source) => source.kind === 'call' && source.callee === focusedFunctionName,
+        );
+      }
+      return false;
     });
     if (matchingPair !== undefined) return activeExpressionForEntry(matchingPair, workspace);
   }
@@ -314,7 +324,11 @@ export function selectActiveExpression(
   // If no focused line identifies a pair, a focused drawable expression still
   // wins. The first transform pair is only the fallback when there is no focused
   // drawable expression, so focus remains meaningful in mixed workspaces.
-  const pair = drawable.find((entry) => entry.type?.classification.kind === 'transform-pair');
+  const pair = drawable.find(
+    (entry) =>
+      entry.type?.classification.kind === 'transform-pair' ||
+      entry.type?.classification.kind === 'convolution-pair',
+  );
   const entry = focused ?? pair ?? (drawable[0] as WorkspaceEntry);
   if (entry.type === null) return null;
 
