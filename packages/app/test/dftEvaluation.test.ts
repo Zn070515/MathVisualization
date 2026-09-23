@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { makeStoreFromLatex } from './helpers';
 import {
   DEFAULT_DFT_SAMPLING,
+  dftStemValues,
   estimateActiveDft,
+  projectDftValue,
+  readoutAtFrequency,
+  sampleMarkerValues,
 } from '../src/views/dftEvaluation';
 import { selectDftTransform } from '../src/views/dftEvaluation';
 import { snapDftBin } from '../src/views/dftEvaluation';
@@ -71,5 +75,31 @@ describe('DFT app evaluation', () => {
     const snapped = snapDftBin(0.03, estimate);
     expect(snapped?.bin.angularFrequency).toBe(snapped?.frequency);
     expect(snapped?.value).toEqual(estimate.values[snapped?.bin.index ?? -1]);
+  });
+
+  it('uses the same estimate for sample markers, stems, and readout', () => {
+    const store = dftStore();
+    const state = store.getState();
+    const estimate = estimateActiveDft(
+      store.activeExpression(),
+      state.workspace,
+      state.parameterValues,
+      DEFAULT_DFT_SAMPLING,
+    );
+    if (estimate === null) throw new Error('expected a DFT estimate');
+
+    const markers = sampleMarkerValues(estimate);
+    const stems = dftStemValues(estimate, 'magnitude');
+    const readout = readoutAtFrequency(0.03, estimate);
+    expect(markers).toHaveLength(64);
+    expect(markers[0]?.t).toBe(-8);
+    expect(stems).toHaveLength(64);
+    expect(stems[0]?.frequency).toBe(estimate.bins[0]?.angularFrequency);
+    expect(readout?.bin.index).toBe(0);
+    expect(readout?.value).toEqual(estimate.values[0]);
+  });
+
+  it('does not invent a phase for a zero-magnitude bin', () => {
+    expect(projectDftValue({ re: 0, im: 0 }, 'phase')).toBeNull();
   });
 });

@@ -26,11 +26,16 @@ import { TICK_FONT } from '../render/canvasText';
 import { NumberText } from '../display/NumberText';
 import { roundForScale, viewNumber } from '../display/numbers';
 import { useStore } from '../state/store';
-import { selectSourceExpression, type ViewRendererProps } from '../state/workspaceStore';
+import {
+  selectActiveExpression,
+  selectSourceExpression,
+  type ViewRendererProps,
+} from '../state/workspaceStore';
 import { handleCameraKey } from './cameraKeys';
 import { makePointEvaluation } from './evaluation';
 import { useResizeVersion } from './useResizeVersion';
 import { fitViewport, fromScreen, planeWindow, toScreen } from './window2d';
+import { estimateActiveDft, sampleMarkerValues } from './dftEvaluation';
 
 /** Points sampled across the visible interval. */
 const SAMPLES = 900;
@@ -97,10 +102,19 @@ export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
     () => selectSourceExpression(workspace, focusedLineId, store.drawableKinds),
     [workspace, focusedLineId, store.drawableKinds],
   );
+  const transformActive = useMemo(
+    () => selectActiveExpression(workspace, focusedLineId, store.drawableKinds),
+    [workspace, focusedLineId, store.drawableKinds],
+  );
 
   const evaluation = useMemo(
     () => makePointEvaluation(active, state.parameterValues, functions),
     [active, state.parameterValues, functions],
+  );
+
+  const dftEstimate = useMemo(
+    () => estimateActiveDft(transformActive, workspace, state.parameterValues, state.sampling),
+    [transformActive, workspace, state.parameterValues, state.sampling],
   );
 
   const drawable = useMemo(() => {
@@ -248,6 +262,22 @@ export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
     strokeCurve((value) => value.re, CANVAS_COLORS.curve);
     if (isComplexValued) strokeCurve((value) => value.im, CANVAS_COLORS.curveSecondary);
 
+    // A DFT is a statement about these samples, not merely about the continuous
+    // source curve. Draw the same finite sample values consumed by the DFT view,
+    // so the time-domain and frequency-domain panes cannot drift apart.
+    for (const marker of dftEstimate === null ? [] : sampleMarkerValues(dftEstimate)) {
+      if (marker.t < window.xMin || marker.t > window.xMax) continue;
+      const at = toScreen(window, { x: marker.t, y: marker.value }, width, height);
+      if (!Number.isFinite(at.x) || !Number.isFinite(at.y)) continue;
+      context.beginPath();
+      context.arc(at.x, at.y, Math.max(2.5, ratio * 3), 0, Math.PI * 2);
+      context.fillStyle = CANVAS_COLORS.paper;
+      context.fill();
+      context.strokeStyle = CANVAS_COLORS.curveSecondary;
+      context.lineWidth = Math.max(1.2, ratio * 1.5);
+      context.stroke();
+    }
+
     // The points worth naming: marked always, labelled only for the one the pointer
     // has taken. That is how a reader finds them without the picture disappearing
     // under numbers.
@@ -333,6 +363,7 @@ export function CartesianView({ store }: ViewRendererProps): React.JSX.Element {
     }
   }, [
     criticalPoints,
+    dftEstimate,
     drawable,
     evaluation,
     isComplexValued,

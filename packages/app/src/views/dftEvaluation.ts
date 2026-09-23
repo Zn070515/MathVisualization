@@ -81,6 +81,27 @@ export function dftRange(
   return { min: -extent, max: extent };
 }
 
+export interface DftStemValue {
+  readonly frequency: number;
+  readonly value: number;
+}
+
+export function dftStemValues(
+  estimate: DftEstimate,
+  mode: DftMode,
+): readonly DftStemValue[] {
+  const stems: DftStemValue[] = [];
+  for (let index = 0; index < estimate.bins.length; index += 1) {
+    const bin = estimate.bins[index];
+    const value = estimate.values[index];
+    if (bin === undefined || value === undefined) continue;
+    const projected = projectDftValue(value, mode);
+    if (projected === null || !Number.isFinite(projected)) continue;
+    stems.push({ frequency: bin.angularFrequency, value: projected });
+  }
+  return stems;
+}
+
 export function fitDftViewport(
   current: FrequencyViewport,
   estimate: DftEstimate,
