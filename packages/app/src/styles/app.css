@@ -1284,6 +1284,11 @@ math-field::part(virtual-keyboard-toggle) {
   color: var(--ink-faint);
 }
 
+.legend__control {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
 /* Sits inside the range it acts on, because that is what it frames. Styled as
    text rather than as a button: it is one more thing the legend says, and a
    control that looked like a control here would outweigh the number beside it. */

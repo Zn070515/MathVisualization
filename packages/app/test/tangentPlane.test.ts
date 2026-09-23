@@ -3,6 +3,7 @@ import { cx, fail, linearizationAt, ok, type RealFieldEvaluator } from '@mathviz
 import {
   measureTangentPlaneError,
   sampleTangentPlane,
+  tangentPatchForSelection,
 } from '../src/views/tangentPlane';
 
 const sampling = {
@@ -49,5 +50,29 @@ describe('tangent-plane view data', () => {
 
     const diagnostics = measureTangentPlaneError(evaluate, result.value, sampling);
     expect(diagnostics.unresolvedSamples).toBeGreaterThan(0);
+  });
+
+  it('marks the maximum error unresolved when every sample fails', () => {
+    const evaluate: RealFieldEvaluator = () =>
+      fail({ kind: 'singularity', message: 'undefined sample' });
+    const result = linearizationAt((x, y) => ok(cx(x + y, 0)), 0, 0);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const diagnostics = measureTangentPlaneError(evaluate, result.value, sampling);
+    expect(diagnostics.maxAbsoluteError).toBeNull();
+    expect(diagnostics.unresolvedSamples).toBe(diagnostics.sampleCount);
+  });
+
+  it('keeps an in-domain patch valid at an edge and rejects an outside selection', () => {
+    const domain = { xMin: -2, xMax: 2, yMin: -2, yMax: 2 };
+    const edge = tangentPatchForSelection({ x: 2, y: -2 }, domain, 1);
+    expect(edge).not.toBeNull();
+    expect(edge?.xMin).toBe(0);
+    expect(edge?.xMax).toBe(2);
+    expect(edge?.yMin).toBe(-2);
+    expect(edge?.yMax).toBe(0);
+
+    expect(tangentPatchForSelection({ x: 3, y: 0 }, domain, 1)).toBeNull();
   });
 });

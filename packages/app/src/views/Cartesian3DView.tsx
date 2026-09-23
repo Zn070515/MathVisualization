@@ -46,7 +46,11 @@ import { NumberText } from '../display/NumberText';
 import { useStore } from '../state/store';
 import { selectActiveExpression, type ViewRendererProps } from '../state/workspaceStore';
 import { makePointEvaluation } from './evaluation';
-import { measureTangentPlaneError, sampleTangentPlane } from './tangentPlane';
+import {
+  measureTangentPlaneError,
+  sampleTangentPlane,
+  tangentPatchForSelection,
+} from './tangentPlane';
 import { useResizeVersion } from './useResizeVersion';
 
 /**
@@ -155,14 +159,12 @@ export function Cartesian3DView({ store }: ViewRendererProps): React.JSX.Element
   const linearization = selectedLinearization?.ok ? selectedLinearization.value : null;
   const tangentDomain = useMemo(() => {
     if (state.selection === null) return null;
-    const radius = Math.min(state.viewport.halfWidth * 0.45, MAX_TANGENT_PATCH_RADIUS);
-    return {
-      xMin: Math.max(domain.xMin, state.selection.re - radius),
-      xMax: Math.min(domain.xMax, state.selection.re + radius),
-      yMin: Math.max(domain.yMin, state.selection.im - radius),
-      yMax: Math.min(domain.yMax, state.selection.im + radius),
-    };
-  }, [domain, state.selection, state.viewport.halfWidth]);
+    return tangentPatchForSelection(
+      { x: state.selection.re, y: state.selection.im },
+      domain,
+      MAX_TANGENT_PATCH_RADIUS,
+    );
+  }, [domain, state.selection]);
   const tangentMesh = useMemo(() => {
     if (!showTangentPlane || linearization === null || tangentDomain === null) return null;
     return sampleTangentPlane(linearization, {
@@ -592,17 +594,22 @@ export function Cartesian3DView({ store }: ViewRendererProps): React.JSX.Element
             <NumberText value={viewNumber(mesh.zMax)} />]
           </span>
           <span className="legend__range">drag to orbit · shift-drag to pan · wheel to zoom</span>
-          <label className="legend__range">
+          <label className="legend__range legend__control">
             <input
               type="checkbox"
               checked={showTangentPlane}
-              disabled={selectedLinearization === null}
+              disabled={selectedLinearization === null || tangentDomain === null}
               onChange={(event) => {
                 setShowTangentPlane(event.target.checked);
               }}
             />{' '}
             tangent plane at selected point
           </label>
+          {showTangentPlane && state.selection !== null && tangentDomain === null && (
+            <span className="legend__range">
+              selected point lies outside the current 3D surface region; pan or zoom to include it
+            </span>
+          )}
           {showTangentPlane && selectedLinearization !== null && !selectedLinearization.ok && (
             <span className="legend__range">unresolved: {selectedLinearization.issue.message}</span>
           )}
@@ -615,8 +622,15 @@ export function Cartesian3DView({ store }: ViewRendererProps): React.JSX.Element
               </span>
               {tangentCursorValue !== null && (
                 <span className="legend__range">
-                  Lₚ(q) ≈ <NumberText value={viewNumber(tangentCursorValue)} /> · max sampled error ≈{' '}
-                  <NumberText value={viewNumber(tangentDiagnostics.maxAbsoluteError)} />
+                  Lₚ(q) ≈ <NumberText value={viewNumber(tangentCursorValue)} /> ·{' '}
+                  {tangentDiagnostics.maxAbsoluteError === null ? (
+                    'max sampled error unresolved'
+                  ) : (
+                    <>
+                      max sampled error ≈{' '}
+                      <NumberText value={viewNumber(tangentDiagnostics.maxAbsoluteError)} />
+                    </>
+                  )}
                   {tangentDiagnostics.unresolvedSamples > 0
                     ? ` · ${tangentDiagnostics.unresolvedSamples} samples unresolved`
                     : ''}

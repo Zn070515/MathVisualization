@@ -89,3 +89,11 @@ test('POSIX bootstrap loads a user-installed nvm before checking for it', () => 
   assert.match(shell, /\.nvm[\\/]nvm\.sh/);
   assert.match(shell, /command -v nvm/);
 });
+
+test('tangent-plane controls escape the non-interactive legend layer', () => {
+  const view = readFileSync(path('packages/app/src/views/Cartesian3DView.tsx'), 'utf8');
+  const styles = readFileSync(path('packages/app/src/styles/app.css'), 'utf8');
+
+  assert.match(view, /legend__control/);
+  assert.match(styles, /\.legend__control[\s\S]*pointer-events:\s*auto/);
+});
