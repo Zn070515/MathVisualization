@@ -152,10 +152,15 @@ describe('DFT sampling state', () => {
 
   it('updates the shared time window and sample count together', () => {
     const store = makeStore([], 'transforms');
-    store.setSamplingSettings({ timeWindow: { min: -4, max: 4 }, sampleCount: 32 });
+    store.setSamplingSettings({
+      timeWindow: { min: -4, max: 4 },
+      sampleCount: 32,
+      algorithm: 'fft',
+    });
     expect(store.getState().sampling).toEqual({
       timeWindow: { min: -4, max: 4 },
       sampleCount: 32,
+      algorithm: 'fft',
     });
   });
 });
@@ -498,11 +503,7 @@ describe('choosing what to draw', () => {
 
   it('keeps an unrelated focused signal instead of falling back to a transform pair', () => {
     const store = makeStoreFromLatex(
-      [
-        'f(t)=t',
-        'F(\\omega)=\\operatorname{Fourier}(f(t))',
-        'h(t)=t^{2}',
-      ],
+      ['f(t)=t', 'F(\\omega)=\\operatorname{Fourier}(f(t))', 'h(t)=t^{2}'],
       'transforms',
     );
 

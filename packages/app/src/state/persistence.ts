@@ -30,7 +30,12 @@
  */
 import { plainToLatex, type FieldMode } from '@mathviz/mathcore';
 import type { Camera3d } from '../render/camera3d';
-import { isDftSampleCount, type SamplingSettings, type ViewKind } from './workspaceStore';
+import {
+  isDftAlgorithm,
+  isDftSampleCount,
+  type SamplingSettings,
+  type ViewKind,
+} from './workspaceStore';
 
 const STORAGE_KEY = 'mathviz.workspaces.v3';
 /** Version 2 also stored LaTeX. Version 1 stored plain text, converted on read. */
@@ -250,6 +255,7 @@ function readSampling(entry: Record<string, unknown>): PersistedWorkspace['sampl
   if (!isRecord(stored)) return undefined;
   const timeWindow = stored['timeWindow'];
   const sampleCount = stored['sampleCount'];
+  const algorithm = stored['algorithm'] ?? 'direct';
   if (!isRecord(timeWindow)) return undefined;
   const min = timeWindow['min'];
   const max = timeWindow['max'];
@@ -260,11 +266,12 @@ function readSampling(entry: Record<string, unknown>): PersistedWorkspace['sampl
     !Number.isFinite(max) ||
     max <= min ||
     typeof sampleCount !== 'number' ||
-    !isDftSampleCount(sampleCount)
+    !isDftSampleCount(sampleCount) ||
+    !isDftAlgorithm(algorithm)
   ) {
     return undefined;
   }
-  return { timeWindow: { min, max }, sampleCount };
+  return { timeWindow: { min, max }, sampleCount, algorithm };
 }
 
 function readContourLevel(entry: Record<string, unknown>): number | undefined {

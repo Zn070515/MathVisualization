@@ -116,10 +116,28 @@ describe('which version is read', () => {
   });
 
   it('round-trips shared DFT sampling settings', () => {
-    const sampling = { timeWindow: { min: -4, max: 4 }, sampleCount: 32 };
+    const sampling = {
+      timeWindow: { min: -4, max: 4 },
+      sampleCount: 32,
+      algorithm: 'fft' as const,
+    };
     saveWorkspace('transforms', workspace({ sampling }));
 
     expect(loadWorkspace('transforms')?.sampling).toEqual(sampling);
+  });
+
+  it('defaults older DFT sampling records to the direct algorithm', () => {
+    writeFile(V3, {
+      transforms: {
+        sampling: { timeWindow: { min: -4, max: 4 }, sampleCount: 32 },
+      },
+    });
+
+    expect(loadWorkspace('transforms')?.sampling).toEqual({
+      timeWindow: { min: -4, max: 4 },
+      sampleCount: 32,
+      algorithm: 'direct',
+    });
   });
 
   it('round-trips a contour view as a current view kind', () => {

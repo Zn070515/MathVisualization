@@ -119,10 +119,7 @@ export interface DftStemValue {
   readonly value: number;
 }
 
-export function dftStemValues(
-  estimate: DftEstimate,
-  mode: DftMode,
-): readonly DftStemValue[] {
+export function dftStemValues(estimate: DftEstimate, mode: DftMode): readonly DftStemValue[] {
   const stems: DftStemValue[] = [];
   for (let index = 0; index < estimate.bins.length; index += 1) {
     const bin = estimate.bins[index];
@@ -179,10 +176,7 @@ export interface DftBinReadout extends SnappedDftBin {
   readonly stability: DftEstimate['stability'];
 }
 
-export function readoutAtFrequency(
-  frequency: number,
-  estimate: DftEstimate,
-): DftBinReadout | null {
+export function readoutAtFrequency(frequency: number, estimate: DftEstimate): DftBinReadout | null {
   const snapped = snapDftBin(frequency, estimate);
   if (snapped === null) return null;
   return {
@@ -224,7 +218,7 @@ function parameterKey(parameters: ReadonlyMap<string, number>): string {
 }
 
 function samplingKey(sampling: SamplingSettings): string {
-  return `${sampling.timeWindow.min},${sampling.timeWindow.max},${sampling.sampleCount}`;
+  return `${sampling.timeWindow.min},${sampling.timeWindow.max},${sampling.sampleCount},${sampling.algorithm}`;
 }
 
 /** A type-only helper for consumers that need to construct the same environment. */

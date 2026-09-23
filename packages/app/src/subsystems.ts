@@ -167,8 +167,9 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
       },
       {
         name: 'FFT algorithm',
-        summary: 'An accelerated discrete Fourier transform with its computational trade-offs.',
-        status: 'planned',
+        summary:
+          'A selectable radix-2 FFT route for the same finite sampled DFT values as the direct reference algorithm.',
+        status: 'implemented',
       },
       {
         name: 'Convolution',

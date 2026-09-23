@@ -63,8 +63,9 @@ export const CONVENTIONS = {
   },
   discreteFourierTransform: {
     name: 'Discrete Fourier transform',
-    definition: 'D[k] = Δt Σ f(t_n)e^(-iω_k t_n), with t_n = t_min + nΔt and ω_k = 2πk_signed/(NΔt)',
-    note: 'Samples use the half-open time window and the actual time coordinate, so a nonzero t_min contributes phase. The frequency axis uses angular frequency; the positive Nyquist bin is the single boundary representative. This is a DFT, not an FFT and not a certified continuous Fourier transform.',
+    definition:
+      'D[k] = Δt Σ f(t_n)e^(-iω_k t_n), with t_n = t_min + nΔt and ω_k = 2πk_signed/(NΔt)',
+    note: 'Samples use the half-open time window and the actual time coordinate, so a nonzero t_min contributes phase. The frequency axis uses angular frequency; the positive Nyquist bin is the single boundary representative. Direct DFT and radix-2 FFT are two algorithms for these same values; neither is a certified continuous Fourier transform.',
   },
   inverseFourierTransform: {
     name: 'Inverse Fourier transform',

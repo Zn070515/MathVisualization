@@ -35,6 +35,7 @@
  *   surface.ts      sampling a scalar field into a mesh
  *   gradient.ts     numerical gradients and directional derivatives
  *   hessian.ts      numerical Hessians and critical-point classification
+ *   fft.ts          radix-2 FFT implementation for the DFT
  *   linearization.ts numerical tangent planes and local approximation error
  *   surfaceGlsl.ts  the fixed shader a surface is drawn with
  *   workspace.ts    a document: many statements, analysed together
@@ -63,6 +64,7 @@ export * from './pointsOfInterest';
 export * from './zerosAndPoles';
 export * from './contour';
 export * from './fourier';
+export * from './fft';
 export * from './dft';
 export * from './surface';
 export * from './gradient';

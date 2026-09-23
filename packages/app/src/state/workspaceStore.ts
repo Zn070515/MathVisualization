@@ -14,6 +14,7 @@
 import {
   type Complex,
   type ContourIntegralNode,
+  type DftAlgorithm,
   type FieldMode,
   type GlslLoweringOptions,
   type MathIssue,
@@ -39,6 +40,8 @@ import {
 } from './viewKinds';
 import { DEFAULT_CAMERA_3D, dolly, orbit, panTarget, type Camera3d } from '../render/camera3d';
 import type { SubsystemId } from '../subsystems';
+
+export type { DftAlgorithm };
 
 /**
  * One editable line, with a stable identity so focus and errors survive edits.
@@ -88,6 +91,7 @@ export const DEFAULT_FREQUENCY_VIEWPORT: FrequencyViewport = {
 export interface SamplingSettings {
   readonly timeWindow: { readonly min: number; readonly max: number };
   readonly sampleCount: number;
+  readonly algorithm: DftAlgorithm;
 }
 
 export const DFT_SAMPLE_COUNTS = [16, 32, 64, 128, 256, 512] as const;
@@ -95,10 +99,15 @@ export const DFT_SAMPLE_COUNTS = [16, 32, 64, 128, 256, 512] as const;
 export const DEFAULT_DFT_SAMPLING: SamplingSettings = {
   timeWindow: { min: -8, max: 8 },
   sampleCount: 64,
+  algorithm: 'direct',
 };
 
 export function isDftSampleCount(value: number): boolean {
   return DFT_SAMPLE_COUNTS.includes(value as (typeof DFT_SAMPLE_COUNTS)[number]);
+}
+
+export function isDftAlgorithm(value: unknown): value is DftAlgorithm {
+  return value === 'direct' || value === 'fft';
 }
 
 export interface Direction2d {
@@ -567,7 +576,8 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
       !Number.isFinite(sampling.timeWindow.min) ||
       !Number.isFinite(sampling.timeWindow.max) ||
       sampling.timeWindow.max <= sampling.timeWindow.min ||
-      !isDftSampleCount(sampling.sampleCount)
+      !isDftSampleCount(sampling.sampleCount) ||
+      !isDftAlgorithm(sampling.algorithm)
     ) {
       return;
     }
@@ -576,6 +586,7 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
       sampling: {
         timeWindow: { ...sampling.timeWindow },
         sampleCount: sampling.sampleCount,
+        algorithm: sampling.algorithm,
       },
     }));
   }
@@ -784,7 +795,9 @@ function planOpeningViews(
   return [{ kind: nominalViewKind(subsystem), mode: defaultModeFor(active?.signature.codomain) }];
 }
 
-export function transformViewKindOf(active: ActiveExpression | null): TransformViewKind | undefined {
+export function transformViewKindOf(
+  active: ActiveExpression | null,
+): TransformViewKind | undefined {
   const body =
     active?.entry.statement?.kind === 'function-definition' ? active.entry.statement.body : null;
   if (body?.kind === 'dft-transform') return 'dft';

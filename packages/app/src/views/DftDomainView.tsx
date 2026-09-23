@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { displayNumberToText } from '@mathviz/mathcore';
+import { displayNumberToText, type DftAlgorithm } from '@mathviz/mathcore';
 import { drawGridAndAxes } from '../render/axes2d';
 import { CANVAS_COLORS, prepareCanvas2d } from '../render/canvasSurface';
 import { viewNumber } from '../display/numbers';
 import { useStore } from '../state/store';
 import {
   DFT_SAMPLE_COUNTS,
+  isDftAlgorithm,
   selectActiveExpression,
   type ViewRendererProps,
 } from '../state/workspaceStore';
@@ -27,6 +28,11 @@ const MODE_LABELS: Readonly<Record<DftMode, string>> = {
   phase: 'arg D[k]',
   real: 'Re D[k]',
   imaginary: 'Im D[k]',
+};
+
+const ALGORITHM_LABELS: Readonly<Record<DftAlgorithm, string>> = {
+  direct: 'Direct DFT',
+  fft: 'FFT',
 };
 
 export function DftDomainView({ store, view }: ViewRendererProps): React.JSX.Element {
@@ -147,9 +153,10 @@ export function DftDomainView({ store, view }: ViewRendererProps): React.JSX.Ele
 
       <div className="legend legend--corner">
         <span className="legend__title">
-          {MODE_LABELS[mode]} · discrete DFT bins over {frequencyVariable}
+          {MODE_LABELS[mode]} · {ALGORITHM_LABELS[state.sampling.algorithm]} · discrete DFT bins
+          over {frequencyVariable}
         </span>
-        <label className="legend__range">
+        <label className="legend__range legend__control">
           <span>N</span>{' '}
           <select
             aria-label="DFT sample count"
@@ -166,6 +173,21 @@ export function DftDomainView({ store, view }: ViewRendererProps): React.JSX.Ele
                 {count}
               </option>
             ))}
+          </select>
+        </label>
+        <label className="legend__range legend__control">
+          <span>algorithm</span>{' '}
+          <select
+            aria-label="DFT algorithm"
+            value={state.sampling.algorithm}
+            onChange={(event) => {
+              const algorithm = event.target.value;
+              if (!isDftAlgorithm(algorithm)) return;
+              store.setSamplingSettings({ ...state.sampling, algorithm });
+            }}
+          >
+            <option value="direct">Direct DFT</option>
+            <option value="fft">FFT</option>
           </select>
         </label>
         {estimate !== null && (
@@ -204,7 +226,12 @@ export function DftDomainView({ store, view }: ViewRendererProps): React.JSX.Ele
   );
 }
 
-function plotWindow(viewport: { xMin: number; xMax: number; yMin: number; yMax: number }): Window2d {
+function plotWindow(viewport: {
+  xMin: number;
+  xMax: number;
+  yMin: number;
+  yMax: number;
+}): Window2d {
   return viewport;
 }
 

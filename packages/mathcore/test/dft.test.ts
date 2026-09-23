@@ -8,6 +8,7 @@ import { exprToLatex, parseLatexExpression } from '../src/latex';
 import { parseExpression } from '../src/parser';
 import { lowerToSympy } from '../src/sympy';
 import { buildWorkspace, workspaceEnvironment, type WorkspaceInput } from '../src/workspace';
+import { expectComplexCloseTo } from './helpers';
 
 function inputs(...sources: string[]): WorkspaceInput[] {
   return sources.map((source, index) => ({ id: `line-${index}`, source }));
@@ -117,6 +118,28 @@ describe('unsupported DFT backends', () => {
 });
 
 describe('numerical DFT estimates', () => {
+  it('keeps FFT and direct DFT on the same scaled signed-bin convention', () => {
+    const workspace = buildWorkspace(inputs('f(t)=cos(pi*t/2)', 'D(ω)=DFT(f(t))'));
+    const options = { timeWindow: { min: 1, max: 5 }, sampleCount: 8 };
+    const direct = estimateDft(transformEntry(workspace), workspaceEnvironment(workspace), {
+      ...options,
+      algorithm: 'direct',
+    });
+    const fast = estimateDft(transformEntry(workspace), workspaceEnvironment(workspace), {
+      ...options,
+      algorithm: 'fft',
+    });
+
+    expect(fast.algorithm).toBe('fft');
+    expect(fast.bins.map((bin) => bin.signedIndex)).toEqual(
+      direct.bins.map((bin) => bin.signedIndex),
+    );
+    expect(fast.values).toHaveLength(direct.values.length);
+    fast.values.forEach((value, index) => {
+      expectComplexCloseTo(value, direct.values[index] as { re: number; im: number });
+    });
+  });
+
   it('uses time-integral scaling and a half-open sample grid', () => {
     const workspace = buildWorkspace(inputs('f(t)=1', 'D(ω)=DFT(f(t))'));
     const estimate = estimateDft(transformEntry(workspace), workspaceEnvironment(workspace), {

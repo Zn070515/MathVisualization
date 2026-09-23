@@ -32,6 +32,7 @@ describe('DFT app evaluation', () => {
     expect(DEFAULT_DFT_SAMPLING).toEqual({
       timeWindow: { min: -8, max: 8 },
       sampleCount: 64,
+      algorithm: 'direct',
     });
   });
 

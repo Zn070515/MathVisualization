@@ -8,7 +8,9 @@
  */
 import type { DftTransformNode } from './ast';
 import { type Complex, cabs, cadd, cmul, cscale, cx, isFiniteComplex } from './complex';
+import { ok, type MathIssue, type Result } from './errors';
 import { type EvaluationEnvironment, evaluateScalar } from './evaluator';
+import { radix2Fft } from './fft';
 
 export interface DftTimeWindow {
   readonly min: number;
@@ -22,10 +24,13 @@ export interface DftBin {
 }
 
 export type DftStability = 'stable' | 'sampling-sensitive' | 'unresolved';
+export type DftAlgorithm = 'direct' | 'fft';
 
 export interface DftEstimateOptions {
   readonly timeWindow: DftTimeWindow;
   readonly sampleCount: number;
+  /** Numerical route used to compute the same DFT values. */
+  readonly algorithm?: DftAlgorithm;
   /** Relative refinement threshold. Defaults to {@link DFT_DEFAULT_TOLERANCE}. */
   readonly tolerance?: number;
 }
@@ -39,6 +44,7 @@ export interface DftEstimate {
   readonly values: readonly Complex[];
   readonly timeWindow: DftTimeWindow;
   readonly sampleCount: number;
+  readonly algorithm: DftAlgorithm;
   readonly sampleInterval: number;
   /** Ordinary sampling frequency, in cycles per unit. */
   readonly samplingFrequency: number;
@@ -75,17 +81,32 @@ export function estimateDft(
   environment: EvaluationEnvironment,
   options: DftEstimateOptions,
 ): DftEstimate {
+  const algorithm = options.algorithm ?? 'direct';
   const diagnostics: string[] = [
-    'Direct DFT of a finite set of samples; this is not an FFT and does not certify the continuous transform.',
+    algorithm === 'fft'
+      ? 'Radix-2 FFT of a finite set of samples; this computes the same DFT convention and does not certify the continuous transform.'
+      : 'Direct DFT of a finite set of samples; this is the quadratic reference algorithm and does not certify the continuous transform.',
   ];
   const validation = validateOptions(options);
   if (validation !== null) return unresolvedEstimate(options, [...diagnostics, validation]);
 
-  const base = estimateRawDft(transform, environment, options.timeWindow, options.sampleCount);
+  const base = estimateRawDft(
+    transform,
+    environment,
+    options.timeWindow,
+    options.sampleCount,
+    algorithm,
+  );
   if (base.issue !== null) return unresolvedEstimate(options, [...diagnostics, base.issue]);
 
   const refinedCount = options.sampleCount * 2;
-  const refined = estimateRawDft(transform, environment, options.timeWindow, refinedCount);
+  const refined = estimateRawDft(
+    transform,
+    environment,
+    options.timeWindow,
+    refinedCount,
+    algorithm,
+  );
   if (refined.issue !== null) return unresolvedEstimate(options, [...diagnostics, refined.issue]);
 
   const estimatedError = commonBinDifference(base.bins, base.values, refined.bins, refined.values);
@@ -116,6 +137,7 @@ export function estimateDft(
     values: [...base.values],
     timeWindow: { ...options.timeWindow },
     sampleCount: options.sampleCount,
+    algorithm,
     sampleInterval: base.sampleInterval,
     samplingFrequency: 1 / base.sampleInterval,
     nyquistAngularFrequency: Math.PI / base.sampleInterval,
@@ -126,6 +148,13 @@ export function estimateDft(
 }
 
 function validateOptions(options: DftEstimateOptions): string | null {
+  if (
+    options.algorithm !== undefined &&
+    options.algorithm !== 'direct' &&
+    options.algorithm !== 'fft'
+  ) {
+    return 'The DFT algorithm must be direct or fft.';
+  }
   if (
     !Number.isFinite(options.timeWindow.min) ||
     !Number.isFinite(options.timeWindow.max) ||
@@ -144,7 +173,10 @@ function validateOptions(options: DftEstimateOptions): string | null {
   if (options.sampleCount * 2 > DFT_MAX_REFINED_SAMPLE_COUNT) {
     return `The DFT refinement is capped at ${DFT_MAX_REFINED_SAMPLE_COUNT} samples.`;
   }
-  if (options.tolerance !== undefined && (!Number.isFinite(options.tolerance) || options.tolerance < 0)) {
+  if (
+    options.tolerance !== undefined &&
+    (!Number.isFinite(options.tolerance) || options.tolerance < 0)
+  ) {
     return 'The DFT refinement tolerance must be a finite non-negative number.';
   }
   return null;
@@ -155,6 +187,7 @@ function estimateRawDft(
   environment: EvaluationEnvironment,
   timeWindow: DftTimeWindow,
   sampleCount: number,
+  algorithm: DftAlgorithm,
 ): RawDft {
   const sampleInterval = (timeWindow.max - timeWindow.min) / sampleCount;
   const sampled = sampleSignal(transform, environment, timeWindow, sampleCount, sampleInterval);
@@ -170,10 +203,41 @@ function estimateRawDft(
   }
 
   const bins = createBins(sampleCount, sampleInterval);
+  const transformed =
+    algorithm === 'fft'
+      ? fftDftValues(sampled.samples, bins, timeWindow.min, sampleInterval)
+      : directDftValues(sampled.samples, sampled.sampleTimes, bins, sampleInterval);
+  if (!transformed.ok) {
+    return {
+      samples: sampled.samples,
+      sampleTimes: sampled.sampleTimes,
+      bins,
+      values: [],
+      sampleInterval,
+      issue: transformed.issue.message,
+    };
+  }
+
+  return {
+    samples: sampled.samples,
+    sampleTimes: sampled.sampleTimes,
+    bins,
+    values: transformed.value,
+    sampleInterval,
+    issue: null,
+  };
+}
+
+function directDftValues(
+  samples: readonly Complex[],
+  sampleTimes: readonly number[],
+  bins: readonly DftBin[],
+  sampleInterval: number,
+): Result<readonly Complex[], MathIssue> {
   const values = bins.map(() => cx(0, 0));
-  for (let sampleIndex = 0; sampleIndex < sampled.samples.length; sampleIndex += 1) {
-    const sample = sampled.samples[sampleIndex] as Complex;
-    const time = sampled.sampleTimes[sampleIndex] as number;
+  for (let sampleIndex = 0; sampleIndex < samples.length; sampleIndex += 1) {
+    const sample = samples[sampleIndex] as Complex;
+    const time = sampleTimes[sampleIndex] as number;
     for (let binIndex = 0; binIndex < bins.length; binIndex += 1) {
       const bin = bins[binIndex] as DftBin;
       const phase = cx(
@@ -184,15 +248,27 @@ function estimateRawDft(
       values[binIndex] = cadd(values[binIndex] as Complex, contribution);
     }
   }
+  return ok(values);
+}
 
-  return {
-    samples: sampled.samples,
-    sampleTimes: sampled.sampleTimes,
-    bins,
-    values,
-    sampleInterval,
-    issue: null,
-  };
+function fftDftValues(
+  samples: readonly Complex[],
+  bins: readonly DftBin[],
+  timeOrigin: number,
+  sampleInterval: number,
+): Result<readonly Complex[], MathIssue> {
+  const transformed = radix2Fft(samples);
+  if (!transformed.ok) return transformed;
+  return ok(
+    bins.map((bin) => {
+      const raw = transformed.value[bin.index] as Complex;
+      const originPhase = cx(
+        Math.cos(bin.angularFrequency * timeOrigin),
+        -Math.sin(bin.angularFrequency * timeOrigin),
+      );
+      return cscale(cmul(raw, originPhase), sampleInterval);
+    }),
+  );
 }
 
 function sampleSignal(
@@ -277,6 +353,7 @@ function unresolvedEstimate(
     values: [],
     timeWindow: { ...options.timeWindow },
     sampleCount: options.sampleCount,
+    algorithm: options.algorithm ?? 'direct',
     sampleInterval,
     samplingFrequency: 1 / sampleInterval,
     nyquistAngularFrequency: Math.PI / sampleInterval,
