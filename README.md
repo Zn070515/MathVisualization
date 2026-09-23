@@ -43,6 +43,29 @@ Underneath, they are one program: one parser, one AST, one type system, one
 numerical evaluator, one symbolic adapter — and a core with **no runtime
 dependencies at all**.
 
+## Complex Analysis
+
+Write a complex expression, inspect its zeros and poles on the plane, and follow a
+contour integral together with its accumulated value.
+
+<p align="center">
+  <img src="docs/assets/complex-demo.gif" alt="Complex Analysis in MathVisualization" width="100%" />
+</p>
+
+## Integral Transforms
+
+The time-domain graph is available today. Fourier transforms and a linked
+frequency-domain view are planned, so there is no transform demo GIF yet.
+
+## Multivariable Calculus
+
+Enter a scalar field and work with its Cartesian 3D surface, orbiting the view,
+reading a point, and deforming the surface with a live parameter slider.
+
+<p align="center">
+  <img src="docs/assets/calculus-demo.gif" alt="Multivariable Calculus in MathVisualization" width="100%" />
+</p>
+
 ## Read these first
 
 | Document                                                                       | What it governs                                                                                                                   |

@@ -53,14 +53,41 @@ export default {
     const max = Number(await slider.getAttribute('max'));
     const current = Number(await slider.inputValue());
     const target = 1.8;
-    const xFor = (value) => sliderBounds.x + ((value - min) / (max - min)) * sliderBounds.width;
     const sliderY = sliderBounds.y + sliderBounds.height / 2;
-    const from = { x: xFor(current), y: sliderY };
-    const to = { x: xFor(target), y: sliderY };
-    await page.mouse.move(from.x, from.y);
+    const xFor = (value, bounds, lower, upper) =>
+      bounds.x + ((value - lower) / (upper - lower)) * bounds.width;
+    let pointer = {
+      x: xFor(current, sliderBounds, min, max),
+      y: sliderY,
+    };
+    await page.mouse.move(pointer.x, pointer.y);
     await page.mouse.down();
-    await moveHumanLike(page, from, to, { steps: 20, durationMs: 650 });
+    for (let step = 1; step <= 20; step += 1) {
+      const desired = current + ((target - current) * step) / 20;
+      const currentBounds = await slider.boundingBox();
+      if (currentBounds === null) throw new Error('Parameter slider disappeared while dragging.');
+      const lower = Number(await slider.getAttribute('min'));
+      const upper = Number(await slider.getAttribute('max'));
+      const next = {
+        x: xFor(desired, currentBounds, lower, upper),
+        y: currentBounds.y + currentBounds.height / 2,
+      };
+      await moveHumanLike(page, pointer, next, {
+        steps: 1,
+        durationMs: 650 / 20,
+      });
+      pointer = next;
+    }
     await page.mouse.up();
+    const exactValue = page.getByRole('textbox', { name: 'Exact value of a' });
+    await exactValue.click();
+    await exactValue.press('Control+A');
+    await exactValue.pressSequentially('1.8', { delay: 75 });
+    await exactValue.press('Enter');
+    await page.waitForFunction(
+      () =>
+        globalThis.document.querySelector('input[aria-label="Exact value of a"]')?.value === '1.8',
+    );
     await pause(page, 2400);
   },
 };
