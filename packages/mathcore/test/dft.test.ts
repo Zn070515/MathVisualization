@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { collectVariableNames } from '../src/ast';
+import { collectVariableNames, type DftTransformNode } from '../src/ast';
+import { cabs } from '../src/complex';
+import { estimateDft } from '../src/dft';
 import { evaluateScalar } from '../src/evaluator';
 import { lowerToDomainColoringProgram } from '../src/glsl';
 import { exprToLatex, parseLatexExpression } from '../src/latex';
 import { parseExpression } from '../src/parser';
 import { lowerToSympy } from '../src/sympy';
-import { buildWorkspace, type WorkspaceInput } from '../src/workspace';
+import { buildWorkspace, workspaceEnvironment, type WorkspaceInput } from '../src/workspace';
 
 function inputs(...sources: string[]): WorkspaceInput[] {
   return sources.map((source, index) => ({ id: `line-${index}`, source }));
@@ -18,6 +20,13 @@ function dftExpression(source = 'DFT(f(t))') {
   });
   if (!parsed.ok) throw new Error(parsed.issue.message);
   return parsed.value;
+}
+
+function transformEntry(workspace: ReturnType<typeof buildWorkspace>): DftTransformNode {
+  const entry = workspace.entries[1];
+  const body = entry?.statement?.kind === 'function-definition' ? entry.statement.body : null;
+  if (body?.kind !== 'dft-transform') throw new Error('expected a DFT transform definition');
+  return body;
 }
 
 describe('DFT transform syntax and binding', () => {
@@ -94,5 +103,81 @@ describe('unsupported DFT backends', () => {
     const symbolic = lowerToSympy(expression, []);
     expect(symbolic.ok).toBe(false);
     if (!symbolic.ok) expect(symbolic.issue.message).toMatch(/numerical|symbolic/i);
+  });
+});
+
+describe('numerical DFT estimates', () => {
+  it('uses time-integral scaling and a half-open sample grid', () => {
+    const workspace = buildWorkspace(inputs('f(t)=1', 'D(ω)=DFT(f(t))'));
+    const estimate = estimateDft(transformEntry(workspace), workspaceEnvironment(workspace), {
+      timeWindow: { min: 0, max: 4 },
+      sampleCount: 4,
+    });
+
+    expect(estimate.samples).toHaveLength(4);
+    expect(estimate.sampleTimes).toEqual([0, 1, 2, 3]);
+    expect(estimate.values[0]).toEqual({ re: 4, im: 0 });
+    expect(estimate.sampleInterval).toBe(1);
+    expect(estimate.samplingFrequency).toBe(1);
+    expect(estimate.nyquistAngularFrequency).toBe(Math.PI);
+    expect(estimate.bins.map((bin) => bin.signedIndex)).toEqual([0, 1, 2, -1]);
+  });
+
+  it('places an on-grid cosine at its positive and negative frequency bins', () => {
+    const workspace = buildWorkspace(inputs('f(t)=cos(pi*t/2)', 'D(ω)=DFT(f(t))'));
+    const estimate = estimateDft(transformEntry(workspace), workspaceEnvironment(workspace), {
+      timeWindow: { min: 0, max: 8 },
+      sampleCount: 8,
+    });
+
+    expect(cabs(estimate.values[2] ?? { re: 0, im: 0 })).toBeCloseTo(4, 10);
+    expect(cabs(estimate.values[6] ?? { re: 0, im: 0 })).toBeCloseTo(4, 10);
+  });
+
+  it('reports a coarse grid that aliases a higher-frequency cosine', () => {
+    const workspace = buildWorkspace(inputs('f(t)=cos(3*pi*t/2)', 'D(ω)=DFT(f(t))'));
+    const estimate = estimateDft(transformEntry(workspace), workspaceEnvironment(workspace), {
+      timeWindow: { min: 0, max: 4 },
+      sampleCount: 4,
+    });
+
+    expect(estimate.bins[1]?.angularFrequency).toBeCloseTo(Math.PI / 2, 12);
+    expect(cabs(estimate.values[1] ?? { re: 0, im: 0 })).toBeCloseTo(2, 10);
+    expect(cabs(estimate.values[3] ?? { re: 0, im: 0 })).toBeCloseTo(2, 10);
+    expect(estimate.stability).toBe('sampling-sensitive');
+  });
+
+  it('keeps the time-origin phase in the complex spectrum', () => {
+    const workspace = buildWorkspace(inputs('f(t)=cos(pi*t/2)', 'D(ω)=DFT(f(t))'));
+    const estimate = estimateDft(transformEntry(workspace), workspaceEnvironment(workspace), {
+      timeWindow: { min: 1, max: 5 },
+      sampleCount: 4,
+    });
+
+    expect(estimate.values[1]?.re ?? 0).toBeCloseTo(2, 10);
+    expect(estimate.values[1]?.im ?? 0).toBeCloseTo(0, 10);
+  });
+
+  it('returns unresolved when a sampled source is not finite', () => {
+    const workspace = buildWorkspace(inputs('f(t)=1/(t-t)', 'D(ω)=DFT(f(t))'));
+    const estimate = estimateDft(transformEntry(workspace), workspaceEnvironment(workspace), {
+      timeWindow: { min: 0, max: 4 },
+      sampleCount: 4,
+    });
+
+    expect(estimate.stability).toBe('unresolved');
+    expect(estimate.values).toEqual([]);
+    expect(estimate.diagnostics.join(' ')).toMatch(/finite|undefined|evaluate/i);
+  });
+
+  it('rejects an unsafe resolution before doing direct quadratic work', () => {
+    const workspace = buildWorkspace(inputs('f(t)=1', 'D(ω)=DFT(f(t))'));
+    const estimate = estimateDft(transformEntry(workspace), workspaceEnvironment(workspace), {
+      timeWindow: { min: 0, max: 4 },
+      sampleCount: 1024,
+    });
+
+    expect(estimate.stability).toBe('unresolved');
+    expect(estimate.diagnostics.join(' ')).toMatch(/resolution|sample|1024/i);
   });
 });

@@ -61,6 +61,7 @@ export * from './pointsOfInterest';
 export * from './zerosAndPoles';
 export * from './contour';
 export * from './fourier';
+export * from './dft';
 export * from './surface';
 export * from './gradient';
 export * from './contours';
