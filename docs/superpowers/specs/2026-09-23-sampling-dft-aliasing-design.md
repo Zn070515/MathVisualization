@@ -160,8 +160,10 @@ UI and diagnostics; it is not called an FFT.
 The estimator computes the requested resolution `N` and a refined resolution
 `2N` over the same half-open time window. To compare like with like, a primary
 bin with signed index `m` is compared with the refined bin whose signed index is
-`2m` (equivalently, refined array index `(2m mod 2N)`). This compares exactly
-the same angular frequency because both grids cover the same total window.
+also `m` (equivalently, the refined array index for that signed index). Because
+both grids cover the same total window, `ω_m = 2πm/T` is unchanged even though
+the sample interval is halved. Comparing `m` with `2m` would compare different
+physical frequencies.
 
 The returned `estimatedError` is the largest finite complex difference over
 those common bins. It is a *refinement difference*, not a certified bound on the

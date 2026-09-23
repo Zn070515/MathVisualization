@@ -165,6 +165,8 @@ describe('numerical DFT estimates', () => {
 
     expect(cabs(estimate.values[2] ?? { re: 0, im: 0 })).toBeCloseTo(4, 10);
     expect(cabs(estimate.values[6] ?? { re: 0, im: 0 })).toBeCloseTo(4, 10);
+    expect(estimate.stability).toBe('stable');
+    expect(estimate.estimatedError).toBeLessThan(1e-10);
   });
 
   it('reports a coarse grid that aliases a higher-frequency cosine', () => {

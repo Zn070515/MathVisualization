@@ -326,7 +326,10 @@ function commonBinDifference(
   const refinedBySignedIndex = new Map(refinedBins.map((bin) => [bin.signedIndex, bin.index]));
   let maximum = 0;
   for (const primaryBin of primaryBins) {
-    const refinedIndex = refinedBySignedIndex.get(primaryBin.signedIndex * 2);
+    // The physical frequency is determined by the signed index and the total
+    // time window, not by the sample count. Refining N to 2N halves Δt while
+    // doubling the number of samples, so the same signed index is the same ω.
+    const refinedIndex = refinedBySignedIndex.get(primaryBin.signedIndex);
     const primaryValue = primaryValues[primaryBin.index];
     const refinedValue = refinedIndex === undefined ? undefined : refinedValues[refinedIndex];
     if (primaryValue === undefined || refinedValue === undefined) return Number.POSITIVE_INFINITY;

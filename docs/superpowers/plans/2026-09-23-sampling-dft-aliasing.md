@@ -16,7 +16,10 @@
 - Use the half-open sampling grid `t_n = t_min + nΔt`, `n = 0 ... N-1`, with `Δt = (t_max - t_min) / N`.
 - Use the time-integral-scaled forward DFT `D[k] = Δt Σ f(t_n)e^(-iω_k t_n)` and project frequencies in angular frequency `ω`.
 - Use the single positive Nyquist representative for the even-`N` boundary; do not create a second negative-Nyquist bin.
-- Compare primary signed bin `m` with refined signed bin `2m`; do not compare raw array positions without signed-index mapping.
+- Compare primary signed bin `m` with refined signed bin `m`; the total time
+  window is unchanged, so the same signed index is the same physical angular
+  frequency after refinement. Do not compare raw array positions without
+  signed-index mapping.
 - Bound direct computation with estimator `N` in `2, 4, ..., 512`, expose only `16, 32, 64, 128, 256, 512` in the UI, and enforce `2N <= 1024`.
 - Treat refinement difference as a stability indicator, not a certified error bound or proof that aliasing exists or does not exist.
 - Register DFT normalization, units, bins, and Nyquist convention in `packages/mathcore/src/conventions.ts`.
@@ -179,7 +182,7 @@ Expected: FAIL because `estimateDft` and the DFT result types do not exist.
 
 - [ ] **Step 3: Add the centralized DFT convention and minimal estimator.**
 
-Register the DFT normalization, angular-frequency units, signed-bin rule, and positive Nyquist boundary in `CONVENTIONS`. Implement half-open sampling, direct `O(N^2)` accumulation with the actual `t_n` in the exponential, signed-bin generation, `2N <= 1024` validation, non-finite source handling, and signed-index refinement matching.
+Register the DFT normalization, angular-frequency units, signed-bin rule, and positive Nyquist boundary in `CONVENTIONS`. Implement half-open sampling, direct `O(N^2)` accumulation with the actual `t_n` in the exponential, signed-bin generation, `2N <= 1024` validation, non-finite source handling, and same-frequency signed-index refinement matching.
 
 - [ ] **Step 4: Run numerical tests, typecheck, and inspect diagnostics.**
 
