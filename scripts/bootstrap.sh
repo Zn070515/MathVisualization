@@ -42,12 +42,19 @@ install_node_if_needed() {
     return
   fi
 
-  if command -v brew >/dev/null 2>&1; then
-    brew install node@24 || brew upgrade node@24
-    brew link --overwrite --force node@24 || true
-  elif command -v nvm >/dev/null 2>&1; then
+  user_home_dir="$(cd ~ && pwd)"
+  if [ -s "$user_home_dir/.nvm/nvm.sh" ]; then
+    # nvm is a shell function, so command -v cannot find it until its script is loaded.
+    # shellcheck disable=SC1090
+    . "$user_home_dir/.nvm/nvm.sh"
+  fi
+
+  if command -v nvm >/dev/null 2>&1; then
     nvm install 24
     nvm use 24
+  elif command -v brew >/dev/null 2>&1; then
+    brew install node@24 || brew upgrade node@24
+    brew link --overwrite --force node@24 || true
   else
     fail 'Node.js 24 LTS is required. Install it from https://nodejs.org/ or install Homebrew/nvm, then rerun this script.'
   fi
