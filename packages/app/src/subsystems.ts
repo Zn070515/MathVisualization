@@ -160,8 +160,14 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
         status: 'planned',
       },
       {
-        name: 'DFT, FFT and sampling',
-        summary: 'Sampled signals, frequency bins, and where aliasing begins.',
+        name: 'DFT and sampling',
+        summary:
+          'A finite sampled signal, its direct discrete Fourier spectrum, signed frequency bins, Nyquist limit, and sampling-sensitive aliasing diagnostics.',
+        status: 'implemented',
+      },
+      {
+        name: 'FFT algorithm',
+        summary: 'An accelerated discrete Fourier transform with its computational trade-offs.',
         status: 'planned',
       },
       {

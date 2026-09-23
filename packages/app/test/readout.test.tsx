@@ -9,7 +9,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { cx } from '@mathviz/mathcore';
-import { makeStore } from './helpers';
+import { makeStore, makeStoreFromLatex } from './helpers';
 import { ReadoutBar } from '../src/readout/ReadoutBar';
 
 /**
@@ -90,6 +90,40 @@ describe('with a cursor', () => {
     store.setSelection(cx(1, 0));
     render(<ReadoutBar store={store} />);
     expect(screen.getByText('held')).toBeTruthy();
+  });
+});
+
+describe('at a discrete Fourier frequency', () => {
+  it('reports the same snapped bin used by the DFT view', () => {
+    const store = makeStoreFromLatex(
+      ['f(t)=1', 'D(\\omega)=\\operatorname{DFT}(f(t))'],
+      'transforms',
+    );
+    store.focusLine(store.getState().lines[1]?.id as string);
+    store.setFrequencyHover(0.03);
+    const { container } = render(<ReadoutBar store={store} />);
+
+    // The N=64 grid on [-8, 8] snaps 0.03 to the actual k=0 bin at ω=0.
+    expect(readCell(container, 'k')).toBe('0');
+    expect(readCell(container, 'signed k')).toBe('0');
+    expect(readCell(container, 'ω')).toBe('0');
+    expect(readCell(container, 'D[k]')).toBe('16');
+    expect(readCell(container, '|D[k]|')).toBe('16');
+    expect(readCell(container, 'Δt')).toBe('0.25');
+  });
+
+  it('keeps the raw array index distinct from the signed frequency index', () => {
+    const store = makeStoreFromLatex(
+      ['f(t)=1', 'D(\\omega)=\\operatorname{DFT}(f(t))'],
+      'transforms',
+    );
+    store.focusLine(store.getState().lines[1]?.id as string);
+    store.setFrequencyHover(-0.38);
+    const { container } = render(<ReadoutBar store={store} />);
+
+    // On the N=64 grid, the negative first bin is array index 63 but signed k=-1.
+    expect(readCell(container, 'k')).toBe('63');
+    expect(readCell(container, 'signed k')).toBe('-1');
   });
 });
 

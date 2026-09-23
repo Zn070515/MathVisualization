@@ -224,6 +224,7 @@ describe('each subsystem gets its own functions', () => {
     expect(names).toContain('A Gaussian pulse');
     expect(names).toContain('Exponential decay');
     expect(names).toContain('The time variable');
+    expect(names).toContain('A numerical discrete Fourier transform');
   });
 
   it('gives multivariable calculus its lists and fields', async () => {
@@ -316,12 +317,15 @@ describe('keys for mathematics the language does not have yet', () => {
               // context includes the source definition name that the workspace
               // resolves before parsing.
               contexts.push('\\operatorname{Fourier}\\left(f(t)\\right)');
+            } else if (entry.title === 'A numerical discrete Fourier transform') {
+              contexts.push('\\operatorname{DFT}\\left(f(t)\\right)');
             }
             expect(
               contexts.some((candidate) =>
                 parseLatexStatement(
                   candidate,
-                  entry.title === 'A numerical Fourier transform'
+                  entry.title === 'A numerical Fourier transform' ||
+                  entry.title === 'A numerical discrete Fourier transform'
                     ? { knownFunctions: new Set(['f']) }
                     : undefined,
                 ).ok,

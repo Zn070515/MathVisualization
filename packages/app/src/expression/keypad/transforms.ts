@@ -40,6 +40,11 @@ export const TRANSFORMS_FUNCTION_ROWS: readonly KeypadRow[] = [
         '\\operatorname{Fourier}\\left(#?\\right)',
         'A numerical Fourier transform',
       ),
+      key(
+        'DFT',
+        '\\operatorname{DFT}\\left(#?\\right)',
+        'A numerical discrete Fourier transform',
+      ),
     ],
   },
 ];

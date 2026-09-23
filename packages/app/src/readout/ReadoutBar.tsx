@@ -35,7 +35,13 @@ import {
   selectFourierTransform,
   snapFrequency,
 } from '../views/frequencyEvaluation';
+import {
+  estimateActiveDft,
+  readoutAtFrequency,
+  selectDftTransform,
+} from '../views/dftEvaluation';
 import type { FourierEstimate } from '@mathviz/mathcore';
+import type { DftEstimate } from '@mathviz/mathcore';
 import type { ActiveExpression, WorkspaceStore } from '../state/workspaceStore';
 
 export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Element {
@@ -48,6 +54,22 @@ export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Elem
     () => estimateActiveFourierTransform(transform, state.workspace, state.parameterValues),
     [transform, state.workspace, state.parameterValues],
   );
+  const dftEstimate = useMemo(
+    () => estimateActiveDft(transform, state.workspace, state.parameterValues, state.sampling),
+    [transform, state.workspace, state.parameterValues, state.sampling],
+  );
+
+  if (frequency !== null && selectDftTransform(transform) !== null) {
+    return (
+      <div className="readout">
+        <DftFrequencyValueCells frequency={frequency} estimate={dftEstimate} />
+        <span className="readout__spacer" />
+        <span className="readout__held">
+          {state.frequencySelection !== null ? 'held' : 'following the pointer'}
+        </span>
+      </div>
+    );
+  }
 
   if (frequency !== null && selectFourierTransform(transform) !== null) {
     return (
@@ -91,6 +113,54 @@ export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Elem
         {state.selection !== null ? 'held' : 'following the pointer'}
       </span>
     </div>
+  );
+}
+
+function DftFrequencyValueCells({
+  frequency,
+  estimate,
+}: {
+  frequency: number;
+  estimate: DftEstimate | null;
+}): React.JSX.Element {
+  const readout = estimate === null ? null : readoutAtFrequency(frequency, estimate);
+  if (readout === null) return <Cell label="frequency" value="—" />;
+
+  return (
+    <>
+      <Cell
+        label="k"
+        value={<NumberText value={displayNumber(readout.bin.index, { digits: 5 })} />}
+      />
+      <Cell
+        label="signed k"
+        value={<NumberText value={displayNumber(readout.bin.signedIndex, { digits: 5 })} />}
+      />
+      <Cell
+        label="ω"
+        value={<NumberText value={displayNumber(readout.frequency, { digits: 5 })} />}
+      />
+      <Cell label="D[k]" value={<ComplexText value={displayComplex(readout.value, { digits: 6 })} />} />
+      <Cell
+        label="|D[k]|"
+        value={<NumberText value={displayNumber(readout.magnitude, { digits: 5 })} />}
+      />
+      <Cell
+        label="Δt"
+        value={<NumberText value={displayNumber(readout.sampleInterval, { digits: 5 })} />}
+      />
+      <Cell
+        label="Nyquist"
+        value={<NumberText value={displayNumber(readout.nyquistAngularFrequency, { digits: 5 })} />}
+      />
+      <span className="readout__reason">
+        {readout.stability === 'stable'
+          ? 'stable under N→2N refinement'
+          : readout.stability === 'sampling-sensitive'
+            ? 'sampling-sensitive under N→2N refinement'
+            : 'unresolved under N→2N refinement'}
+      </span>
+    </>
   );
 }
 
