@@ -13,8 +13,10 @@ import { useResizeVersion } from './useResizeVersion';
 import {
   dftRange,
   dftStemValues,
+  dftFrequencyVariable,
   estimateActiveDft,
   fitDftViewport,
+  nyquistBoundaryFrequencies,
   snapDftBin,
   type DftMode,
 } from './dftEvaluation';
@@ -39,6 +41,7 @@ export function DftDomainView({ store, view }: ViewRendererProps): React.JSX.Ele
     () => estimateActiveDft(active, state.workspace, state.parameterValues, state.sampling),
     [active, state.workspace, state.parameterValues, state.sampling],
   );
+  const frequencyVariable = dftFrequencyVariable(active);
   const mode: DftMode = view.mode === 'complex' ? 'magnitude' : view.mode;
   const frequencyCursor = state.frequencyHover ?? state.frequencySelection;
   const measuredRange = useMemo(
@@ -59,10 +62,24 @@ export function DftDomainView({ store, view }: ViewRendererProps): React.JSX.Ele
       width,
       height,
       ratio,
-      xName: 'ω',
+      xName: frequencyVariable,
       yName: MODE_LABELS[mode],
     });
     if (estimate === null || estimate.values.length === 0) return;
+
+    context.save();
+    context.strokeStyle = CANVAS_COLORS.curveSecondary;
+    context.lineWidth = Math.max(1, ratio);
+    context.setLineDash([Math.max(4, ratio * 5), Math.max(3, ratio * 4)]);
+    for (const boundary of nyquistBoundaryFrequencies(estimate)) {
+      const point = toScreen(window, { x: boundary, y: 0 }, width, height);
+      if (!Number.isFinite(point.x) || point.x < 0 || point.x > width) continue;
+      context.beginPath();
+      context.moveTo(point.x, 0);
+      context.lineTo(point.x, height);
+      context.stroke();
+    }
+    context.restore();
 
     const baseline = toScreen(window, { x: 0, y: 0 }, width, height).y;
     for (const stem of dftStemValues(estimate, mode)) {
@@ -94,7 +111,7 @@ export function DftDomainView({ store, view }: ViewRendererProps): React.JSX.Ele
         }
       }
     }
-  }, [estimate, frequencyCursor, frequencyViewport, mode]);
+  }, [estimate, frequencyCursor, frequencyVariable, frequencyViewport, mode]);
 
   useEffect(() => {
     draw();
@@ -107,7 +124,7 @@ export function DftDomainView({ store, view }: ViewRendererProps): React.JSX.Ele
         ref={canvasRef}
         className="view__canvas view__canvas--paper"
         role="img"
-        aria-label={`Discrete Fourier spectrum of ${MODE_LABELS[mode]} over angular frequency ω`}
+        aria-label={`Discrete Fourier spectrum of ${MODE_LABELS[mode]} over angular frequency ${frequencyVariable}`}
         onPointerMove={(event) => {
           const frequency = frequencyAt(event, canvasRef.current, plotWindow(frequencyViewport));
           if (frequency === null || estimate === null) return;
@@ -129,7 +146,9 @@ export function DftDomainView({ store, view }: ViewRendererProps): React.JSX.Ele
       />
 
       <div className="legend legend--corner">
-        <span className="legend__title">{MODE_LABELS[mode]} · discrete DFT bins</span>
+        <span className="legend__title">
+          {MODE_LABELS[mode]} · discrete DFT bins over {frequencyVariable}
+        </span>
         <label className="legend__range">
           <span>N</span>{' '}
           <select

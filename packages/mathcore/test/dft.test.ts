@@ -82,6 +82,16 @@ describe('DFT transform workspace inference', () => {
     expect(workspace.entries[1]?.type).toBeNull();
     expect(workspace.entries[1]?.typeIssue?.message).toMatch(/real|complex/i);
   });
+
+  it('requires a one-dimensional real frequency variable', () => {
+    const complexFrequency = buildWorkspace(inputs('f(t)=t', 'D(z)=DFT(f(t))'));
+    expect(complexFrequency.entries[1]?.type).toBeNull();
+    expect(complexFrequency.entries[1]?.typeIssue?.message).toMatch(/frequency.*real/i);
+
+    const multiVariableFrequency = buildWorkspace(inputs('f(t)=t', 'D(x,y)=DFT(f(t))'));
+    expect(multiVariableFrequency.entries[1]?.type).toBeNull();
+    expect(multiVariableFrequency.entries[1]?.typeIssue?.message).toMatch(/frequency.*real/i);
+  });
 });
 
 describe('unsupported DFT backends', () => {

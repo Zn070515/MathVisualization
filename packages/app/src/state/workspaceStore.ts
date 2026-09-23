@@ -302,11 +302,11 @@ export function selectActiveExpression(
     if (matchingPair !== undefined) return activeExpressionForEntry(matchingPair, workspace);
   }
 
-  // If no focused line identifies a pair, use the first pair as the stable
-  // fallback. A focused non-transform expression still wins when it has no
-  // associated pair, so focus remains meaningful in mixed workspaces.
+  // If no focused line identifies a pair, a focused drawable expression still
+  // wins. The first transform pair is only the fallback when there is no focused
+  // drawable expression, so focus remains meaningful in mixed workspaces.
   const pair = drawable.find((entry) => entry.type?.classification.kind === 'transform-pair');
-  const entry = pair ?? focused ?? (drawable[0] as WorkspaceEntry);
+  const entry = focused ?? pair ?? (drawable[0] as WorkspaceEntry);
   if (entry.type === null) return null;
 
   return activeExpressionForEntry(entry, workspace);

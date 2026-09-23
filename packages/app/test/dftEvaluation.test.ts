@@ -3,6 +3,8 @@ import { makeStoreFromLatex } from './helpers';
 import {
   DEFAULT_DFT_SAMPLING,
   dftStemValues,
+  dftFrequencyVariable,
+  nyquistBoundaryFrequencies,
   estimateActiveDft,
   projectDftValue,
   readoutAtFrequency,
@@ -101,5 +103,27 @@ describe('DFT app evaluation', () => {
 
   it('does not invent a phase for a zero-magnitude bin', () => {
     expect(projectDftValue({ re: 0, im: 0 }, 'phase')).toBeNull();
+  });
+
+  it('preserves the expression frequency variable and exposes Nyquist boundaries', () => {
+    const store = makeStoreFromLatex(
+      ['f(t)=\\cos(t)', 'D(q)=\\operatorname{DFT}(f(t))'],
+      'transforms',
+    );
+    store.focusLine(store.getState().lines[1]?.id as string);
+    const state = store.getState();
+    const estimate = estimateActiveDft(
+      store.activeExpression(),
+      state.workspace,
+      state.parameterValues,
+      DEFAULT_DFT_SAMPLING,
+    );
+    if (estimate === null) throw new Error('expected a DFT estimate');
+
+    expect(dftFrequencyVariable(store.activeExpression())).toBe('q');
+    expect(nyquistBoundaryFrequencies(estimate)).toEqual([
+      -estimate.nyquistAngularFrequency,
+      estimate.nyquistAngularFrequency,
+    ]);
   });
 });

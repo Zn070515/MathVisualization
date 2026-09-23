@@ -22,10 +22,43 @@ const estimateCache = new WeakMap<Workspace, Map<string, DftEstimate | null>>();
 export type DftMode = Exclude<FieldMode, 'complex'>;
 export { DEFAULT_DFT_SAMPLING };
 
+const DISPLAY_GREEK_NAMES: Readonly<Record<string, string>> = {
+  alpha: 'α',
+  beta: 'β',
+  gamma: 'γ',
+  delta: 'δ',
+  epsilon: 'ε',
+  eta: 'η',
+  theta: 'θ',
+  iota: 'ι',
+  kappa: 'κ',
+  lambda: 'λ',
+  mu: 'μ',
+  nu: 'ν',
+  xi: 'ξ',
+  pi: 'π',
+  rho: 'ρ',
+  sigma: 'σ',
+  tau: 'τ',
+  upsilon: 'υ',
+  phi: 'φ',
+  chi: 'χ',
+  psi: 'ψ',
+  omega: 'ω',
+};
+
 export function selectDftTransform(active: ActiveExpression | null): DftTransformNode | null {
   const statement = active?.entry.statement;
   if (statement?.kind !== 'function-definition') return null;
   return statement.body.kind === 'dft-transform' ? statement.body : null;
+}
+
+export function dftFrequencyVariable(active: ActiveExpression | null): string {
+  const statement = active?.entry.statement;
+  if (statement?.kind !== 'function-definition') return 'ω';
+  if (selectDftTransform(active) === null) return 'ω';
+  const name = statement.parameters[0] ?? 'omega';
+  return DISPLAY_GREEK_NAMES[name] ?? name;
 }
 
 export function estimateActiveDft(
@@ -159,6 +192,12 @@ export function readoutAtFrequency(
     nyquistAngularFrequency: estimate.nyquistAngularFrequency,
     stability: estimate.stability,
   };
+}
+
+export function nyquistBoundaryFrequencies(estimate: DftEstimate): readonly number[] {
+  const nyquist = estimate.nyquistAngularFrequency;
+  if (!Number.isFinite(nyquist) || nyquist <= 0) return [];
+  return [-nyquist, nyquist];
 }
 
 export interface SampleMarker {

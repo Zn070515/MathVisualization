@@ -36,6 +36,7 @@ import {
   snapFrequency,
 } from '../views/frequencyEvaluation';
 import {
+  dftFrequencyVariable,
   estimateActiveDft,
   readoutAtFrequency,
   selectDftTransform,
@@ -62,7 +63,11 @@ export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Elem
   if (frequency !== null && selectDftTransform(transform) !== null) {
     return (
       <div className="readout">
-        <DftFrequencyValueCells frequency={frequency} estimate={dftEstimate} />
+        <DftFrequencyValueCells
+          frequency={frequency}
+          frequencyVariable={dftFrequencyVariable(transform)}
+          estimate={dftEstimate}
+        />
         <span className="readout__spacer" />
         <span className="readout__held">
           {state.frequencySelection !== null ? 'held' : 'following the pointer'}
@@ -118,9 +123,11 @@ export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Elem
 
 function DftFrequencyValueCells({
   frequency,
+  frequencyVariable,
   estimate,
 }: {
   frequency: number;
+  frequencyVariable: string;
   estimate: DftEstimate | null;
 }): React.JSX.Element {
   const readout = estimate === null ? null : readoutAtFrequency(frequency, estimate);
@@ -137,7 +144,7 @@ function DftFrequencyValueCells({
         value={<NumberText value={displayNumber(readout.bin.signedIndex, { digits: 5 })} />}
       />
       <Cell
-        label="ω"
+        label={frequencyVariable}
         value={<NumberText value={displayNumber(readout.frequency, { digits: 5 })} />}
       />
       <Cell label="D[k]" value={<ComplexText value={displayComplex(readout.value, { digits: 6 })} />} />

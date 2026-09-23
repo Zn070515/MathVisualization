@@ -518,6 +518,19 @@ export function inferSignature(
   const domain = inferDomain(parameters, spaceOfParameter, body);
   if (!domain.ok) return domain;
 
+  if (
+    body.kind === 'dft-transform' &&
+    (domain.value.kind !== 'R' || domain.value.dim !== 1)
+  ) {
+    return fail({
+      kind: 'dimension-mismatch',
+      detail: 'A DFT frequency variable must be one-dimensional and real.',
+      message:
+        'A DFT frequency variable must be one real variable, as in D(ω) = DFT(f(t)).',
+      span: body.span,
+    });
+  }
+
   const innerVariables = new Map(context.variables);
   for (const parameter of parameters) innerVariables.set(parameter, spaceOfParameter(parameter));
 

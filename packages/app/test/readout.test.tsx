@@ -125,6 +125,19 @@ describe('at a discrete Fourier frequency', () => {
     expect(readCell(container, 'k')).toBe('63');
     expect(readCell(container, 'signed k')).toBe('-1');
   });
+
+  it('uses the expression frequency variable in the coordinate readout', () => {
+    const store = makeStoreFromLatex(
+      ['f(t)=1', 'D(q)=\\operatorname{DFT}(f(t))'],
+      'transforms',
+    );
+    store.focusLine(store.getState().lines[1]?.id as string);
+    store.setFrequencyHover(0.03);
+    const { container } = render(<ReadoutBar store={store} />);
+
+    expect(readCell(container, 'q')).toBe('0');
+    expect(readCell(container, 'ω')).toBe('');
+  });
 });
 
 describe('at a point with no value', () => {

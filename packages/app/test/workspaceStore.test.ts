@@ -496,6 +496,24 @@ describe('choosing what to draw', () => {
     if (focusedSourcePair?.kind === 'function-definition') expect(focusedSourcePair.name).toBe('G');
   });
 
+  it('keeps an unrelated focused signal instead of falling back to a transform pair', () => {
+    const store = makeStoreFromLatex(
+      [
+        'f(t)=t',
+        'F(\\omega)=\\operatorname{Fourier}(f(t))',
+        'h(t)=t^{2}',
+      ],
+      'transforms',
+    );
+
+    const unrelated = store.getState().lines[2]?.id as string;
+    store.focusLine(unrelated);
+    expect(store.activeExpression()?.entry.statement).toMatchObject({
+      kind: 'function-definition',
+      name: 'h',
+    });
+  });
+
   it('skips expressions this subsystem cannot draw', () => {
     // A scalar field is not a complex function, so the complex subsystem has
     // nothing to show for it.
