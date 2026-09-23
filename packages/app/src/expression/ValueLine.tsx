@@ -26,7 +26,7 @@
  */
 import { useMemo } from 'react';
 import {
-  CONTOUR_PARAMETER_TEXT,
+  contourParameterText,
   asComplex,
   cabs,
   csub,
@@ -108,7 +108,9 @@ export function ValueLine({
 
       {contour !== null && (
         <>
-          <span className="expr-row__value-note">over {CONTOUR_PARAMETER_TEXT}</span>
+          <span className="expr-row__value-note">
+            over {contourParameterText(contour.integral.from, contour.integral.to)}
+          </span>
 
           {!contour.integral.closed && (
             <span className="expr-row__value-warning">
@@ -134,12 +136,22 @@ export function ValueLine({
  * that falls outside is worth the ink it takes to say so.
  */
 function ResidueCheck({ contour }: { readonly contour: ContourDetails }): React.JSX.Element {
-  const { integral, enclosed, residueSum } = contour;
+  const { integral, enclosed, residueSum, singularities, residueEstimatedError } = contour;
 
   if (enclosed.length === 0) {
     return (
       <span className="expr-row__value-note">
-        no poles inside, so Cauchy&rsquo;s theorem says the integral is zero
+        No poles were detected inside the contour. The residue-theorem check is inconclusive because
+        other singularities have not yet been classified.
+      </span>
+    );
+  }
+
+  if (!singularities.complete) {
+    return (
+      <span className="expr-row__value-note">
+        {enclosed.length} pole{enclosed.length === 1 ? '' : 's'} detected inside, but the
+        singularity search is incomplete, so the residue theorem is not being asserted
       </span>
     );
   }
@@ -149,23 +161,25 @@ function ResidueCheck({ contour }: { readonly contour: ContourDetails }): React.
     return (
       <span className="expr-row__value-note">
         {enclosed.length} pole{enclosed.length === 1 ? '' : 's'} inside, but{' '}
-        {unmeasured === 1 ? 'one has' : 'some have'} no residue a circle can isolate, so the
-        theorem is not being checked here
+        {unmeasured === 1 ? 'one has' : 'some have'} no residue a circle can isolate, so the theorem
+        is not being checked here
       </span>
     );
   }
 
   const difference = cabs(csub(integral.value, residueSum));
-  const within = difference <= integral.estimatedError;
-  const tolerance = displayNumberToText(viewNumber(integral.estimatedError));
+  const combinedError = integral.estimatedError + residueEstimatedError;
+  const within = difference <= combinedError;
+  const tolerance = displayNumberToText(viewNumber(combinedError));
 
   return (
     <span className={within ? 'expr-row__value-note' : 'expr-row__value-warning'}>
-      {enclosed.length} pole{enclosed.length === 1 ? '' : 's'} inside · 2&pi;i&thinsp;&Sigma;&thinsp;Res
-      = <ComplexText value={displayComplex(residueSum, { digits: 6 })} /> ·{' '}
+      {enclosed.length} pole{enclosed.length === 1 ? '' : 's'} inside ·
+      2&pi;i&thinsp;&Sigma;&thinsp;Res ={' '}
+      <ComplexText value={displayComplex(residueSum, { digits: 6 })} /> ·{' '}
       {within
-        ? `the same number to within the integral's error estimate (${tolerance})`
-        : `which differs from the integral by more than its error estimate (${tolerance})`}
+        ? `the same number to within the combined error estimate (${tolerance})`
+        : `which differs from the integral by more than the combined error estimate (${tolerance})`}
     </span>
   );
 }

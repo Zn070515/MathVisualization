@@ -27,16 +27,16 @@
 </div>
 
 MathVisualization is an environment for exploring complex analysis, integral
-transforms and multivariable calculus by *writing mathematics*. You type an
+transforms and multivariable calculus by _writing mathematics_. You type an
 expression; the system infers what kind of object it is — `C → C`, `R² → R` — and
 puts the pictures and the analyses that suit **that object** in front of you, rather
 than asking you to pick a tool first.
 
-| Subsystem | What it is for |
-|---|---|
-| `/complex` | Functions of a complex variable, drawn as maps of the plane. |
-| `/transforms` | Signals in the time domain, and what they become in the transform domain. |
-| `/calculus` | Scalar and vector fields, their local structure, and the integrals over them. |
+| Subsystem     | What it is for                                                                |
+| ------------- | ----------------------------------------------------------------------------- |
+| `/complex`    | Functions of a complex variable, drawn as maps of the plane.                  |
+| `/transforms` | Signals in the time domain, and what they become in the transform domain.     |
+| `/calculus`   | Scalar and vector fields, their local structure, and the integrals over them. |
 
 They are peers, and each is the beginning of a subject rather than a demonstration.
 Underneath, they are one program: one parser, one AST, one type system, one
@@ -45,11 +45,11 @@ dependencies at all**.
 
 ## Read these first
 
-| Document | What it governs |
-|---|---|
-| [`GOAL.md`](GOAL.md) | The product document, and the authority on what this project is and is not. |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | How it is built, and why — every claim naming the file it is about. |
-| [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) | Every mathematical convention, rendered for a reader. |
+| Document                                                                       | What it governs                                                                                                                   |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| [`GOAL.md`](GOAL.md)                                                           | The product document, and the authority on what this project is and is not.                                                       |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)                                 | How it is built, and why — every claim naming the file it is about.                                                               |
+| [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)                                   | Every mathematical convention, rendered for a reader.                                                                             |
 | [`packages/mathcore/src/conventions.ts`](packages/mathcore/src/conventions.ts) | The same conventions as a machine-readable table the tests assert against, so the document above cannot drift from the behaviour. |
 
 ## What it refuses to do
@@ -63,7 +63,7 @@ is a thing that would have been easier.
   question.
 - **Fabrication.** An unimplemented capability is named and marked as such, never
   offered as a button that returns a wrong answer. A value that does not exist is
-  reported with a *reason* — the divisor is zero here — rather than as `NaN`.
+  reported with a _reason_ — the divisor is zero here — rather than as `NaN`.
 - **A number written two ways.** One policy for how a number is written, in the core,
   so the readout and the axis labels cannot disagree about the same magnitude.
 - **Hidden scaling.** A curve that leaves the frame is stated as a number in the
@@ -86,11 +86,11 @@ is a thing that would have been easier.
 
 Three pieces of software. Only the first two are required.
 
-| | Version | What it is | For |
-|---|---|---|---|
-| [Node.js](https://nodejs.org) | 20 or newer | the program that runs JavaScript outside a browser — this application is written in JavaScript, so it needs this to run | everything |
-| pnpm | 11.22.0 (written down in `package.json`; Corepack fetches the right one) | a *package manager*: it downloads the libraries the project depends on | everything |
-| [Python](https://www.python.org) | 3.12 or newer | another language, used by one optional feature that does algebra in closed form | **only** the symbolic engine |
+|                                  | Version                                                                  | What it is                                                                                                              | For                          |
+| -------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| [Node.js](https://nodejs.org)    | 20 or newer                                                              | the program that runs JavaScript outside a browser — this application is written in JavaScript, so it needs this to run | everything                   |
+| pnpm                             | 11.22.0 (written down in `package.json`; Corepack fetches the right one) | a _package manager_: it downloads the libraries the project depends on                                                  | everything                   |
+| [Python](https://www.python.org) | 3.12 or newer                                                            | another language, used by one optional feature that does algebra in closed form                                         | **only** the symbolic engine |
 
 Nothing else. There is no database to install, no account to create and no server to
 set up.
@@ -113,7 +113,7 @@ ways to get it, and the first needs no other software.
 
 **The easy way — download a zip.** Open that link, click the green **Code** button,
 choose **Download ZIP**, and then unzip the file you get. On Windows, right-click the
-downloaded file and choose *Extract All*; on macOS, double-click it. You now have a
+downloaded file and choose _Extract All_; on macOS, double-click it. You now have a
 folder called `MathVisualization-main` (or similar) with the project inside.
 
 **The way that keeps it updatable — `git clone`.** If you already have Git, open a
@@ -132,19 +132,19 @@ somewhere you will find again — `Desktop` or `Documents` is fine.
 ### 2. Open a terminal in that folder
 
 You do not need to know any terminal commands for this. Every system has a way to open
-a terminal that is *already pointed at a folder*:
+a terminal that is _already pointed at a folder_:
 
 - **Windows** — open the folder in File Explorer, then right-click on some empty
   space inside it and choose **Open in Terminal** (Windows 11) or **Open PowerShell
   window here** (Windows 10; hold Shift while right-clicking if you do not see it).
-- **macOS** — right-click the folder in Finder, then *Services* → **New Terminal at
-  Folder**. If that is missing, enable it in *System Settings* → *Keyboard* →
-  *Keyboard Shortcuts* → *Services* → *Files and Folders*.
+- **macOS** — right-click the folder in Finder, then _Services_ → **New Terminal at
+  Folder**. If that is missing, enable it in _System Settings_ → _Keyboard_ →
+  _Keyboard Shortcuts_ → _Services_ → _Files and Folders_.
 - **Linux** — most file managers have **Open in Terminal** on the right-click menu.
   Otherwise open a terminal and type `cd ` (with a space), then drag the folder into
   the window and press Enter.
 
-The terminal now starts *inside* the project. You can tell you are in the right place
+The terminal now starts _inside_ the project. You can tell you are in the right place
 because `ls` (macOS, Linux) or `dir` (Windows) lists files including `package.json`,
 `README.md` and a folder called `packages`.
 
@@ -180,7 +180,7 @@ sudo apt-get install -y nodejs
 On Fedora use `sudo dnf install nodejs`, on Arch `sudo pacman -S nodejs npm`. If you
 already use `nvm`, `nvm install --lts` is the shortest route.
 
-**Check that it worked.** In a terminal — a *new* one, if you just installed — type:
+**Check that it worked.** In a terminal — a _new_ one, if you just installed — type:
 
 ```bash
 node -v
@@ -227,7 +227,7 @@ pnpm install
 This downloads the libraries the project is built on. It prints a spinner and takes
 between thirty seconds and two minutes. **Text in yellow is a warning and is normal.**
 Only lines containing `ERR!` or `error` are a problem — if you see one of those, look
-under *If something does not work* below.
+under _If something does not work_ below.
 
 > **Outside mainland China?** The repository is configured to use a mirror that is fast
 > in China. If this step is crawling, open the file `.npmrc` in the project folder,
@@ -268,7 +268,7 @@ says so plainly instead of guessing at an answer.
 Python 3.12 or newer, if you do not have it:
 
 - **Windows** — `winget install Python.Python.3.12`, or the installer from
-  <https://www.python.org> (tick *Add Python to PATH* during installation).
+  <https://www.python.org> (tick _Add Python to PATH_ during installation).
 - **macOS** — `brew install python@3.12`, or the installer from
   <https://www.python.org>.
 - **Linux** — `sudo apt install python3.12 python3.12-venv` (Debian, Ubuntu),
@@ -285,7 +285,7 @@ python -m venv .venv
 > If `python -m venv` fails, try `python3 -m venv .venv`.
 
 That creates a private, throwaway Python installation inside the project, so nothing
-you do here can affect the rest of your computer. Install into it — the *only*
+you do here can affect the rest of your computer. Install into it — the _only_
 difference between the systems is where an environment keeps its programs:
 
 ```bash
@@ -335,7 +335,7 @@ Things worth trying straight away:
 - **Just start typing.** The first expression row is already focused, so you do not
   have to click into it first.
 - **Write a fraction.** Type `sin(z)/(z^2+1)`. It becomes a two-dimensional fraction
-  as you type, and the arrow keys move the caret *inside* the numerator and
+  as you type, and the arrow keys move the caret _inside_ the numerator and
   denominator rather than along a line of text.
 - **Press Enter** on the last row to get another one. Press `⌨` at the bottom of the
   left panel for a mathematical keypad whose function page differs per subsystem.
@@ -375,7 +375,7 @@ Almost always one of two things:
 
 1. **The application is not running.** Look at the terminal where you ran `pnpm dev`.
    If you closed it, or if you can type in it and get a prompt back, it has stopped —
-   start it again with `pnpm dev`. A running dev server *looks* frozen, which is
+   start it again with `pnpm dev`. A running dev server _looks_ frozen, which is
    correct.
 2. **You are at the wrong address.** It must be `http://127.0.0.1:5173`, exactly. Not
    `https`, and not `localhost`.
@@ -423,7 +423,7 @@ You can ignore this and use everything else. If you want it:
   `http://127.0.0.1:8000` — it should answer with something, rather than refusing.
 - On Windows, two programs can quietly share the same port: a stale engine keeps
   answering while the one you just started has failed to start. `netstat -ano |
-  findstr :8000` printing two `LISTENING` lines is the symptom. Kill both and start it
+findstr :8000` printing two `LISTENING` lines is the symptom. Kill both and start it
   once.
 
 ### Starting over
@@ -467,7 +467,7 @@ The tests are not smoke tests. Among them:
   shared selection, multiple views;
 - the GLSL lowering, including the shader's mirror of the colouring convention;
 - the SymPy lowering, including exactness at the engine boundary;
-- the LaTeX front end: that it produces the *same* tree as the plain syntax, that the
+- the LaTeX front end: that it produces the _same_ tree as the plain syntax, that the
   round trip holds, that a compound subscript is not confused with a sum, and that
   unfinished input is reported as unfinished rather than wrong;
 - the keypad: that every key inserts LaTeX the parser reads (so no key can offer a
@@ -508,8 +508,10 @@ with orbit, pan and zoom, and with a point where the function has no value drawn
 a hole rather than bridged; the same field as a heatmap with a stated value range;
 the coordinate grid; the shared cursor; parameters.
 
-Not implemented, and not approximated: contour integration, residues, Taylor and
-Laurent series, pole and zero detection, branch cuts, Cauchy–Riemann residual
+The complex subsystem also now includes numerical contour integrals, accumulated
+integral trajectories, detected zero/pole orders, numerical residues, and an
+uncertainty-aware residue-theorem cross-check. Still not implemented, and not
+approximated: Taylor and Laurent series, branch cuts, Cauchy–Riemann residual
 fields in the complex subsystem; Fourier series and transforms, the DFT and FFT,
 sampling and aliasing, convolution, the Laplace transform, the s-plane and the
 region of convergence in the transforms subsystem; contours, gradients,
@@ -569,8 +571,8 @@ The repository-root `.npmrc` points npm at `registry.npmmirror.com`, a fast mirr
 for networks in mainland China. Delete that line if your network reaches the public
 registry directly.
 
-| Variable | Default | Purpose |
-|---|---|---|
+| Variable            | Default                 | Purpose                      |
+| ------------------- | ----------------------- | ---------------------------- |
 | `VITE_SYMBOLIC_URL` | `http://127.0.0.1:8000` | where the symbolic engine is |
 
 Set it in `.env.local` at the repository root — that file is git-ignored, so it is
@@ -613,12 +615,12 @@ store, read by every view. A view cannot have a private cursor because there is
 nowhere to put one.
 
 **LaTeX is a surface syntax, not a second truth.** The editor reads and writes LaTeX;
-`latex.ts` in the core parses it into the *same* canonical AST the plain-text parser
+`latex.ts` in the core parses it into the _same_ canonical AST the plain-text parser
 produces. Two front ends, four back ends, one tree.
 
 **Numbers are written in one place.** Every number a reader sees — the readout, a
 tick label, a legend range, a slider's value — comes from one policy in the core,
-which returns a *structured* value rather than a string so that the document can set
+which returns a _structured_ value rather than a string so that the document can set
 an exponent as a real superscript and a canvas can position one by hand. Four
 copies of that policy used to disagree about both the threshold and the digits.
 

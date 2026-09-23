@@ -18,7 +18,17 @@ import { canonicalName } from './builtins';
 import { rationalFromLiteralText } from './rational';
 
 export type TokenType =
-  'number' | 'name' | 'operator' | 'lparen' | 'rparen' | 'comma' | 'equals' | 'integral';
+  | 'number'
+  | 'name'
+  | 'operator'
+  | 'lparen'
+  | 'rparen'
+  | 'bracketOpen'
+  | 'bracketClose'
+  | 'comma'
+  | 'semicolon'
+  | 'equals'
+  | 'integral';
 
 export interface Token {
   readonly type: TokenType;
@@ -130,8 +140,26 @@ export function tokenize(source: string): Result<readonly Token[], ParseError> {
       continue;
     }
 
+    if (character === '[') {
+      tokens.push({ type: 'bracketOpen', text: character, start, end: index + 1 });
+      index += 1;
+      continue;
+    }
+
+    if (character === ']') {
+      tokens.push({ type: 'bracketClose', text: character, start, end: index + 1 });
+      index += 1;
+      continue;
+    }
+
     if (character === ',') {
       tokens.push({ type: 'comma', text: character, start, end: index + 1 });
+      index += 1;
+      continue;
+    }
+
+    if (character === ';') {
+      tokens.push({ type: 'semicolon', text: character, start, end: index + 1 });
       index += 1;
       continue;
     }

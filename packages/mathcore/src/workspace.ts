@@ -175,6 +175,9 @@ export function buildWorkspace(inputs: readonly WorkspaceInput[]): Workspace {
       functions.set(statement.name, {
         name: statement.name,
         parameters: statement.parameters,
+        ...(statement.interval === undefined
+          ? {}
+          : { interval: { from: statement.interval.from, to: statement.interval.to } }),
         body: statement.body,
       });
     }

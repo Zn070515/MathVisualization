@@ -50,7 +50,7 @@ section 30:
 
 Everything left of the type system is in `packages/mathcore`, which has **no runtime
 dependencies at all** and knows nothing about the DOM, React, the network or storage.
-Everything to the right is an *engine*: a consumer of the tree, not a second
+Everything to the right is an _engine_: a consumer of the tree, not a second
 interpretation of the mathematics.
 
 Two front ends and four back ends, one tree. That is the whole architecture, and the
@@ -65,15 +65,15 @@ sections below are the details of each arrow.
 One tree for the whole project. It is not a parse tree: grouping parentheses leave
 no node behind, because they only shape the tree. The node kinds are:
 
-| Node | Represents |
-|---|---|
-| `NumberLiteralNode` | a numeric literal, held as an **exact rational** |
-| `VariableNode` | a name whose meaning depends on context |
-| `ConstantNode` | `i`, `pi`, `e`, `tau` — fixed meaning, unlike a variable |
-| `UnaryNode` | `neg`, `pos` |
-| `BinaryNode` | `add`, `sub`, `mul`, `div`, `pow` |
-| `CallNode` | a builtin or user function applied to arguments |
-| `TupleNode` | a parenthesised list, e.g. `(-y, x)` |
+| Node                | Represents                                               |
+| ------------------- | -------------------------------------------------------- |
+| `NumberLiteralNode` | a numeric literal, held as an **exact rational**         |
+| `VariableNode`      | a name whose meaning depends on context                  |
+| `ConstantNode`      | `i`, `pi`, `e`, `tau` — fixed meaning, unlike a variable |
+| `UnaryNode`         | `neg`, `pos`                                             |
+| `BinaryNode`        | `add`, `sub`, `mul`, `div`, `pow`                        |
+| `CallNode`          | a builtin or user function applied to arguments          |
+| `TupleNode`         | a parenthesised list, e.g. `(-y, x)`                     |
 
 Two decisions in this file are load-bearing.
 
@@ -81,7 +81,7 @@ Two decisions in this file are load-bearing.
 (`rational.ts`), not a `number`. `0.1` is `1/10`; `1.25e-3` is `1/800`. The
 reason is in `GOAL.md` section 13: the product has to distinguish an exact result
 from an approximation, and that is impossible if the parser has already destroyed
-the exactness. The evaluator converts to double precision when it *evaluates*;
+the exactness. The evaluator converts to double precision when it _evaluates_;
 the symbolic lowering sends the exact rational to the engine.
 
 **Constants are a distinct node kind from variables.** The space of a variable
@@ -107,7 +107,7 @@ canonical AST, so the two can never disagree about the mathematics.
 
 Both are hand-written. Not delegated to a library, because `GOAL.md` section 8
 forbids binding the core architecture to a library's internal data structure, and
-because the tree *is* the architecture.
+because the tree _is_ the architecture.
 
 Precedence, low to high, in both syntaxes: `+ -`, `* /` and implicit multiplication,
 unary sign, `^` (right associative). So `-z^2` is `-(z^2)` and `2z^2` is `2*(z^2)`.
@@ -115,7 +115,7 @@ unary sign, `^` (right associative). So `-z^2` is `-(z^2)` and `2z^2` is `2*(z^2
 ### LaTeX, and why parsing it is not a formality
 
 LaTeX has **no operator precedence**. `a+b\cdot c` is three atoms in a row, and it
-only *reads* as `a + b·c` by convention. A tree needs an answer, so `latex.ts`
+only _reads_ as `a + b·c` by convention. A tree needs an answer, so `latex.ts`
 recovers the conventional reading. That is what makes
 
 ```
@@ -151,7 +151,7 @@ it without inventing notation.
 what the letter means in this subject.
 
 **Juxtaposed letters multiply.** The lexer reads a maximal run of letters as one
-token, so `it` and `ay` arrive as single names. If such a run is *not* a name the
+token, so `it` and `ay` arrive as single names. If such a run is _not_ a name the
 document defines, the parser splits it into single letters and multiplies them.
 This is what makes `GOAL.md`'s own examples mean what they look like:
 
@@ -161,7 +161,7 @@ f(x,y) = x^2 + a y^2   ⟹  x^2 + a * y^2
 ```
 
 while `pi`, `sin`, a parameter you defined (`a = 2`) and a function you defined
-all stay single symbols, because they *are* known names. This is a naming
+all stay single symbols, because they _are_ known names. This is a naming
 convention with a rule attached, not a guess: the set of known names comes from
 the document and the builtin registry.
 
@@ -176,7 +176,7 @@ are deliberately coarse — `R`, `R²`, `R³`, `C` — because those are the
 distinctions that change what mathematics is available.
 
 Classification into `ComplexFunction`, `ScalarField`, `VectorField`,
-`ComplexPath`, `ParametricCurve` and the rest is a *documented reading* of the
+`ComplexPath`, `ParametricCurve` and the rest is a _documented reading_ of the
 signature. Where one signature is genuinely ambiguous — `R → C` is a complex path
 to the complex-analysis subsystem and a complex-valued signal to the transforms
 subsystem — the signature is the shared truth and the reading differs. The
@@ -185,22 +185,22 @@ subsystems never disagree about the signature.
 Inference is a real pass over the tree, and it **widens only when the mathematics
 forces it**:
 
-| Expression | Type | Why |
-|---|---|---|
-| `z^2` | `C → C` | `z` is complex by the naming convention |
-| `f(x) = x^2` | `R → R` | integer exponent, no widening needed |
-| `f(x) = x^0.5` | `R → C` | `(-1)^0.5 = i`; claiming `R` would be wrong |
-| `f(x) = log(x)` | `R → C` | the principal log of a negative real is imaginary |
-| `f(x) = sqrt(4)` | `R → R` | the argument is provably non-negative |
-| `f(x,y) = x^2-y^2` | `R² → R` | a scalar field |
-| `gamma(t) = 2e^(it)` | `R → C` | a complex path |
-| `F(x,y) = (-y, x)` | `R² → R²` | a vector field |
+| Expression           | Type      | Why                                               |
+| -------------------- | --------- | ------------------------------------------------- |
+| `z^2`                | `C → C`   | `z` is complex by the naming convention           |
+| `f(x) = x^2`         | `R → R`   | integer exponent, no widening needed              |
+| `f(x) = x^0.5`       | `R → C`   | `(-1)^0.5 = i`; claiming `R` would be wrong       |
+| `f(x) = log(x)`      | `R → C`   | the principal log of a negative real is imaginary |
+| `f(x) = sqrt(4)`     | `R → R`   | the argument is provably non-negative             |
+| `f(x,y) = x^2-y^2`   | `R² → R`  | a scalar field                                    |
+| `gamma(t) = 2e^(it)` | `R → C`   | a complex path                                    |
+| `F(x,y) = (-y, x)`   | `R² → R²` | a vector field                                    |
 
 The conservative cases are stated rather than hidden. `log(x)` typed `R → C` is
 correct for half the domain, and a caller that needs a narrower type has to prove
 non-negativity to get one.
 
-The only place a variable's space comes from its *name* is the convention table in
+The only place a variable's space comes from its _name_ is the convention table in
 `conventions.ts`, applied when a definition's parameter list becomes a domain. The
 codomain is always computed.
 
@@ -217,7 +217,7 @@ exactly zero, so a real function never drifts into looking complex.
 It returns a **reason**, not `NaN`, when there is no value:
 
 ```ts
-evaluateScalar(parse('1/(z^2-1)'), { z: 1 })
+evaluateScalar(parse('1/(z^2-1)'), { z: 1 });
 // ⟹ { ok: false, issue: {
 //      kind: 'division-by-zero',
 //      message: '"z ^ 2 - 1" is zero here, so the expression is not defined at this point.' } }
@@ -225,7 +225,7 @@ evaluateScalar(parse('1/(z^2-1)'), { z: 1 })
 
 `GOAL.md` section 14 asks for mathematical errors presented as mathematical
 information. That is only possible if the conditions that produce `NaN` are
-checked *before* the arithmetic runs, which is what the evaluator does. `NaN` is
+checked _before_ the arithmetic runs, which is what the evaluator does. `NaN` is
 still used inside `complex.ts`; it never escapes the evaluator.
 
 ---
@@ -247,7 +247,7 @@ not conflated:
 The lowering to SymPy syntax keeps literals exact: `0.1` becomes
 `Rational(1, 10)`, and literal arithmetic is folded exactly (`1/3` becomes
 `Rational(1, 3)`). That fold is not cosmetic. Emitting `(1 / 3)` would be Python's
-*float* division, and the exactness the rationals exist to preserve would be lost
+_float_ division, and the exactness the rationals exist to preserve would be lost
 at the engine boundary.
 
 The service is standard library plus SymPy — no web framework — and it does **not**
@@ -273,13 +273,13 @@ GLSL has no complex type, so complex values are `vec2` pairs and every elementar
 function is reimplemented in a shader prelude. Those implementations reproduce
 `complex.ts` operation for operation, including the branch conventions:
 
-| `complex.ts` | shader prelude |
-|---|---|
-| `cadd csub cmul cdiv cneg cconj` | same names |
-| `cabs carg clog csqrt cpow cintpow` | same names, same branches |
-| `cexp csin ccos ctan csinh ccosh ctanh` | same names |
-| `domainColor` (`coloring.ts`) | `colorForValue` |
-| `SCALAR_RAMP` (`coloring.ts`) | `RAMP_COLOR` / `RAMP_POSITION`, **generated from it** |
+| `complex.ts`                            | shader prelude                                        |
+| --------------------------------------- | ----------------------------------------------------- |
+| `cadd csub cmul cdiv cneg cconj`        | same names                                            |
+| `cabs carg clog csqrt cpow cintpow`     | same names, same branches                             |
+| `cexp csin ccos ctan csinh ccosh ctanh` | same names                                            |
+| `domainColor` (`coloring.ts`)           | `colorForValue`                                       |
+| `SCALAR_RAMP` (`coloring.ts`)           | `RAMP_COLOR` / `RAMP_POSITION`, **generated from it** |
 
 The ramp table is generated from the TypeScript source rather than written out
 again, so the two cannot drift.
@@ -294,7 +294,7 @@ recompile the shader. Only an expression change produces a new program.
 
 `MappedGridView`, `CartesianView`, `ComplexPlaneView` and `Cartesian3DView` all
 evaluate on the CPU, through the same evaluator. For the first three this is not a
-shortcut: a mapped grid needs a *polyline* — a curve followed through the map — and
+shortcut: a mapped grid needs a _polyline_ — a curve followed through the map — and
 a fragment shader cannot do that. Having both paths also means the CPU evaluator is
 an independent check on the shader.
 
@@ -306,34 +306,34 @@ one piece of mathematics.
 The three two-dimensional views share their scaffolding, because a plane and a pair
 of axes are one object seen from two directions:
 
-| module | what it owns |
-|---|---|
-| `views/window2d.ts` | the pixel ↔ plane conversion, and its inverse, and framing a range |
-| `render/axes2d.ts` | the grid, the axes, the tick marks and the numbers on them |
-| `render/canvasText.ts` | drawing a structured number on a canvas, exponent and all |
+| module                    | what it owns                                                             |
+| ------------------------- | ------------------------------------------------------------------------ |
+| `views/window2d.ts`       | the pixel ↔ plane conversion, and its inverse, and framing a range       |
+| `render/axes2d.ts`        | the grid, the axes, the tick marks and the numbers on them               |
+| `render/canvasText.ts`    | drawing a structured number on a canvas, exponent and all                |
 | `render/canvasSurface.ts` | sizing a canvas from its CSS box, and the colours the canvases draw with |
 
 `axes2d.ts` draws an axis only when it is in view, keeps the numbers on the frame
 edge when it is not, and drops a label that would collide with the one before it —
-decided from *measured* text widths. That last rule is a pure function
+decided from _measured_ text widths. That last rule is a pure function
 (`readableLabels`) so that it can be tested without a canvas, which jsdom does not
 have.
 
 **Points of interest.** `mathcore/src/pointsOfInterest.ts` finds where a curve crosses the
 axis and where it turns round, and the cartesian view marks them and lets the
-cursor take them. It is worth stating what it does *not* claim, because the tool it
+cursor take them. It is worth stating what it does _not_ claim, because the tool it
 is modelled on gets this wrong and says so: intercepts and extrema are
-*approximations*, and a minimum at height 0.0001 looks exactly like a root until
+_approximations_, and a minimum at height 0.0001 looks exactly like a root until
 you zoom in. So a crossing and a touch are different variants of the result type,
-and the difference is on screen in the *shape of the mark* — a filled disc for a
+and the difference is on screen in the _shape of the mark_ — a filled disc for a
 crossing, an open ring for a turn — which leaves the label to say the one thing the
 picture cannot, namely which numbers the point stands at. `(t − 2)² + 0.0001`
 therefore reports a minimum at 0.0001 and never a root.
 
 **It is deliberately not root analysis.** `t²` has a double zero at the origin, and
-this reports the *turn* rather than a crossing, because a crossing is a claim about a
+this reports the _turn_ rather than a crossing, because a crossing is a claim about a
 sign change and there is none. The module is named after what it marks — points of
-interest *on the picture* — rather than after what a caller might hope it computes,
+interest _on the picture_ — rather than after what a caller might hope it computes,
 which is the difference between a name that guides and a name that invites the wrong
 use. Where the zeros of a function are, and with what multiplicity, is a different
 question needing different mathematics. The complex plane has one — `zerosAndPoles.ts`,
@@ -350,10 +350,10 @@ Two numerical decisions carry that:
   so no tolerance has to be guessed for a function measured in millions.
 - **A turn wins the place.** Where an exact zero and a turn coincide — `t²` and
   `|t|` both land their minimum exactly on a sample — the true statement is that
-  the curve *touched*, and calling that a crossing is the mistake being avoided.
+  the curve _touched_, and calling that a crossing is the mistake being avoided.
 
 **Zeros and poles.** `mathcore/src/zerosAndPoles.ts` answers where a complex
-function vanishes and where it blows up, and it answers the *count* exactly, which
+function vanishes and where it blows up, and it answers the _count_ exactly, which
 is what makes it worth having. The **argument principle** says that the change in
 the argument of `f` around a closed curve, divided by a full turn, is the number of
 zeros minus the number of poles inside — an integer. A small circle around a
@@ -364,18 +364,21 @@ one; a contour can, and the test that says so asserts exactly 2.
 
 The division of labour is the same one used above, and it is deliberate:
 
-- **The kind and the order are facts**, from the winding number. They cannot be
-  changed by moving the point.
+- **The kind and the order are facts only after adaptive winding converges.** The
+  classifier doubles its circle resolution, checks three consecutive equal counts,
+  and refuses the result when an adjacent phase step is too large to resolve.
+  They cannot be changed by moving the point once that evidence exists.
 - **The coordinates are a deduction.** A candidate comes from a local extremum of
   `|f|` on a search grid and is then walked downhill, so the position is approximate
   and is presented as a number like any other.
 
-Candidates that are neither a zero nor a pole are discarded by a winding of *zero*
-rather than by a tolerance: `sin(z)/z` at the origin has a removable singularity, and
-nothing is reported there. A contour that runs through a singularity has no value on
-it to take the argument of, and the answer is that there is no answer rather than a
-number that happens to be nearby. And the search reports only what is inside the
-region it was given — `tan` has a zero at every multiple of π, so a candidate near
+Candidates that are neither a zero nor a pole are not silently promoted to a theorem:
+the search returns detected points separately from unresolved candidates and truncation
+status. `sin(z)/z` at the origin has a removable singularity, and nothing is reported
+there, but a caller still knows the region was not fully classified. A contour that
+runs through a singularity has no value on it to take the argument of, and the answer
+is that there is no answer rather than a number that happens to be nearby. And the
+search reports only what is inside the region it was given — `tan` has a zero at every multiple of π, so a candidate near
 the edge of a window walks straight out of it and must not be reported.
 
 The complex plane draws them: a filled disc for a zero and an open ring for a pole,
@@ -384,14 +387,14 @@ not have to be read twice to say so. Taking one with the cursor labels it `(0, 0
 `(0, 0) ×2` where the order is above one: which of the two it is lives in the shape of
 the mark and in the legend, and the order is the single exception because nothing else
 in that picture carries it. The coordinate is rounded to the place the picture can
-support before it is written, since the search *located* the point rather than solving
+support before it is written, since the search _located_ the point rather than solving
 for it and `-1.06×10⁻¹⁶` is not a better answer than `0`.
 
 The capability flipped to `implemented` in the same commit as the drawing, which is
 the rule: a capability may not claim more than the interface shows.
 
 This is the first thing here that Desmos does not do. It marks where a curve meets
-the axis; it does not tell you that `z²` has a *double* zero there, and it has no
+the axis; it does not tell you that `z²` has a _double_ zero there, and it has no
 notion of a pole at all.
 
 ### 7.2c Contour integrals
@@ -399,8 +402,8 @@ notion of a pole at all.
 `mathcore/src/contour.ts`, and the one place where the language itself had to grow.
 
 `GOAL.md` section 7.15 writes the interaction as notation — `f(z) = ...`,
-`gamma(t) = ...`, `∮_gamma f(z) dz` — and explicitly rejects a dialog for it. So the
-contour integral is a *node in the tree*, and the first one that binds a variable: the
+`gamma(t) = ...`, `gamma(t; [0, 1]) = ...`, `∮_gamma f(z) dz` — and explicitly rejects a dialog for it. So the
+contour integral is a _node in the tree_, and the first one that binds a variable: the
 `z` in `∮_gamma f(z) dz` is bound by the integral, which is why `collectVariableNames`
 had to stop being a `walk`. Getting that wrong is quiet — the line would be typed as a
 function of `z` instead of a value, and nothing about the integral would look wrong.
@@ -420,11 +423,13 @@ honest are reported rather than assumed:
   central difference the answer is `6.6×10⁻⁸` out and the error estimate independently
   catches it.
 
-Two things are deliberately *not* decided by the quadrature. Whether the path closed is
+Two things are deliberately _not_ decided by the quadrature. Whether the path closed is
 computed and shown, because `∮` over an open path is a claim the picture cannot make
-good on. And **which poles are enclosed** is settled by the winding number — an integer,
-from the argument principle applied to the contour's own samples — because a quadrature
-cannot see a pole the grid steps over.
+good on. And **which poles are enclosed** is settled by the converged winding number —
+an integer from the argument principle applied to the contour's own samples — because
+a quadrature cannot see a pole the grid steps over. An empty detected-pole list is not
+evidence that the integrand is analytic: `exp(1/z)` is an essential-singularity
+regression case, so the UI reports an inconclusive residue-theorem check.
 
 That division is what makes the residue theorem worth showing. The two sides come from
 **different methods**: quadrature along the reader's contour, against circle quadrature at
@@ -433,7 +438,8 @@ the enclosure is decided by the winding number and not by the integral being com
 The residue at a pole is its defining integral around a circle that holds that pole and
 no other, and the radius ladder — a descending sequence that has to agree — is what makes
 an over-generous circle safe: `1/(z² − 1)` about `z = 1` answers `1/2` where a
-single-radius version answers `1`.
+single-radius version answers `1`. Each residue carries its own radius and measured
+uncertainty; theorem comparison combines those errors with the contour quadrature error.
 
 The capability flipped in the same commit as the drawing, which is the rule.
 
@@ -445,7 +451,7 @@ at all. `ValueLine` shows it under the line that produced it, with the interval,
 closure, and the theorem's own answer. The number is written in the same notation the
 readout uses, so the two cannot disagree about how a complex number is written.
 
-The one piece of *state* this needed was finding the integral at all: a value is never
+The one piece of _state_ this needed was finding the integral at all: a value is never
 the active expression, so `selectContourLine` looks for it separately, and the curve drawn
 on the plane and the number under the line come from one integration rather than two —
 the core returns the path samples it already computed.
@@ -454,13 +460,13 @@ the core returns the path samples it already computed.
 
 Two WebGL2 renderers, deliberately siblings rather than one generalised class:
 
-| | `fieldRenderer.ts` | `surfaceRenderer.ts` |
-|---|---|---|
-| geometry | one full-screen quad | a sampled mesh, indexed |
-| where the maths happens | in the fragment shader, per pixel | on the CPU, once per mesh |
-| depth buffer | off | on |
-| program | the AST, lowered | fixed, and takes no part of the AST |
-| uniforms | floats and `vec2`s | matrices and vectors too |
+|                         | `fieldRenderer.ts`                | `surfaceRenderer.ts`                |
+| ----------------------- | --------------------------------- | ----------------------------------- |
+| geometry                | one full-screen quad              | a sampled mesh, indexed             |
+| where the maths happens | in the fragment shader, per pixel | on the CPU, once per mesh           |
+| depth buffer            | off                               | on                                  |
+| program                 | the AST, lowered                  | fixed, and takes no part of the AST |
+| uniforms                | floats and `vec2`s                | matrices and vectors too            |
 
 Neither receives a shader it has to understand; the field renderer receives one the
 core produced, and the surface renderer's is a constant. Sharing the
@@ -471,7 +477,7 @@ changes how it draws.
 The surface program is **not** a `GlslProgram`. That type means "the expression,
 compiled", and it has exactly one producer; a 3D surface evaluates the AST sixteen
 thousand times to build its geometry and then hands the GPU a fixed program that
-places vertices and colours them. What the two *do* share is the colouring:
+places vertices and colours them. What the two _do_ share is the colouring:
 `scalarFieldColoringSource()` in the core is generated from `SCALAR_RAMP` and
 interpolated into both shaders, so a surface of `f(x, y)` and a heatmap of
 `f(x, y)` cannot come out different colours.
@@ -510,7 +516,7 @@ hand. One function produces the plain text (`2×10^8`) for tooltips, ARIA labels
 and tests.
 
 One consequence is worth knowing rather than discovering: a superscript is a
-*layout*, not a character, so the text content of the rendered element is
+_layout_, not a character, so the text content of the rendered element is
 `2×108`. The value is carried on the element's label as well, and a test asserts
 both halves so that the trade-off stays deliberate.
 
@@ -525,14 +531,14 @@ both halves so that the trade-off stays deliberate.
 MathQuill was the first choice. Desmos's editing behaviour is the behaviour being
 reproduced, and MathQuill came out of Desmos. It was rejected on evidence:
 
-| | MathQuill | MathLive |
-|---|---|---|
-| published version | `0.10.1-a` — a prerelease | `0.110.0` |
-| last published | 2023, and 2016 before that | months ago, actively |
-| runtime dependency | `jquery ^1.12.3` | none in the editor itself |
-| TypeScript types | **none**; `@types/mathquill` does not exist (404) | ships its own |
-| React 19 | manipulates the DOM directly, against the reconciler | a web component, framework-agnostic |
-| accessibility | no meaningful screen-reader support | designed with it: ARIA and spoken mathematics |
+|                    | MathQuill                                            | MathLive                                      |
+| ------------------ | ---------------------------------------------------- | --------------------------------------------- |
+| published version  | `0.10.1-a` — a prerelease                            | `0.110.0`                                     |
+| last published     | 2023, and 2016 before that                           | months ago, actively                          |
+| runtime dependency | `jquery ^1.12.3`                                     | none in the editor itself                     |
+| TypeScript types   | **none**; `@types/mathquill` does not exist (404)    | ships its own                                 |
+| React 19           | manipulates the DOM directly, against the reconciler | a web component, framework-agnostic           |
+| accessibility      | no meaningful screen-reader support                  | designed with it: ARIA and spoken mathematics |
 
 A hard jQuery 1.x dependency, no types at all, and unmaintained prerelease releases
 are not acceptable for the input layer of a project meant to last. The editing
@@ -548,7 +554,7 @@ ArrowDown at the bottom        → move-out{direction:'downward'}  → the next 
 
 The application handles `move-out`; it never has to guess where the caret should go.
 
-### What MathLive is *not* used for
+### What MathLive is _not_ used for
 
 It carries its own computer algebra system as a dependency. **That system is never
 called.** MathLive here is a text-entry widget that reads and writes LaTeX. The
@@ -565,7 +571,7 @@ that would need changing if it were ever replaced.
 `MathExpressionField.tsx` implements it over the element. Nothing else in the
 application touches the editor. That is what makes the editor replaceable, and it is
 also what makes the integration testable: the tests drive a double that behaves like an
-editable field with a caret, so the *integration* is tested without a TeX engine.
+editable field with a caret, so the _integration_ is tested without a TeX engine.
 
 Three details in that adapter are load-bearing:
 
@@ -574,7 +580,7 @@ Three details in that adapter are load-bearing:
 - **Keypad buttons cancel their own pointer-down.** Without it, pressing a key moves
   focus out of the formula and the caret is lost. This is asserted directly.
 - **The caret follows the focused row.** Enter, the keypad's return key and an arrow
-  that runs out of structure all move the *store's* focus; the caret has to follow or
+  that runs out of structure all move the _store's_ focus; the caret has to follow or
   the next keystroke lands in the previous formula.
 
 ### The removed chrome
@@ -589,7 +595,7 @@ remove.
 `packages/app/src/expression/keypad/`
 
 One keypad, three configurations. The digits and the letters are the same everywhere;
-only the function page differs, and it is *composed* from the shared groups plus the
+only the function page differs, and it is _composed_ from the shared groups plus the
 subsystem's own. There is no `ComplexKeypad` component — only a configuration, which
 is what stops the three subsystems growing three input systems.
 
@@ -602,7 +608,7 @@ rather than inserting something the parser would reject. Two tests enforce this 
 checks that every command in every insertion is one the parser knows, the other that
 every insertion is valid in some natural context.
 
-Keys for mathematics the language *does* have are live: the fraction key builds a real
+Keys for mathematics the language _does_ have are live: the fraction key builds a real
 fraction with the caret in the numerator, and pressing it with a selection wraps the
 selection rather than discarding it (`#@` is MathLive's placeholder for the selection,
 `#?` for an empty box).
@@ -629,7 +635,7 @@ Five design points worth naming:
 - **View identities are assigned by the store** (`ViewBlueprint` → `ViewSpec`), so
   a view restored from storage, opened with a subsystem, or added from the toolbar
   cannot collide with another.
-- **The cursor is a point of the *domain*.** Not a value, and not a triple: the
+- **The cursor is a point of the _domain_.** Not a value, and not a triple: the
   shared state is the plane coordinate `(x, y)`, and every view derives what it
   shows from that. That is why a 3D surface's readout has a `z` without `z` being
   stored anywhere — it is `f(x, y)`, computed by the same evaluator the picture was
@@ -644,7 +650,7 @@ Five design points worth naming:
   cannot point at a place the readout is not describing — which is why a held point
   shows once the pointer has left the canvas and not while it is over it. Where a mark
   takes one of the analysed points, the coordinate is stated to the place the picture
-  can support and is rounded *before* it reaches the shared cursor; rounding it in the
+  can support and is rounded _before_ it reaches the shared cursor; rounding it in the
   label while publishing the raw value would be two statements of one point, and two
   statements that round differently are two different answers.
 
@@ -674,7 +680,7 @@ it from the expression's inferred signature, so `f(x, y) = x² − y²` opens on
 surface wherever it is typed.
 
 4. **The view taxonomy is a statement about mathematics, not about renderers.**
-   `ViewKind` names the *space and the representation*: `complex-plane` is the
+   `ViewKind` names the _space and the representation_: `complex-plane` is the
    plane itself, and `domain-coloring` is one way of drawing a map on that plane.
    Conflating the two — one kind called `field` doing every job — is the confusion
    the taxonomy exists to undo, because it made the plane and a picture of a
@@ -692,24 +698,24 @@ renders it for a reader. Every entry is consumed by the evaluator, the type
 system, the lowering and the test suite, so documentation cannot drift from
 behaviour. The most consequential:
 
-| Convention | Choice |
-|---|---|
-| Principal argument | `(-π, π]` — the negative real axis is the **upper** edge |
-| Complex logarithm | `Log z = ln|z| + i·Arg z`, cut on the negative real axis |
-| Complex power | `exp(w Log z)`; exact repeated multiplication for integer `w`; `0^0 = 1` |
-| Square root | principal: `sqrt(-4) = 2i`, never `-2i` |
-| Fourier transform | angular frequency, `1/(2π)` on the *inverse* only |
-| Laplace transform | one-sided, lower limit `0⁻`, ROC reported separately |
-| Domain colouring | hue from `arg`, brightness from `log₂|w|` per octave |
-| Scalar ramp | the viridis palette, monotone in lightness |
-| Undefined values | reported as a mathematical issue, never as `NaN` reaching the UI |
-| Writing a number | plain decimals in `[1e-4, 1e6)`, `m×10^e` outside it, and one policy for every surface |
-| Axis ticks | 1-2-5 steps, each tick computed as `index × step`, a quarter subdivision for a step of `2×10ⁿ` |
-| Surface normals | outward, by central differences over the sampled grid; a singularity is a hole, not a bridge |
-| 3D camera | right-handed, looking down `-z`, column-major, clip space `[-1, 1]` on all three axes |
-| The world's up axis | `+z` — `x` and `y` span the plane and `z` is the height, because that is how a graph is read |
-| Editor interchange format | LaTeX, parsed by `latex.ts` into the same canonical AST the plain syntax produces |
-| Unfinished input | reported as `incomplete`, and shown as nothing rather than as an error |
+| Convention                | Choice                                                                                         |
+| ------------------------- | ---------------------------------------------------------------------------------------------- |
+| Principal argument        | `(-π, π]` — the negative real axis is the **upper** edge                                       |
+| Complex logarithm         | `Log z = ln                                                                                    | z   | + i·Arg z`, cut on the negative real axis |
+| Complex power             | `exp(w Log z)`; exact repeated multiplication for integer `w`; `0^0 = 1`                       |
+| Square root               | principal: `sqrt(-4) = 2i`, never `-2i`                                                        |
+| Fourier transform         | angular frequency, `1/(2π)` on the _inverse_ only                                              |
+| Laplace transform         | one-sided, lower limit `0⁻`, ROC reported separately                                           |
+| Domain colouring          | hue from `arg`, brightness from `log₂                                                          | w   | ` per octave                              |
+| Scalar ramp               | the viridis palette, monotone in lightness                                                     |
+| Undefined values          | reported as a mathematical issue, never as `NaN` reaching the UI                               |
+| Writing a number          | plain decimals in `[1e-4, 1e6)`, `m×10^e` outside it, and one policy for every surface         |
+| Axis ticks                | 1-2-5 steps, each tick computed as `index × step`, a quarter subdivision for a step of `2×10ⁿ` |
+| Surface normals           | outward, by central differences over the sampled grid; a singularity is a hole, not a bridge   |
+| 3D camera                 | right-handed, looking down `-z`, column-major, clip space `[-1, 1]` on all three axes          |
+| The world's up axis       | `+z` — `x` and `y` span the plane and `z` is the height, because that is how a graph is read   |
+| Editor interchange format | LaTeX, parsed by `latex.ts` into the same canonical AST the plain syntax produces              |
+| Unfinished input          | reported as `incomplete`, and shown as nothing rather than as an error                         |
 
 There is one convention per row and one place it is written down.
 
@@ -752,12 +758,12 @@ Four levels, all of them runnable:
 7. **The GPU against the CPU** — verified in a real browser by reading pixels out
    of the framebuffer and checking them against the convention. For `f(z) = z²`:
 
-   | Point | Expected | Measured |
-   |---|---|---|
-   | `z = 0` | a zero, so black | dark, luminance ≈ 0.17 |
-   | `z ≈ 1`, `w = 1`, `arg 0` | hue 0.5, cyan | `g ≈ b > r` |
-   | `z ≈ i`, `w = -1`, `arg π` | hue 1, red | `r > b > g` |
-   | `z ≈ 1+0.9i`, `arg w ≈ 1.47` | hue 0.73, blue | `b > r > g`, ratio 0.55 vs 0.52 predicted |
+   | Point                        | Expected         | Measured                                  |
+   | ---------------------------- | ---------------- | ----------------------------------------- |
+   | `z = 0`                      | a zero, so black | dark, luminance ≈ 0.17                    |
+   | `z ≈ 1`, `w = 1`, `arg 0`    | hue 0.5, cyan    | `g ≈ b > r`                               |
+   | `z ≈ i`, `w = -1`, `arg π`   | hue 1, red       | `r > b > g`                               |
+   | `z ≈ 1+0.9i`, `arg w ≈ 1.47` | hue 0.73, blue   | `b > r > g`, ratio 0.55 vs 0.52 predicted |
 
    The subtle predictions — which of `g` and `b` is larger — are the ones that
    make this a real check rather than a smoke test.
@@ -767,7 +773,7 @@ Four levels, all of them runnable:
    - **The depth buffer is doing work.** With the camera deliberately left
      unchanged, disabling `DEPTH_TEST` and forcing a single redraw changes the
      framebuffer — a hash over the pixels goes from `1235388183` to `1830031926`.
-     A scene that merely *had* a depth buffer, and did not depend on it, would
+     A scene that merely _had_ a depth buffer, and did not depend on it, would
      produce the same image either way.
    - **Picking is exact.** Hovering a pixel reports the domain point
      `-1.9875 - 0.075i`, and the readout's value is `3.94453`, which is `x² − y²` at
@@ -840,25 +846,25 @@ one way.
 `GOAL.md` section 28 gives the order of architectural importance. Applying it to
 what exists now:
 
-| Next feature | Where it goes |
-|---|---|
-| Cauchy–Riemann residuals | Already expressible: `re`/`im` of a complex function are scalar fields of `x` and `y`. A view of `u_x - v_y` needs no new mathematics, only a way to express the partial derivative. |
-| Fourier and Laplace | New `mathcore` modules with their conventions added to `conventions.ts`, plus a transform-domain view. The `s-plane` is `complex-plane` with `s` bound as the complex variable, which is what the view already does. |
-| Gradients and divergence | `surface.ts` already samples a scalar field into a mesh, so a gradient can be shown as arrows over the existing surface or heatmap. Vector fields are the one case the current rendering design does not cover: a `vec2` per point is not a scalar, so `scalarRamp` does not apply to it. |
-| Contours and level sets | A two-dimensional representation of `R² → R`, alongside the surface and the heatmap, using the same `axisTicks` ladder the grid already uses. |
-| Taylor and Laurent series, branch cuts | New `mathcore` modules. The series want a symbolic engine for the coefficients; a branch cut is a *convention* before it is a drawing, so it belongs in `conventions.ts` first. |
+| Next feature                           | Where it goes                                                                                                                                                                                                                                                                             |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cauchy–Riemann residuals               | Already expressible: `re`/`im` of a complex function are scalar fields of `x` and `y`. A view of `u_x - v_y` needs no new mathematics, only a way to express the partial derivative.                                                                                                      |
+| Fourier and Laplace                    | New `mathcore` modules with their conventions added to `conventions.ts`, plus a transform-domain view. The `s-plane` is `complex-plane` with `s` bound as the complex variable, which is what the view already does.                                                                      |
+| Gradients and divergence               | `surface.ts` already samples a scalar field into a mesh, so a gradient can be shown as arrows over the existing surface or heatmap. Vector fields are the one case the current rendering design does not cover: a `vec2` per point is not a scalar, so `scalarRamp` does not apply to it. |
+| Contours and level sets                | A two-dimensional representation of `R² → R`, alongside the surface and the heatmap, using the same `axisTicks` ladder the grid already uses.                                                                                                                                             |
+| Taylor and Laurent series, branch cuts | New `mathcore` modules. The series want a symbolic engine for the coefficients; a branch cut is a _convention_ before it is a drawing, so it belongs in `conventions.ts` first.                                                                                                           |
 
 The recurring pattern: a new mathematical concept becomes a new module in
 `mathcore` that consumes the existing AST, and a view in `app` that consumes the
 existing store.
 
 **That pattern held for every feature until contour integrals, and it is worth saying
-where it stopped being true.** `GOAL.md` 7.15 asks for the integral to be *written*,
+where it stopped being true.** `GOAL.md` 7.15 asks for the integral to be _written_,
 `∮_gamma f(z) dz`, rather than assembled from a dialog — so the feature needed a node in
 the tree, a token in the lexer, a production in each front end, a branch in each lowering
 and, for the first time, a **binder inside an expression**: the `z` in `∮_gamma f(z) dz`
 is bound by the integral. None of that was free, and the honest lesson is that the
-architecture made it *cheap* rather than *unnecessary*: every backend that could not
+architecture made it _cheap_ rather than _unnecessary_: every backend that could not
 implement the node had to refuse it out loud, because the switches carry annotated return
 types and no `default`. Two of them do exactly that today — a fragment shader evaluates
 per pixel and a contour integral is one number, and the symbolic engine is not handed an
@@ -866,4 +872,4 @@ integral whose path it has no way to declare.
 
 The type system, on the other hand, did not move at all: a line with no free variables was
 already `scalar`, so the value side of the feature needed no inference work — only
-somewhere to *show* the number, which had not existed because until then no line had one.
+somewhere to _show_ the number, which had not existed because until then no line had one.

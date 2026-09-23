@@ -106,6 +106,20 @@ export interface ContourIntegralResult {
  */
 export const CONTOUR_PARAMETER_TEXT = 't ∈ [0, 2π]';
 
+/** Display the interval actually used by a contour, retaining the conventional default. */
+export function contourParameterText(from: number, to: number): string {
+  if (from === CONTOUR_INTEGRAL.from && to === CONTOUR_INTEGRAL.to) {
+    return CONTOUR_PARAMETER_TEXT;
+  }
+  return `t ∈ [${formatReal(from)}, ${formatReal(to)}]`;
+}
+
+export interface ResidueEstimate {
+  readonly value: Complex;
+  readonly estimatedError: number;
+  readonly radius: number;
+}
+
 /** Radii a residue is measured at, as fractions of the largest one offered. */
 const RESIDUE_RADIUS_STEPS = [1, 1 / 2, 1 / 4, 1 / 8] as const;
 
@@ -114,6 +128,9 @@ const RESIDUE_AGREEMENT = 1e-8;
 
 /** Samples on a residue's circle. The integrand is periodic on it, so this is ample. */
 const RESIDUE_SAMPLES = 256;
+
+/** A wrapped phase step this large cannot be distinguished from an alias. */
+const WINDING_MAX_PHASE_STEP = Math.PI * 0.75;
 
 /**
  * The residue of `f` at a pole — the coefficient of `1/(z − z₀)` in its Laurent series.
@@ -139,10 +156,10 @@ export function residueAt(
   evaluate: (z: Complex) => Result<Complex, MathIssue>,
   pole: Complex,
   maxRadius: number,
-): Complex | null {
+): ResidueEstimate | null {
   if (!Number.isFinite(maxRadius) || maxRadius <= 0) return null;
 
-  const measured: (Complex | null)[] = RESIDUE_RADIUS_STEPS.map((fraction) =>
+  const measured: (ResidueEstimate | null)[] = RESIDUE_RADIUS_STEPS.map((fraction) =>
     aroundCircle(evaluate, pole, maxRadius * fraction),
   );
 
@@ -154,15 +171,29 @@ export function residueAt(
     const next = measured[index + 1] ?? null;
     const after = measured[index + 2] ?? null;
     if (here === null || next === null || after === null) continue;
-    if (agrees(here, next) && agrees(here, after)) return here;
+    if (agrees(here, next) && agrees(here, after)) {
+      return combineResidueEstimates(here, next, after);
+    }
   }
 
   // The last two, if the ladder ran out before three in a row were available: still two
   // independent measurements of the same coefficient.
   const last = measured[measured.length - 1] ?? null;
   const secondLast = measured[measured.length - 2] ?? null;
-  if (last !== null && secondLast !== null && agrees(last, secondLast)) return last;
+  if (last !== null && secondLast !== null && agrees(last, secondLast)) {
+    return combineResidueEstimates(last, secondLast);
+  }
   return null;
+}
+
+function combineResidueEstimates(...estimates: ResidueEstimate[]): ResidueEstimate {
+  const first = estimates[0] as ResidueEstimate;
+  let estimatedError = 0;
+  for (const estimate of estimates) {
+    estimatedError = Math.max(estimatedError, estimate.estimatedError);
+    estimatedError = Math.max(estimatedError, cabs(csub(estimate.value, first.value)));
+  }
+  return { value: first.value, estimatedError, radius: first.radius };
 }
 
 /**
@@ -170,9 +201,9 @@ export function residueAt(
  *
  * The argument principle, applied to the contour rather than to a function: the total
  * change in `arg(γ(t) − p)` over the traversal, divided by a full turn. It is the same
- * idea as `windingNumber` in `zerosAndPoles.ts` and trustworthy for the same reason — the
- * answer is an integer, so sampling error can move it by a millionth and cannot move it
- * by one.
+ * idea as `windingNumber` in `zerosAndPoles.ts`. A sampled contour is only trusted when
+ * each wrapped phase step is comfortably below a half turn; otherwise this returns
+ * `null` instead of turning an aliased sample into an integer.
  *
  * The samples come from the caller because the caller already has them: they are the
  * ones the integral was computed on, and counting the turns of a different sampling
@@ -195,6 +226,7 @@ export function windingAround(path: readonly Complex[], about: Complex): number 
       // of a smooth contour move a fraction of a turn at a time.
       if (step > Math.PI) step -= 2 * Math.PI;
       else if (step <= -Math.PI) step += 2 * Math.PI;
+      if (Math.abs(step) >= WINDING_MAX_PHASE_STEP) return null;
       total += step;
     }
     previous = argument;
@@ -211,7 +243,7 @@ function aroundCircle(
   evaluate: (z: Complex) => Result<Complex, MathIssue>,
   centre: Complex,
   radius: number,
-): Complex | null {
+): ResidueEstimate | null {
   const integrated = contourIntegral({
     path: (t) => ok(cx(centre.re + radius * Math.cos(t), centre.im + radius * Math.sin(t))),
     integrand: evaluate,
@@ -219,13 +251,17 @@ function aroundCircle(
   });
   if (!integrated.ok) return null;
   // Divide by 2πi, which is the same as multiplying by −i/(2π).
-  return cmul(integrated.value.value, cx(0, -1 / (2 * Math.PI)));
+  return {
+    value: cmul(integrated.value.value, cx(0, -1 / (2 * Math.PI))),
+    estimatedError: integrated.value.estimatedError / (2 * Math.PI),
+    radius,
+  };
 }
 
 /** Whether two measurements of the same residue are the same number. */
-function agrees(left: Complex, right: Complex): boolean {
-  const difference = cabs(csub(left, right));
-  return difference <= RESIDUE_AGREEMENT * Math.max(1, cabs(left), cabs(right));
+function agrees(left: ResidueEstimate, right: ResidueEstimate): boolean {
+  const difference = cabs(csub(left.value, right.value));
+  return difference <= RESIDUE_AGREEMENT * Math.max(1, cabs(left.value), cabs(right.value));
 }
 
 /** One pass of the rule: the total, the running sum, and what the path did. */

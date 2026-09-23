@@ -12,7 +12,8 @@
  *     (1/2π) · Δarg f along the curve  =  N − P
  *
  * the number of zeros minus the number of poles *inside*. That count is an integer,
- * and it is exact — the sampling error can move it by a millionth, not by one.
+ * but a sampled phase can alias by whole turns, so this module only accepts a count
+ * after adaptive resolutions agree and every phase step is safely resolved.
  *
  * So the division of labour here is:
  *
@@ -44,6 +45,12 @@ export interface Winding {
   readonly count: number | null;
   /** The value before rounding, so a caller can see how close it came. */
   readonly raw: number;
+  /** Whether successive adaptive resolutions agreed on this count. */
+  readonly converged: boolean;
+  /** The finest resolution used to obtain this result. */
+  readonly samples: number;
+  /** The largest wrapped phase step at the finest resolution. */
+  readonly maxPhaseStep: number;
 }
 
 export interface Singularity {
@@ -67,6 +74,20 @@ export interface ZerosAndPolesOptions {
   readonly resolution?: number;
 }
 
+export interface SingularitySearchResult {
+  /** Singularities the heuristic search detected and classified. */
+  readonly points: readonly Singularity[];
+  /**
+   * Whether this heuristic search finished without unresolved candidates or search limits.
+   * This is not a proof that the whole region is analytic or that no singularity was missed.
+   */
+  readonly complete: boolean;
+  /** Candidate locations that were undefined or had an unstable classification. */
+  readonly unresolved: readonly Complex[];
+  /** Whether the candidate or result limits hid part of the search. */
+  readonly truncated: boolean;
+}
+
 /**
  * Places a contour is sampled.
  *
@@ -77,6 +98,12 @@ export interface ZerosAndPolesOptions {
  * the answer is that there is no answer.
  */
 const CONTOUR_SAMPLES = 256;
+
+/** A phase step this large is too close to the branch-cut ambiguity to trust. */
+const MAX_PHASE_STEP = Math.PI * 0.75;
+
+/** Do not let a pathological function make an interactive search unbounded. */
+const MAX_WINDING_SAMPLES = 8192;
 
 /** How near a whole number a winding has to land to be taken as one. */
 const INTEGER_TOLERANCE = 1e-4;
@@ -90,6 +117,9 @@ const MAX_FOUND = 40;
 /** An upper bound on how many grid points are worth refining, for the same reason. */
 const MAX_CANDIDATES = MAX_FOUND * 4;
 
+/** A rapidly exploding sample is evidence that this grid cannot certify the region. */
+const UNRESOLVED_MAGNITUDE = 1e4;
+
 /** A grid point that might be standing in for a singularity. */
 interface Candidate {
   readonly at: Complex;
@@ -98,6 +128,8 @@ interface Candidate {
    * only a guess — the winding number afterwards is what settles the question.
    */
   readonly minimise: boolean;
+  /** The grid had no finite value here, so a zero winding is not a classification. */
+  readonly undefinedAt: boolean;
 }
 
 /**
@@ -110,6 +142,11 @@ interface Candidate {
  * total turn is divided by a full turn.
  *
  * A function with no value anywhere on the contour cannot be counted, and says so.
+ * Count argument turns with adaptive resolution.
+ *
+ * Two equal samples are not enough: a phase can alias to the same integer at two
+ * resolutions and reveal its real turn only at the next doubling. Three consecutive
+ * equal counts plus a safe phase step are the minimum evidence accepted here.
  */
 export function windingNumber(
   evaluate: (z: Complex) => Result<Complex, MathIssue>,
@@ -118,14 +155,84 @@ export function windingNumber(
   samples: number = CONTOUR_SAMPLES,
 ): Winding {
   if (!Number.isFinite(radius) || radius <= 0 || samples < 4) {
-    return { count: null, raw: Number.NaN };
+    return {
+      count: null,
+      raw: Number.NaN,
+      converged: false,
+      samples: 0,
+      maxPhaseStep: Number.NaN,
+    };
   }
 
+  const history: WindingMeasurement[] = [];
+  let resolution = Math.max(4, Math.floor(samples));
+  const limit = Math.max(resolution, MAX_WINDING_SAMPLES);
+
+  while (resolution <= limit) {
+    const current = measureWinding(evaluate, centre, radius, resolution);
+    if (current === null) {
+      return {
+        count: null,
+        raw: Number.NaN,
+        converged: false,
+        samples: resolution,
+        maxPhaseStep: Number.NaN,
+      };
+    }
+    history.push(current);
+
+    const previous = history[history.length - 2];
+    const beforePrevious = history[history.length - 3];
+    if (
+      beforePrevious !== undefined &&
+      previous !== undefined &&
+      current.count !== null &&
+      previous.count === current.count &&
+      beforePrevious.count === current.count &&
+      current.maxPhaseStep < MAX_PHASE_STEP &&
+      previous.maxPhaseStep < MAX_PHASE_STEP &&
+      beforePrevious.maxPhaseStep < MAX_PHASE_STEP
+    ) {
+      return {
+        count: current.count,
+        raw: current.raw,
+        converged: true,
+        samples: resolution,
+        maxPhaseStep: current.maxPhaseStep,
+      };
+    }
+
+    if (resolution === limit) break;
+    resolution = Math.min(limit, resolution * 2);
+  }
+
+  const last = history[history.length - 1];
+  return {
+    count: null,
+    raw: last?.raw ?? Number.NaN,
+    converged: false,
+    samples: last?.samples ?? resolution,
+    maxPhaseStep: last?.maxPhaseStep ?? Number.NaN,
+  };
+}
+
+interface WindingMeasurement {
+  readonly count: number | null;
+  readonly raw: number;
+  readonly samples: number;
+  readonly maxPhaseStep: number;
+}
+
+function measureWinding(
+  evaluate: (z: Complex) => Result<Complex, MathIssue>,
+  centre: Complex,
+  radius: number,
+  samples: number,
+): WindingMeasurement | null {
   let previous: number | null = null;
   let total = 0;
+  let maxPhaseStep = 0;
 
-  // The last sample repeats the first, so the walk closes and the final turn is
-  // included.
   for (let index = 0; index <= samples; index += 1) {
     const angle = (index / samples) * 2 * Math.PI;
     const at = {
@@ -133,28 +240,25 @@ export function windingNumber(
       im: centre.im + radius * Math.sin(angle),
     };
     const result = evaluate(at);
-    if (!result.ok || isUndefined(result.value)) return { count: null, raw: Number.NaN };
+    if (!result.ok || isUndefined(result.value)) return null;
 
     const argument = principalArg(result.value);
+    if (!Number.isFinite(argument)) return null;
     if (previous !== null) {
       let step = argument - previous;
-      // Wrapped into (-π, π], so a step never spans more than half a turn and the
-      // running total is continuous.
       if (step > Math.PI) step -= 2 * Math.PI;
       else if (step <= -Math.PI) step += 2 * Math.PI;
       total += step;
+      maxPhaseStep = Math.max(maxPhaseStep, Math.abs(step));
     }
     previous = argument;
   }
 
   const raw = total / (2 * Math.PI);
-  if (!Number.isFinite(raw)) return { count: null, raw: Number.NaN };
-
+  if (!Number.isFinite(raw)) return null;
   const nearest = Math.round(raw);
-  if (Math.abs(raw - nearest) > INTEGER_TOLERANCE) return { count: null, raw };
-  // `Math.round(-0.0000001)` is `-0`, and a count of negative zero is a wart a
-  // caller should not have to think about.
-  return { count: nearest + 0, raw };
+  const count = Math.abs(raw - nearest) <= INTEGER_TOLERANCE ? nearest + 0 : null;
+  return { count, raw, samples, maxPhaseStep };
 }
 
 /**
@@ -171,24 +275,36 @@ export function windingNumber(
  * search are found once, with the combined order — which is the truth about that
  * cell, and is reported rather than hidden.
  */
-export function findZerosAndPoles(
+export function analyzeZerosAndPoles(
   evaluate: (z: Complex) => Result<Complex, MathIssue>,
   options: ZerosAndPolesOptions,
-): readonly Singularity[] {
+): SingularitySearchResult {
   const { xMin, xMax, yMin, yMax } = options;
-  if (!Number.isFinite(xMin) || !Number.isFinite(xMax)) return [];
-  if (!Number.isFinite(yMin) || !Number.isFinite(yMax)) return [];
-  if (xMax <= xMin || yMax <= yMin) return [];
+  const empty = (complete: boolean): SingularitySearchResult => ({
+    points: [],
+    complete,
+    unresolved: [],
+    truncated: false,
+  });
+  if (!Number.isFinite(xMin) || !Number.isFinite(xMax)) return empty(false);
+  if (!Number.isFinite(yMin) || !Number.isFinite(yMax)) return empty(false);
+  if (xMax <= xMin || yMax <= yMin) return empty(false);
 
   const resolution = Math.max(8, Math.floor(options.resolution ?? DEFAULT_RESOLUTION));
   const stepX = (xMax - xMin) / (resolution - 1);
   const stepY = (yMax - yMin) / (resolution - 1);
 
+  const unresolvedGrid: Complex[] = [];
+
   /** `|f|` at a grid point, or null where there is no value. */
   const magnitudeAt = (column: number, row: number): number | null => {
-    const result = evaluate({ re: xMin + column * stepX, im: yMin + row * stepY });
+    const at = { re: xMin + column * stepX, im: yMin + row * stepY };
+    const result = evaluate(at);
     if (!result.ok || isUndefined(result.value)) return null;
     const magnitude = cabs(result.value);
+    if (!Number.isFinite(magnitude) || magnitude > UNRESOLVED_MAGNITUDE) {
+      unresolvedGrid.push(at);
+    }
     return Number.isFinite(magnitude) ? magnitude : null;
   };
 
@@ -208,7 +324,7 @@ export function findZerosAndPoles(
       // No value here at all: a pole, or a hole in the domain. Either way it is
       // worth testing, and the winding number decides which.
       if (here === null || here === undefined) {
-        candidates.push({ at, minimise: false });
+        candidates.push({ at, minimise: false, undefinedAt: true });
         continue;
       }
 
@@ -226,13 +342,15 @@ export function findZerosAndPoles(
       // An extremum of the modulus. A bottom is *probably* a zero and a top is
       // *probably* a pole — and that guess is only used to decide which way to walk
       // downhill. The contour below decides what the point actually is.
-      if (!lower) candidates.push({ at, minimise: true });
-      else if (!higher) candidates.push({ at, minimise: false });
+      if (!lower) candidates.push({ at, minimise: true, undefinedAt: false });
+      else if (!higher) candidates.push({ at, minimise: false, undefinedAt: false });
     }
   }
 
   const contourRadius = Math.min(stepX, stepY) * 0.5;
   const found: Singularity[] = [];
+  const unresolved: Complex[] = [...unresolvedGrid];
+  const candidateLimitReached = candidates.length > MAX_CANDIDATES;
 
   for (const candidate of candidates.slice(0, MAX_CANDIDATES)) {
     // **Walk to the extremum before measuring anything.** A grid point can be most
@@ -248,7 +366,16 @@ export function findZerosAndPoles(
     if (z.re < xMin || z.re > xMax || z.im < yMin || z.im > yMax) continue;
 
     const winding = windingNumber(evaluate, z, contourRadius);
-    if (winding.count === null || winding.count === 0) continue;
+    if (winding.count === null) {
+      unresolved.push(z);
+      continue;
+    }
+    if (winding.count === 0) {
+      // An undefined centre with zero winding may be removable or essential; the
+      // winding alone cannot classify it, so keep it out of theorem-level claims.
+      if (candidate.undefinedAt) unresolved.push(z);
+      continue;
+    }
     found.push({
       z,
       kind: winding.count > 0 ? 'zero' : 'pole',
@@ -269,7 +396,21 @@ export function findZerosAndPoles(
     if (!duplicate) distinct.push(point);
   }
 
-  return distinct.slice(0, MAX_FOUND);
+  const resultLimitReached = distinct.length > MAX_FOUND;
+  return {
+    points: distinct.slice(0, MAX_FOUND),
+    complete: !candidateLimitReached && !resultLimitReached && unresolved.length === 0,
+    unresolved,
+    truncated: candidateLimitReached || resultLimitReached,
+  };
+}
+
+/** Detected singularity points, preserved as the simple renderer-facing API. */
+export function findZerosAndPoles(
+  evaluate: (z: Complex) => Result<Complex, MathIssue>,
+  options: ZerosAndPolesOptions,
+): readonly Singularity[] {
+  return analyzeZerosAndPoles(evaluate, options).points;
 }
 
 /** What is being driven to zero: the modulus, or its reciprocal. */

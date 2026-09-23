@@ -279,6 +279,18 @@ describe('the whole way through', () => {
     expect(cabs(csub(scalar, cx(0, 2 * Math.PI)))).toBeLessThan(1e-9);
   });
 
+  it('passes a path definition interval through to numerical integration', () => {
+    const workspace = buildWorkspace(
+      inputs('gamma(t; [0, 1])=t+i*t^2', 'f(z)=1', '∮_gamma f(z) dz'),
+    );
+    const statement = workspace.entries[2]?.statement;
+    if (statement?.kind !== 'expression') throw new Error('expected a statement');
+    const details = evaluateContourDetails(statement.body, workspaceEnvironment(workspace));
+    if (details === null || !details.ok) throw new Error('expected contour details');
+    expect(details.value.integral.from).toBe(0);
+    expect(details.value.integral.to).toBe(1);
+  });
+
   it('follows a parameter, so the slider means something', () => {
     const workspace = buildWorkspace(
       inputs('a=2', 'gamma(t)=exp(i*t)', 'f(z)=1/z', '∮_gamma a*f(z) dz'),
@@ -333,7 +345,9 @@ describe('the whole way through', () => {
 describe('the residue theorem, checked rather than asserted', () => {
   /** Run the analysis for a three-line workspace and return what it found. */
   function analyse(path: string, integrand: string) {
-    const workspace = buildWorkspace(inputs(`gamma(t)=${path}`, `f(z)=${integrand}`, '∮_gamma f(z) dz'));
+    const workspace = buildWorkspace(
+      inputs(`gamma(t)=${path}`, `f(z)=${integrand}`, '∮_gamma f(z) dz'),
+    );
     const statement = workspace.entries[2]?.statement;
     if (statement?.kind !== 'expression') throw new Error('expected a statement');
     const details = evaluateContourDetails(statement.body, workspaceEnvironment(workspace));
@@ -353,6 +367,8 @@ describe('the residue theorem, checked rather than asserted', () => {
     expect(windingAround([...circle, ...circle], cx(0, 0))).toBe(2);
     // Through the point itself there is no winding number, and no zero pretending to be one.
     expect(windingAround(circle, cx(1, 0))).toBeNull();
+    // Two samples can look like a half turn even though the missing arc is unknown.
+    expect(windingAround([cx(1, 0), cx(-1, 0)], cx(0, 0))).toBeNull();
   });
 
   it('finds the pole inside, and agrees with its residue', () => {
@@ -361,12 +377,16 @@ describe('the residue theorem, checked rather than asserted', () => {
     expect(details.enclosed).toHaveLength(1);
     const pole = details.enclosed[0];
     expect(pole?.winding).toBe(1);
-    expect(cabs(csub(pole?.residue ?? cx(0, 0), cx(1, 0)))).toBeLessThan(1e-6);
+    expect(cabs(csub(pole?.residue?.value ?? cx(0, 0), cx(1, 0)))).toBeLessThan(1e-6);
 
     // The two sides come from different methods: quadrature along the circle, and circle
     // quadrature at the pole. That they agree is the theorem.
     expect(cabs(csub(details.integral.value, details.residueSum))).toBeLessThan(
       Math.max(details.integral.estimatedError, 1e-9),
+    );
+    expect(details.residueEstimatedError).toBeGreaterThan(0);
+    expect(details.integral.estimatedError + details.residueEstimatedError).toBeGreaterThanOrEqual(
+      cabs(csub(details.integral.value, details.residueSum)),
     );
     expect(cabs(csub(details.residueSum, cx(0, 2 * Math.PI)))).toBeLessThan(1e-6);
   });

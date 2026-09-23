@@ -25,7 +25,7 @@ The negative real axis belongs to the **upper** edge of the branch cut, so
 `Arg(-1) = π`, never `-π`. JavaScript's `atan2` returns `-π` for a negative zero
 imaginary part, so that one case is remapped. The shader does the same.
 
-*Consequence:* `principalArg(-4) = π` and `principalArg(-4 - 0i) = π`. The range is
+_Consequence:_ `principalArg(-4) = π` and `principalArg(-4 - 0i) = π`. The range is
 half-open, which is what makes the argument single-valued everywhere except the cut.
 
 ### Complex logarithm
@@ -119,14 +119,14 @@ contour integral and therefore the sign of `2πi Σ Res(f, zₖ)`.
 ### Contour integral
 
 ```
-∮_γ f(z) dz = ∫ f(γ(t))·γ′(t) dt     over t ∈ [0, 2π]
+∮_γ f(z) dz = ∫ f(γ(t))·γ′(t) dt     over t ∈ [a, b]
 ```
 
-The parameter runs over `[0, 2π]` for **every** contour, so the sign of the answer is
-fixed by one stated convention rather than by how each path happens to be written:
-`γ(t) = r·e^(it)` walks a circle once in the positive direction, and a segment is
-written `γ(t) = a + (b − a)·t/(2π)` to walk once as well. Writing the path the other
-way round reverses the sign, and that is the whole of what orientation means here.
+The compatibility default is `[0, 2π]`. A path may declare its own interval in its
+definition, for example `gamma(t; [0, 1]) = t + i·t²`; the evaluator carries that
+interval into the quadrature rather than silently reinterpreting the path on
+`[0, 2π]`. Writing the path the other way round reverses the sign, and that is the
+whole of what orientation means here.
 
 The rule is the **composite trapezoid**. It is spectrally accurate on a closed contour
 — refining the grid stops helping once the integrand is resolved, because the integrand
@@ -141,8 +141,10 @@ brings it to about `4×10⁻¹²`. That sets a floor, so every result carries an
 estimate that is never allowed below it.
 
 And the integral is a **quadrature**: a pole the grid steps over is invisible to it.
-Whether a pole is *enclosed* is therefore settled by the winding number and not by
-this — the two are used together and never one in place of the other.
+Whether a pole is _enclosed_ is therefore settled by an adaptively sampled winding
+number and not by this — the two are used together and never one in place of the
+other. A winding result is unknown when successive resolutions do not agree or an
+adjacent phase step is too large to resolve safely.
 
 ## Recorded for features not yet built
 
@@ -170,11 +172,11 @@ are visible.
 Three cases are handled before the hue is computed, because colour would otherwise
 lie about them:
 
-| Value | Drawn as |
-|---|---|
-| `w = 0` (a zero of the function) | black |
-| `|w| = ∞` (a pole) | white |
-| `w` undefined (`NaN`) | flat grey — distinct from black |
+| Value                            | Drawn as                        |
+| -------------------------------- | ------------------------------- |
+| `w = 0` (a zero of the function) | black                           |
+| `                                | w                               | = ∞` (a pole) | white |
+| `w` undefined (`NaN`)            | flat grey — distinct from black |
 
 The hue offset means the positive real axis is cyan, the negative real axis is red,
 the positive imaginary axis is blue and the negative imaginary axis is green. That
@@ -190,11 +192,11 @@ by hue by itself (`GOAL.md` section 19).
 
 Each mode normalises differently, and the shader reproduces each exactly:
 
-| Mode | Mapping |
-|---|---|
-| magnitude | `log(1 + |w|)` against the sampled maximum — logarithmic so a few large values do not flatten everything else |
-| phase | `(Arg w + π) / 2π`, ignoring the range, since the argument's range is known |
-| real, imaginary | linear over the sampled range |
+| Mode            | Mapping                                                                     |
+| --------------- | --------------------------------------------------------------------------- |
+| magnitude       | `log(1 +                                                                    | w   | )` against the sampled maximum — logarithmic so a few large values do not flatten everything else |
+| phase           | `(Arg w + π) / 2π`, ignoring the range, since the argument's range is known |
+| real, imaginary | linear over the sampled range                                               |
 
 `log(1 + x)` rather than `log1p`, because GLSL has no `log1p`; the CPU reference
 uses the same form so that the two agree.
@@ -220,7 +222,7 @@ behind the camera — and none of them announces itself.
 The surface's own conventions:
 
 - **A height is the real part of the value.** Correct for a scalar field
-  `R² → R`, which is the only thing a surface is. Which expressions *are* surfaces
+  `R² → R`, which is the only thing a surface is. Which expressions _are_ surfaces
   is decided by the type system a level up, rather than guessed at here.
 - **A singularity is a hole.** A sample where the function has no value is marked
   undefined, and every cell of the mesh touching it is dropped, so `1/(x² + y²)`
@@ -243,12 +245,12 @@ The surface's own conventions:
 
 Defined once, in `NUMERICS` (`conventions.ts`):
 
-| Constant | Value | Used for |
-|---|---|---|
-| `absoluteTolerance` | `1e-12` | comparing values of order 1 |
-| `relativeTolerance` | `1e-9` | comparing large magnitudes |
-| `methodTolerance` | `1e-6` | numerically estimated derivatives and integrals |
-| `finiteDifferenceStep` | `1e-6` | the step in those estimates |
+| Constant               | Value   | Used for                                        |
+| ---------------------- | ------- | ----------------------------------------------- |
+| `absoluteTolerance`    | `1e-12` | comparing values of order 1                     |
+| `relativeTolerance`    | `1e-9`  | comparing large magnitudes                      |
+| `methodTolerance`      | `1e-6`  | numerically estimated derivatives and integrals |
+| `finiteDifferenceStep` | `1e-6`  | the step in those estimates                     |
 
 A test that compares against a reference states which tolerance it uses, so that
 "approximately equal" means one thing everywhere.
@@ -290,7 +292,7 @@ helping:
 ```
 
 Note that this is not "exponential for small, decimal for large". `200000000` is
-not hard to compute with; it is hard to *read*, and `2×10⁸` states the same
+not hard to compute with; it is hard to _read_, and `2×10⁸` states the same
 magnitude in three characters.
 
 The core returns this **structurally** — `{ kind: 'scientific', mantissa: 2,
@@ -345,11 +347,11 @@ The second line is what the structure buys: both components are written as
 magnitudes with an exponent set in smaller type, which a single formatted string
 could not express.
 
-Note also which numbers are deliberately *not* routed through this layer. The
+Note also which numbers are deliberately _not_ routed through this layer. The
 symbolic panel prints what the symbolic engine returned, verbatim. That engine
 works in exact rationals and prints its own syntax; re-formatting its output as a
 decimal would report `Rational(1, 3)` as `0.333333`, destroying exactly the
-distinction the product is built to preserve (see *Exact versed approximate*
+distinction the product is built to preserve (see _Exact versed approximate_
 above).
 
 ### Undefined values
@@ -382,7 +384,7 @@ it      ⟹  i * t
 ay      ⟹  a * y
 ```
 
-A run of letters that *is* a known name stays one symbol: `pi`, `sin`, a parameter
+A run of letters that _is_ a known name stays one symbol: `pi`, `sin`, a parameter
 you defined (`a = 2`), a function you defined.
 
 ### A name followed by `(`
@@ -404,13 +406,13 @@ The space of a variable comes from one documented table
 (`VARIABLE_SPACE_BY_NAME`), applied when a definition's parameter list becomes a
 domain:
 
-| Names | Space |
-|---|---|
-| `z`, `w`, `s` | `C` |
-| `x`, `y`, `t`, `u`, `v`, `r`, `a` … `q` | `R` |
-| anything else | `R` (the documented default) |
+| Names                                   | Space                        |
+| --------------------------------------- | ---------------------------- |
+| `z`, `w`, `s`                           | `C`                          |
+| `x`, `y`, `t`, `u`, `v`, `r`, `a` … `q` | `R`                          |
+| anything else                           | `R` (the documented default) |
 
-This is a naming convention, not type guessing: the *codomain* of every expression
+This is a naming convention, not type guessing: the _codomain_ of every expression
 is computed by inference over the tree. `f(z) = z^2` and `f(x) = x^2` are the same
 text and become different objects because the declared variable differs — which is
 what a mathematician means by them too.

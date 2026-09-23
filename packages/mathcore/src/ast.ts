@@ -128,6 +128,14 @@ export type Expr =
 
 export type ExprKind = Expr['kind'];
 
+/** A real interval attached to a one-parameter path definition. */
+export interface PathInterval {
+  readonly parameter: string;
+  readonly from: Expr;
+  readonly to: Expr;
+  readonly span: SourceSpan;
+}
+
 /**
  * A top-level line of the workspace.
  *
@@ -138,6 +146,8 @@ export interface FunctionDefinition {
   readonly kind: 'function-definition';
   readonly name: string;
   readonly parameters: readonly string[];
+  /** Optional declaration such as `gamma(t; [0, 1]) = ...`. */
+  readonly interval?: PathInterval;
   readonly body: Expr;
   readonly span: SourceSpan;
 }

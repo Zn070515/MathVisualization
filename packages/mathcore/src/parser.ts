@@ -28,7 +28,13 @@
  * `^` (right associative). So `-z^2` is `-(z^2)` and `2^-3` is well formed.
  * Because implicit multiplication has the precedence of `*`, `2z^2` is `2*(z^2)`.
  */
-import { type BinaryOperator, type Expr, type Statement, type UnaryOperator } from './ast';
+import {
+  type BinaryOperator,
+  type Expr,
+  type PathInterval,
+  type Statement,
+  type UnaryOperator,
+} from './ast';
 import { BUILTIN_CONSTANT_NAMES } from './conventions';
 import { BUILTIN_FUNCTION_NAMES } from './builtins';
 import { type ParseError, type Result, span } from './errors';
@@ -149,6 +155,7 @@ class Parser {
               kind: 'function-definition',
               name: header.name,
               parameters: header.parameters,
+              ...(header.interval === undefined ? {} : { interval: header.interval }),
               body: body.value,
               span: span(first.start, body.value.span.end),
             },
@@ -172,7 +179,11 @@ class Parser {
    * body. Returns `null` without consuming anything if the shape does not match,
    * in which case the input is an ordinary expression such as `sin(z)`.
    */
-  private tryParseDefinitionHeader(): { name: string; parameters: string[] } | null {
+  private tryParseDefinitionHeader(): {
+    name: string;
+    parameters: string[];
+    interval?: PathInterval;
+  } | null {
     const saved = this.index;
     const nameToken = this.advance();
     this.advance(); // lparen
@@ -193,6 +204,28 @@ class Parser {
       parameters.push(parameter.text);
 
       const separator = this.peek();
+      if (separator?.type === 'semicolon') {
+        if (parameters.length !== 1) {
+          this.index = saved;
+          return null;
+        }
+        const interval = this.parseIntervalHeader(parameters[0] as string);
+        if (interval === null) {
+          this.index = saved;
+          return null;
+        }
+        if (this.peek()?.type !== 'rparen') {
+          this.index = saved;
+          return null;
+        }
+        this.advance();
+        if (this.peek()?.type !== 'equals') {
+          this.index = saved;
+          return null;
+        }
+        this.advance();
+        return { name: nameToken.text, parameters, interval };
+      }
       if (separator?.type === 'comma') {
         this.advance();
         continue;
@@ -212,6 +245,64 @@ class Parser {
     this.advance(); // equals
 
     return { name: nameToken.text, parameters };
+  }
+
+  /** Parse `[from, to]` after the semicolon in a one-parameter path header. */
+  private parseIntervalHeader(parameter: string): PathInterval | null {
+    const semicolon = this.advance();
+    const open = this.peek();
+    if (open?.type !== 'bracketOpen') return null;
+    this.advance();
+
+    const fromStart = this.index;
+    let depth = 0;
+    let comma = -1;
+    for (; this.index < this.tokens.length; this.index += 1) {
+      const token = this.tokens[this.index] as Token;
+      if (token.type === 'lparen') depth += 1;
+      else if (token.type === 'rparen') depth -= 1;
+      else if (token.type === 'comma' && depth === 0) {
+        comma = this.index;
+        break;
+      }
+    }
+    if (comma === -1) return null;
+
+    const from = new Parser(this.tokens.slice(fromStart, comma), this.source, {
+      knownFunctions: this.knownFunctions,
+      knownValues: this.knownValues,
+    }).parseWholeExpression();
+    if (!from.ok) return null;
+
+    this.index = comma + 1;
+    const toStart = this.index;
+    depth = 0;
+    let close = -1;
+    for (; this.index < this.tokens.length; this.index += 1) {
+      const token = this.tokens[this.index] as Token;
+      if (token.type === 'lparen') depth += 1;
+      else if (token.type === 'rparen') depth -= 1;
+      else if (token.type === 'bracketClose' && depth === 0) {
+        close = this.index;
+        break;
+      }
+    }
+    if (close === -1) return null;
+
+    const to = new Parser(this.tokens.slice(toStart, close), this.source, {
+      knownFunctions: this.knownFunctions,
+      knownValues: this.knownValues,
+    }).parseWholeExpression();
+    if (!to.ok) return null;
+
+    const closeToken = this.tokens[close] as Token;
+    this.index = close + 1;
+    return {
+      parameter,
+      from: from.value,
+      to: to.value,
+      span: { start: semicolon.start, end: closeToken.end },
+    };
   }
 
   /**
@@ -713,15 +804,40 @@ export function detectDefinitionHeader(
     index += 1;
 
     const separator = list[index];
-    if (separator?.type === 'comma') {
+    if (separator?.type === 'semicolon') {
+      if (parameters.length !== 1 || list[index + 1]?.type !== 'bracketOpen') return null;
+      index += 2;
+      let depth = 0;
+      let foundComma = false;
+      for (; index < list.length; index += 1) {
+        const token = list[index];
+        if (token?.type === 'lparen') depth += 1;
+        else if (token?.type === 'rparen') depth -= 1;
+        else if (token?.type === 'comma' && depth === 0) {
+          foundComma = true;
+          index += 1;
+          break;
+        }
+      }
+      if (!foundComma) return null;
+      depth = 0;
+      for (; index < list.length; index += 1) {
+        const token = list[index];
+        if (token?.type === 'lparen') depth += 1;
+        else if (token?.type === 'rparen') depth -= 1;
+        else if (token?.type === 'bracketClose' && depth === 0) break;
+      }
+      if (list[index]?.type !== 'bracketClose' || list[index + 1]?.type !== 'rparen') return null;
+      index += 2;
+    } else if (separator?.type === 'comma') {
       index += 1;
       continue;
-    }
-    if (separator?.type === 'rparen') {
+    } else if (separator?.type === 'rparen') {
       index += 1;
       break;
+    } else {
+      return null;
     }
-    return null;
   }
 
   if (list[index]?.type !== 'equals') return null;

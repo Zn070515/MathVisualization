@@ -234,6 +234,13 @@ describe('statements', () => {
     expect(exprToText(statement.body)).toBe('2 * e ^ (i * t)');
   });
 
+  it('reads and prints a first-class path parameter interval', () => {
+    const statement = latexStatement('\\gamma\\left(t;[0,1]\\right)=t+i t^{2}');
+    if (statement.kind !== 'function-definition') throw new Error('expected a definition');
+    expect(statement.interval?.parameter).toBe('t');
+    expect(statementToLatex(statement)).toContain('t;[0,1]');
+  });
+
   it('finds an equals sign inside an absolute value', () => {
     const statement = latexStatement('a=|z|');
     expect(statement.kind).toBe('parameter');
@@ -317,9 +324,7 @@ describe('printing back to LaTeX', () => {
 
   it('writes a sum without redundant parentheses', () => {
     expect(exprToLatex(latexExpr('a+b\\cdot c'))).toBe('a+b\\cdot c');
-    expect(exprToLatex(latexExpr('\\left(a+b\\right)\\cdot c'))).toBe(
-      '\\left(a+b\\right)\\cdot c',
-    );
+    expect(exprToLatex(latexExpr('\\left(a+b\\right)\\cdot c'))).toBe('\\left(a+b\\right)\\cdot c');
   });
 
   it('writes a definition with its head', () => {

@@ -66,6 +66,18 @@ describe('a line whose result is a number', () => {
     expect(container.textContent).toContain('t ∈ [0, 2π]');
   });
 
+  it('states a path interval declared by the definition', () => {
+    const container = renderPanel(
+      makeStoreFromLatex([
+        '\\gamma\\left(t;[0,1]\\right)=t+i t^{2}',
+        'f\\left(z\\right)=1',
+        INTEGRAL,
+      ]),
+    );
+    expect(container.textContent).toContain('t ∈ [0, 1]');
+    expect(container.textContent).not.toContain('t ∈ [0, 2π]');
+  });
+
   it('says when the path does not close, and what that costs', () => {
     // `γ(t) = 1 + t` walks a segment from 1 to 1 + 2π without meeting the pole, so the
     // integral exists — but the contour is not closed, so the number is an answer to
@@ -81,14 +93,24 @@ describe('a line whose result is a number', () => {
     const container = renderPanel(seeded('e^{it}', '\\frac{1}{z}'));
     expect(container.textContent).toContain('1 pole inside');
     expect(container.textContent).toContain('Σ');
-    expect(container.textContent).toContain("the same number to within the integral's error estimate");
+    expect(container.textContent).toContain(
+      'the same number to within the combined error estimate',
+    );
   });
 
   it('counts no poles when the contour does not wind around one', () => {
     // The pole of `1/(z − 2)` is at 2, outside the unit circle. An analysis that reported
     // residues without checking enclosure would claim 2πi here.
     const container = renderPanel(seeded('e^{it}', '\\frac{1}{z-2}'));
-    expect(container.textContent).toContain('no poles inside');
+    expect(container.textContent).toContain('No poles were detected inside the contour.');
+    expect(container.textContent).toContain('inconclusive');
+  });
+
+  it('does not call an essential singularity pole-free analytic', () => {
+    const container = renderPanel(seeded('e^{it}', 'e^{1/z}'));
+    expect(container.textContent).toContain('No poles were detected inside the contour.');
+    expect(container.textContent).toContain('inconclusive');
+    expect(container.textContent).not.toContain('Cauchy’s theorem says the integral is zero');
   });
 
   it('shows the evaluator’s reason rather than a blank when there is no value', () => {

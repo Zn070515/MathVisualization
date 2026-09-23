@@ -18,7 +18,12 @@ import { type Complex, cx } from '../src/complex';
 import { type MathIssue, type Result } from '../src/errors';
 import { evaluateScalar } from '../src/evaluator';
 import { parseExpression } from '../src/parser';
-import { findZerosAndPoles, windingNumber, type Singularity } from '../src/zerosAndPoles';
+import {
+  analyzeZerosAndPoles,
+  findZerosAndPoles,
+  windingNumber,
+  type Singularity,
+} from '../src/zerosAndPoles';
 
 /** A function of the complex variable z, as the analysis sees it. */
 function functionOf(source: string): (z: Complex) => Result<Complex, MathIssue> {
@@ -66,6 +71,13 @@ describe('the argument principle', () => {
 
   it('counts nothing for a function with neither', () => {
     expect(windingNumber(functionOf('exp(z)'), cx(0, 0), 2).count).toBe(0);
+  });
+
+  it('adapts instead of aliasing a fast phase', () => {
+    const winding = windingNumber(functionOf('z^300'), cx(0, 0), 1);
+    expect(winding.count).toBe(300);
+    expect(winding.converged).toBe(true);
+    expect(winding.samples).toBeGreaterThan(256);
   });
 
   it('refuses to answer when the contour runs through the singularity', () => {
@@ -150,6 +162,13 @@ describe('finding them', () => {
 });
 
 describe('what it refuses to report', () => {
+  it('marks an undefined candidate unresolved instead of proving no singularity', () => {
+    const search = analyzeZerosAndPoles(functionOf('exp(1/z)'), REGION);
+    expect(search.points.filter((point) => point.kind === 'pole')).toHaveLength(0);
+    expect(search.unresolved.length).toBeGreaterThan(0);
+    expect(search.complete).toBe(false);
+  });
+
   it('does not report a removable singularity as either', () => {
     // sin(z)/z has no value at 0 as written, so 0 is a candidate and a local maximum
     // of |f|. The turns come to zero: the singularity is removable, and calling it a

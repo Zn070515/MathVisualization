@@ -21,7 +21,7 @@
  * real (for example `log(2)`), the value carries the truth and the readout shows
  * a real number.
  */
-import type { Expr } from './ast';
+import type { Expr, PathInterval } from './ast';
 import { builtinFunction } from './builtins';
 import {
   CX_I,
@@ -53,22 +53,24 @@ import {
   isZero,
   principalArg,
 } from './complex';
-import { builtinConstant } from './conventions';
+import { CONTOUR_INTEGRAL, builtinConstant } from './conventions';
 import {
   contourIntegral,
   residueAt,
   windingAround,
+  type ResidueEstimate,
   type ContourIntegralResult,
 } from './contour';
 import { fail, ok, type MathIssue, type Result } from './errors';
 import { exprToText } from './format';
 import { rationalToNumber } from './rational';
-import { findZerosAndPoles } from './zerosAndPoles';
+import { analyzeZerosAndPoles, type SingularitySearchResult } from './zerosAndPoles';
 
 /** A function the user defined, in the form the evaluator needs. */
 export interface UserFunctionDefinition {
   readonly name: string;
   readonly parameters: readonly string[];
+  readonly interval?: Pick<PathInterval, 'from' | 'to'>;
   readonly body: Expr;
 }
 
@@ -414,8 +416,8 @@ export interface EnclosedPole {
   readonly z: Complex;
   /** How many times the contour winds around it — an integer, from the argument principle. */
   readonly winding: number;
-  /** Its residue, or null when no circle isolates it well enough to say. */
-  readonly residue: Complex | null;
+  /** Its residue estimate, or null when no circle isolates it well enough to say. */
+  readonly residue: ResidueEstimate | null;
 }
 
 /** A contour integral and everything that qualifies it. */
@@ -425,6 +427,10 @@ export interface ContourDetails {
   readonly enclosed: readonly EnclosedPole[];
   /** `2πi Σ n(γ, zₖ) Res(f, zₖ)` — the residue theorem's other side. */
   readonly residueSum: Complex;
+  /** The singularity search status that qualifies the enclosed-pole list. */
+  readonly singularities: SingularitySearchResult;
+  /** Sum of the independent residue uncertainty contributions. */
+  readonly residueEstimatedError: number;
 }
 
 /**
@@ -457,14 +463,19 @@ export function evaluateContourDetails(
   const integral = contourIntegral({
     path: callbacks.value.atParameter,
     integrand: callbacks.value.atPoint,
+    from: callbacks.value.from,
+    to: callbacks.value.to,
   });
   if (!integral.ok) return integral;
 
-  const enclosed = enclosedPoles(integral.value, callbacks.value.atPoint);
+  const poleAnalysis = enclosedPoles(integral.value, callbacks.value.atPoint);
+  const enclosed = poleAnalysis.poles;
   let residueSum: Complex = CX_ZERO;
+  let residueEstimatedError = 0;
   for (const pole of enclosed) {
     if (pole.residue === null) continue;
-    residueSum = cadd(residueSum, cscale(pole.residue, pole.winding));
+    residueSum = cadd(residueSum, cscale(pole.residue.value, pole.winding));
+    residueEstimatedError += Math.abs(pole.winding) * pole.residue.estimatedError;
   }
 
   return ok({
@@ -472,6 +483,8 @@ export function evaluateContourDetails(
     enclosed,
     // 2πi times the sum.
     residueSum: cscale(cmul(residueSum, CX_I), 2 * Math.PI),
+    singularities: poleAnalysis.search,
+    residueEstimatedError: residueEstimatedError * 2 * Math.PI,
   });
 }
 
@@ -485,8 +498,10 @@ export function evaluateContourDetails(
 function enclosedPoles(
   integral: ContourIntegralResult,
   atPoint: (z: Complex) => Result<Complex, MathIssue>,
-): readonly EnclosedPole[] {
-  if (integral.path.length === 0) return [];
+): { readonly poles: readonly EnclosedPole[]; readonly search: SingularitySearchResult } {
+  if (integral.path.length === 0) {
+    return { poles: [], search: { points: [], complete: false, unresolved: [], truncated: false } };
+  }
 
   let xMin = Number.POSITIVE_INFINITY;
   let xMax = Number.NEGATIVE_INFINITY;
@@ -499,10 +514,12 @@ function enclosedPoles(
     yMin = Math.min(yMin, point.im);
     yMax = Math.max(yMax, point.im);
   }
-  if (!Number.isFinite(xMin) || xMax <= xMin || yMax <= yMin) return [];
+  if (!Number.isFinite(xMin) || xMax <= xMin || yMax <= yMin) {
+    return { poles: [], search: { points: [], complete: false, unresolved: [], truncated: false } };
+  }
 
   const pad = 0.25 * Math.max(xMax - xMin, yMax - yMin);
-  const found = findZerosAndPoles(atPoint, {
+  const search = analyzeZerosAndPoles(atPoint, {
     xMin: xMin - pad,
     xMax: xMax + pad,
     yMin: yMin - pad,
@@ -510,7 +527,7 @@ function enclosedPoles(
   });
 
   const poles: EnclosedPole[] = [];
-  for (const point of found) {
+  for (const point of search.points) {
     if (point.kind !== 'pole') continue;
     const winding = windingAround(integral.path, point.z);
     if (winding === null || winding === 0) continue;
@@ -518,7 +535,7 @@ function enclosedPoles(
     // measured at half the distance to the nearest other pole, and `residueAt`'s ladder
     // guards against the estimate being wrong.
     let nearest = Math.max(xMax - xMin, yMax - yMin);
-    for (const other of found) {
+    for (const other of search.points) {
       if (other === point) continue;
       nearest = Math.min(nearest, cabs(csub(other.z, point.z)));
     }
@@ -528,7 +545,7 @@ function enclosedPoles(
       residue: residueAt(atPoint, point.z, nearest / 2),
     });
   }
-  return poles;
+  return { poles, search };
 }
 
 /** Resolve the path and the integrand, and integrate. */
@@ -536,6 +553,8 @@ function enclosedPoles(
 interface ContourCallbacks {
   readonly atParameter: (t: number) => Result<Complex, MathIssue>;
   readonly atPoint: (z: Complex) => Result<Complex, MathIssue>;
+  readonly from: number;
+  readonly to: number;
 }
 
 /** Resolve the path and the integrand, or say why they cannot be resolved. */
@@ -577,6 +596,12 @@ function contourCallbacks(
   }
 
   const innerFunctions = environment.functions;
+  const interval =
+    path.interval === undefined
+      ? ok({ from: CONTOUR_INTEGRAL.from, to: CONTOUR_INTEGRAL.to })
+      : resolvePathInterval(path.interval, environment, depth, contourDepth);
+  if (!interval.ok) return interval;
+
   const atParameter = (t: number): Result<Complex, MathIssue> => {
     const value = evaluate(
       path.body,
@@ -619,7 +644,37 @@ function contourCallbacks(
       : ok(scalar);
   };
 
-  return ok({ atParameter, atPoint });
+  return ok({ atParameter, atPoint, from: interval.value.from, to: interval.value.to });
+}
+
+function resolvePathInterval(
+  interval: Pick<PathInterval, 'from' | 'to'>,
+  environment: EvaluationEnvironment,
+  depth: number,
+  contourDepth: number,
+): Result<{ readonly from: number; readonly to: number }, MathIssue> {
+  const from = evaluate(interval.from, environment, depth + 1, contourDepth + 1);
+  if (!from.ok) return from;
+  const to = evaluate(interval.to, environment, depth + 1, contourDepth + 1);
+  if (!to.ok) return to;
+
+  const fromValue = asComplex(from.value);
+  const toValue = asComplex(to.value);
+  if (
+    fromValue === null ||
+    toValue === null ||
+    fromValue.im !== 0 ||
+    toValue.im !== 0 ||
+    !Number.isFinite(fromValue.re) ||
+    !Number.isFinite(toValue.re)
+  ) {
+    return fail({
+      kind: 'unsupported',
+      detail: 'non-real contour parameter interval',
+      message: 'A contour parameter interval must have finite real endpoints.',
+    });
+  }
+  return ok({ from: fromValue.re, to: toValue.re });
 }
 
 /** Integrate along the contour, resolving the path and the integrand first. */
@@ -634,6 +689,8 @@ function integrateContour(
   return contourIntegral({
     path: callbacks.value.atParameter,
     integrand: callbacks.value.atPoint,
+    from: callbacks.value.from,
+    to: callbacks.value.to,
   });
 }
 

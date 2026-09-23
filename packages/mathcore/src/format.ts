@@ -125,7 +125,11 @@ export function exprToText(expr: Expr): string {
 export function statementToText(statement: Statement): string {
   switch (statement.kind) {
     case 'function-definition':
-      return `${statement.name}(${statement.parameters.join(', ')}) = ${exprToText(statement.body)}`;
+      return `${statement.name}(${statement.parameters.join(', ')}${
+        statement.interval === undefined
+          ? ''
+          : `; [${exprToText(statement.interval.from)}, ${exprToText(statement.interval.to)}]`
+      }) = ${exprToText(statement.body)}`;
     case 'parameter':
       return `${statement.name} = ${exprToText(statement.body)}`;
     case 'expression':

@@ -6,7 +6,7 @@
  * inspecting the parsed statement directly.
  */
 import { describe, expect, it } from 'vitest';
-import { exprToText } from '../src/format';
+import { exprToText, statementToText } from '../src/format';
 import { detectDefinitionHeader, parseExpression, parseStatement } from '../src/parser';
 import type { Statement } from '../src/ast';
 
@@ -194,6 +194,17 @@ describe('statements', () => {
     const statement = parseOrThrow('gamma(t)=2e^(it)');
     if (statement.kind !== 'function-definition') throw new Error('expected a definition');
     expect(exprToText(statement.body)).toBe('2 * e ^ (i * t)');
+  });
+
+  it('parses a first-class path parameter interval', () => {
+    const statement = parseOrThrow('gamma(t; [0, 1])=t+i*t^2');
+    if (statement.kind !== 'function-definition') throw new Error('expected a definition');
+    const interval = statement.interval;
+    if (interval === undefined) throw new Error('expected a path interval');
+    expect(interval.parameter).toBe('t');
+    expect(exprToText(interval.from)).toBe('0');
+    expect(exprToText(interval.to)).toBe('1');
+    expect(statementToText(statement)).toContain('gamma(t; [0, 1])');
   });
 
   it('rejects a definition whose left side is not a name or a header', () => {

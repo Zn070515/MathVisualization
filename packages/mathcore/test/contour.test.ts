@@ -14,7 +14,12 @@
  */
 import { describe, expect, it } from 'vitest';
 import { type Complex, cabs, cadd, cdiv, cmul, csub, cx, cexp } from '../src/complex';
-import { contourIntegral, residueAt, type ContourIntegralResult } from '../src/contour';
+import {
+  contourIntegral,
+  residueAt,
+  type ContourIntegralResult,
+  type ResidueEstimate,
+} from '../src/contour';
 import { CONTOUR_INTEGRAL } from '../src/conventions';
 import { ok, type MathIssue, type Result } from '../src/errors';
 
@@ -51,10 +56,10 @@ function relativeError(actual: Complex, expected: Complex): number {
 }
 
 /** Assert a result that may be `null`, so a missing answer fails loudly rather than quietly. */
-function expectNear(actual: Complex | null, expected: Complex, tolerance: number): void {
+function expectNear(actual: ResidueEstimate | null, expected: Complex, tolerance: number): void {
   expect(actual).not.toBeNull();
   if (actual === null) return;
-  expect(relativeError(actual, expected)).toBeLessThan(tolerance);
+  expect(relativeError(actual.value, expected)).toBeLessThan(tolerance);
 }
 
 describe('what the integral is', () => {
@@ -233,7 +238,17 @@ describe('the residue at a pole', () => {
     // an answer rather than a failure, which is why it is a number and not `null`.
     const zero = residueAt(reciprocalSquared, cx(0, 0), 1);
     expect(zero).not.toBeNull();
-    expect(cabs(zero as Complex)).toBeLessThan(1e-8);
+    expect(cabs((zero as ResidueEstimate).value)).toBeLessThan(1e-8);
+  });
+
+  it('returns the residue together with its measured uncertainty and radius', () => {
+    const estimate = residueAt(reciprocal, cx(0, 0), 1);
+    expect(estimate).not.toBeNull();
+    expect(estimate?.value).toEqual(
+      expect.objectContaining({ re: expect.any(Number), im: expect.any(Number) }),
+    );
+    expect(estimate?.estimatedError).toBeGreaterThan(0);
+    expect(estimate?.radius).toBeGreaterThan(0);
   });
 
   it('does not depend on how large the circle is', () => {

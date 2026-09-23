@@ -41,6 +41,7 @@
 import {
   type Expr,
   type FunctionDefinition,
+  type PathInterval,
   type Statement,
   type BinaryOperator,
   type UnaryOperator,
@@ -191,6 +192,7 @@ type LatexTokenKind =
   | 'minus'
   | 'equals'
   | 'comma'
+  | 'semicolon'
   | 'slash'
   | 'asterisk';
 
@@ -215,6 +217,7 @@ const PUNCTUATION: Readonly<Record<string, LatexTokenKind>> = {
   '-': 'minus',
   '=': 'equals',
   ',': 'comma',
+  ';': 'semicolon',
   '/': 'slash',
   // Not LaTeX, but accepted so that ASCII mathematics pasted into the editor
   // reads as the multiplication it plainly is rather than being rejected.
@@ -399,6 +402,7 @@ class LatexParser {
         kind: 'function-definition',
         name,
         parameters,
+        ...(left.value.interval === undefined ? {} : { interval: left.value.interval }),
         body: right.value,
         span,
       } satisfies FunctionDefinition,
@@ -411,7 +415,7 @@ class LatexParser {
    * A token-shape test on `name(params)=`, used to collect function names before
    * any line is parsed. That is what lets `f` be used before it is defined.
    */
-  definitionHeader(): { name: string; parameters: string[] } | null {
+  definitionHeader(): { name: string; parameters: string[]; interval?: PathInterval } | null {
     const saved = this.index;
     const name = this.readName();
     if (!name.ok) {
@@ -433,6 +437,23 @@ class LatexParser {
       }
       parameters.push(parameter.value.name);
       const separator = this.peek();
+      if (separator?.kind === 'semicolon') {
+        if (parameters.length !== 1) {
+          this.index = saved;
+          return null;
+        }
+        const interval = this.parseIntervalHeader(parameters[0] as string);
+        if (interval === null || this.peek()?.kind !== 'parenClose') {
+          this.index = saved;
+          return null;
+        }
+        this.advance();
+        if (this.peek()?.kind !== 'equals') {
+          this.index = saved;
+          return null;
+        }
+        return { name: name.value.name, parameters, interval };
+      }
       if (separator?.kind === 'comma') {
         this.advance();
         continue;
@@ -507,7 +528,10 @@ class LatexParser {
   /** The left of `=`: a name, or a name with a parameter list. */
   private parseHead(
     limit: number,
-  ): Result<{ name: string; parameters: string[] | null; span: SourceSpan }, ParseError> {
+  ): Result<
+    { name: string; parameters: string[] | null; interval?: PathInterval; span: SourceSpan },
+    ParseError
+  > {
     // Read only up to the equals sign. A separate parser over the same tokens,
     // bounded by `limit`, keeps the head grammar independent of the body.
     const parser = new LatexParser(this.tokens, limit, this.context);
@@ -532,6 +556,7 @@ class LatexParser {
 
     parser.advance(); // (
     const parameters: string[] = [];
+    let interval: PathInterval | undefined;
     if (parser.peek()?.kind === 'parenClose') {
       return {
         ok: false,
@@ -547,6 +572,33 @@ class LatexParser {
       parameters.push(parameter.value.name);
 
       const separator = parser.peek();
+      if (separator?.kind === 'semicolon') {
+        if (parameters.length !== 1) {
+          return {
+            ok: false,
+            issue: wrong(separator.span, 'A path interval needs exactly one path parameter.'),
+          };
+        }
+        const parsedInterval = parser.parseIntervalHeader(parameters[0] as string);
+        if (parsedInterval === null) {
+          return {
+            ok: false,
+            issue: wrong(separator.span, 'A path interval must be written as `[from, to]`.'),
+          };
+        }
+        interval = parsedInterval;
+        if (parser.peek()?.kind !== 'parenClose') {
+          return {
+            ok: false,
+            issue: incomplete(
+              parser.peek()?.span ?? separator.span,
+              'Expected a closing parenthesis after the path interval.',
+            ),
+          };
+        }
+        parser.advance();
+        break;
+      }
       if (separator?.kind === 'comma') {
         parser.advance();
         continue;
@@ -576,8 +628,68 @@ class LatexParser {
       value: {
         name: name.value.name,
         parameters,
+        ...(interval === undefined ? {} : { interval }),
         span: { start: name.value.span.start, end: parser.lastSpan().end },
       },
+    };
+  }
+
+  /** Parse `[from, to]` after the semicolon in a one-parameter path header. */
+  private parseIntervalHeader(parameter: string): PathInterval | null {
+    const semicolon = this.advance();
+    const open = this.peek();
+    if (open?.kind !== 'bracketOpen') return null;
+    this.advance();
+
+    const fromStart = this.index;
+    let depth = 0;
+    let comma = -1;
+    for (; this.index < this.end; this.index += 1) {
+      const token = this.tokens[this.index] as LatexToken;
+      if (token.kind === 'braceOpen' || token.kind === 'parenOpen') depth += 1;
+      else if (token.kind === 'braceClose' || token.kind === 'parenClose') depth -= 1;
+      else if (token.kind === 'comma' && depth === 0) {
+        comma = this.index;
+        break;
+      }
+    }
+    if (comma === -1) return null;
+
+    const from = new LatexParser(
+      this.tokens.slice(fromStart, comma),
+      comma - fromStart,
+      this.context,
+    ).parseExpressionOnly();
+    if (!from.ok) return null;
+
+    this.index = comma + 1;
+    const toStart = this.index;
+    depth = 0;
+    let close = -1;
+    for (; this.index < this.end; this.index += 1) {
+      const token = this.tokens[this.index] as LatexToken;
+      if (token.kind === 'braceOpen' || token.kind === 'parenOpen') depth += 1;
+      else if (token.kind === 'braceClose' || token.kind === 'parenClose') depth -= 1;
+      else if (token.kind === 'bracketClose' && depth === 0) {
+        close = this.index;
+        break;
+      }
+    }
+    if (close === -1) return null;
+
+    const to = new LatexParser(
+      this.tokens.slice(toStart, close),
+      close - toStart,
+      this.context,
+    ).parseExpressionOnly();
+    if (!to.ok) return null;
+    const closeToken = this.tokens[close] as LatexToken;
+    this.index = close + 1;
+    return {
+      parameter,
+      from: from.value,
+      to: to.value,
+      span: { start: semicolon.span.start, end: closeToken.span.end },
     };
   }
 
@@ -1691,7 +1803,11 @@ export function statementToLatex(statement: Statement): string {
   switch (statement.kind) {
     case 'function-definition': {
       const parameters = statement.parameters.map(nameToLatex).join(', ');
-      return `${nameToLatex(statement.name)}\\left(${parameters}\\right)=${exprToLatex(statement.body)}`;
+      const interval =
+        statement.interval === undefined
+          ? ''
+          : `;[${exprToLatex(statement.interval.from)},${exprToLatex(statement.interval.to)}]`;
+      return `${nameToLatex(statement.name)}\\left(${parameters}${interval}\\right)=${exprToLatex(statement.body)}`;
     }
     case 'parameter':
       return `${nameToLatex(statement.name)}=${exprToLatex(statement.body)}`;

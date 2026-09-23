@@ -228,11 +228,10 @@ export const NUMERICS = {
 /**
  * The parameter interval a contour is integrated over.
  *
- * One interval for every contour, so that the sign of the answer is fixed by a single
- * stated convention rather than by what each path happened to be written as. A path
- * that should be traversed over some other interval is written so that it is not:
- * `γ(t) = a + (b − a)·t/(2π)` walks a segment once, just as `γ(t) = r·e^(it)` walks a
- * circle once.
+ * The default interval keeps old path definitions deterministic. A path definition may
+ * override it with a first-class declaration such as `gamma(t; [0, 1]) = ...`; the
+ * evaluator passes that interval to the quadrature instead of requiring a reparameterised
+ * formula.
  */
 export const CONTOUR_INTEGRAL = {
   from: 0,
