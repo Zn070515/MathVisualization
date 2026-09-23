@@ -11,10 +11,12 @@ import {
   axisTicks,
   contourLines,
   cx,
+  criticalPointAt,
   directionalDerivativeAt,
   displayNumberToText,
   gradientAt,
   sampleSurface,
+  type CriticalPointClassification,
   type Gradient,
   type RealFieldEvaluator,
 } from '@mathviz/mathcore';
@@ -207,6 +209,14 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
       state.direction,
     );
   }, [drawable, evaluation, state.direction, state.selection]);
+  const selectedCriticalPoint = useMemo(() => {
+    if (!drawable || evaluation === null || state.selection === null) return null;
+    return criticalPointAt(
+      (x, y) => evaluation.evaluate(cx(x, y)),
+      state.selection.re,
+      state.selection.im,
+    );
+  }, [drawable, evaluation, state.selection]);
   const bounds = canvasRef.current?.getBoundingClientRect();
   const halfHeight =
     bounds === undefined || bounds.width === 0
@@ -358,6 +368,37 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
               )}
             </>
           )}
+          {state.selection !== null && selectedCriticalPoint !== null && (
+            selectedCriticalPoint.ok ? (
+              <>
+                <span className="legend__range">
+                  Hf(p) ≈ [[
+                  <NumberText value={viewNumber(selectedCriticalPoint.value.hessian.xx)} />,{ ' '}
+                  <NumberText value={viewNumber(selectedCriticalPoint.value.hessian.xy)}
+                  />],[
+                  <NumberText value={viewNumber(selectedCriticalPoint.value.hessian.xy)} />,{ ' '}
+                  <NumberText value={viewNumber(selectedCriticalPoint.value.hessian.yy)} />]]
+                </span>
+                <span className="legend__range">
+                  det H ≈ <NumberText value={viewNumber(selectedCriticalPoint.value.hessian.determinant)} />
+                  {' ± '}
+                  <NumberText
+                    value={viewNumber(selectedCriticalPoint.value.hessian.determinantEstimatedError)}
+                  />
+                  {' · '}second-derivative test: {criticalPointLabel(selectedCriticalPoint.value.classification)}
+                </span>
+                <span className="legend__range">
+                  ‖∇f(p)‖ ≈ <NumberText value={viewNumber(selectedCriticalPoint.value.gradientMagnitude)} />
+                  {' · '}gradient sampling disagreement ≈{' '}
+                  <NumberText value={viewNumber(selectedCriticalPoint.value.gradient.estimatedError)} />
+                </span>
+              </>
+            ) : (
+              <span className="legend__range">
+                critical-point analysis unresolved: {selectedCriticalPoint.issue.message}
+              </span>
+            )
+          )}
           {state.selection === null && (
             <span className="legend__range">select a point, then drag the handle to choose u</span>
           )}
@@ -365,6 +406,21 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
       )}
     </div>
   );
+}
+
+function criticalPointLabel(classification: CriticalPointClassification): string {
+  switch (classification) {
+    case 'local-minimum':
+      return 'local minimum';
+    case 'local-maximum':
+      return 'local maximum';
+    case 'saddle':
+      return 'saddle point';
+    case 'non-critical':
+      return 'non-critical';
+    case 'inconclusive':
+      return 'inconclusive';
+  }
 }
 
 function collectArrows(
