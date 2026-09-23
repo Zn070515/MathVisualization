@@ -35,7 +35,8 @@ export type CriticalPointClassification =
   | 'inconclusive';
 
 export type StationarityStatus = 'near-critical' | 'non-critical' | 'inconclusive';
-export type HessianShape = 'positive-definite' | 'negative-definite' | 'indefinite' | 'inconclusive';
+export type HessianShape =
+  'positive-definite' | 'negative-definite' | 'indefinite' | 'inconclusive';
 
 export interface CriticalPointOptions extends HessianOptions {
   /** Dimensionless tolerance applied to a locally measured derivative scale. */
@@ -212,8 +213,7 @@ function centralSecondDifferences(
   // overflow before the curvature is measured.
   const xxNumerator = plusX.value - centre.value + (minusX.value - centre.value);
   const yyNumerator = plusY.value - centre.value + (minusY.value - centre.value);
-  const xyNumerator =
-    plusPlus.value - plusMinus.value - (minusPlus.value - minusMinus.value);
+  const xyNumerator = plusPlus.value - plusMinus.value - (minusPlus.value - minusMinus.value);
   if (![xxNumerator, yyNumerator, xyNumerator].every(Number.isFinite)) {
     return fail({
       kind: 'singularity',

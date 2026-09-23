@@ -17,12 +17,7 @@ describe('numerical Hessians', () => {
   });
 
   it('does not overflow when a finite field has a very large constant offset', () => {
-    const result = hessianAt(
-      (x, y) => ok(cx(1e308 + x * x + y * y, 0)),
-      0,
-      0,
-      { step: 1e153 },
-    );
+    const result = hessianAt((x, y) => ok(cx(1e308 + x * x + y * y, 0)), 0, 0, { step: 1e153 });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -73,11 +68,7 @@ describe('numerical Hessians', () => {
   });
 
   it('does not call a merely small scaled gradient a critical point', () => {
-    const result = criticalPointAt(
-      (x, y) => ok(cx(1e-8 * ((x - 10) * (x - 10) + y * y), 0)),
-      0,
-      0,
-    );
+    const result = criticalPointAt((x, y) => ok(cx(1e-8 * ((x - 10) * (x - 10) + y * y), 0)), 0, 0);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -97,7 +88,10 @@ describe('numerical Hessians', () => {
 
   it('reports unresolved sampling instead of classifying an undefined Hessian', () => {
     const result = criticalPointAt(
-      (x, y) => (x === 0 && y === 0 ? ok(cx(0, 0)) : { ok: false, issue: { kind: 'singularity', message: 'undefined nearby' } }),
+      (x, y) =>
+        x === 0 && y === 0
+          ? ok(cx(0, 0))
+          : { ok: false, issue: { kind: 'singularity', message: 'undefined nearby' } },
       0,
       0,
     );

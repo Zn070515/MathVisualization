@@ -26,10 +26,12 @@ describe('subsystem capability registry', () => {
       transforms.capabilities.find((entry) => entry.name === 'Numerical convolution')?.status,
     ).toBe('implemented');
     expect(
-      transforms.capabilities.find((entry) => entry.name === 'Sampled convolution and DFT product')?.status,
+      transforms.capabilities.find((entry) => entry.name === 'Sampled convolution and DFT product')
+        ?.status,
     ).toBe('implemented');
     expect(
-      transforms.capabilities.find((entry) => entry.name === 'Interactive convolution construction')?.status,
+      transforms.capabilities.find((entry) => entry.name === 'Interactive convolution construction')
+        ?.status,
     ).toBe('planned');
   });
 });

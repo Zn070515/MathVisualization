@@ -368,42 +368,52 @@ export function GradientView({ store }: ViewRendererProps): React.JSX.Element {
               )}
             </>
           )}
-          {state.selection !== null && selectedCriticalPoint !== null && (
-            selectedCriticalPoint.ok ? (
+          {state.selection !== null &&
+            selectedCriticalPoint !== null &&
+            (selectedCriticalPoint.ok ? (
               <>
                 <span className="legend__range">
                   Hf(p) ≈ [[
-                  <NumberText value={viewNumber(selectedCriticalPoint.value.hessian.xx)} />,{ ' '}
-                  <NumberText value={viewNumber(selectedCriticalPoint.value.hessian.xy)}
-                  />],[
-                  <NumberText value={viewNumber(selectedCriticalPoint.value.hessian.xy)} />,{ ' '}
-                  <NumberText value={viewNumber(selectedCriticalPoint.value.hessian.yy)} />]]
+                  <NumberText value={viewNumber(selectedCriticalPoint.value.hessian.xx)} />,{' '}
+                  <NumberText value={viewNumber(selectedCriticalPoint.value.hessian.xy)} />
+                  ],[
+                  <NumberText value={viewNumber(selectedCriticalPoint.value.hessian.xy)} />,{' '}
+                  <NumberText value={viewNumber(selectedCriticalPoint.value.hessian.yy)} />
+                  ]]
                 </span>
                 <span className="legend__range">
-                  det H ≈ <NumberText value={viewNumber(selectedCriticalPoint.value.hessian.determinant)} />
+                  det H ≈{' '}
+                  <NumberText value={viewNumber(selectedCriticalPoint.value.hessian.determinant)} />
                   {' ± '}
                   <NumberText
-                    value={viewNumber(selectedCriticalPoint.value.hessian.determinantEstimatedError)}
+                    value={viewNumber(
+                      selectedCriticalPoint.value.hessian.determinantEstimatedError,
+                    )}
                   />
                   {' · '}stationarity: {selectedCriticalPoint.value.stationarity} · Hessian:{' '}
                   {selectedCriticalPoint.value.hessianShape}
                 </span>
                 <span className="legend__range">
-                  analysis: {criticalPointLabel(selectedCriticalPoint.value.classification)} · tolerance ≈{' '}
-                  <NumberText value={viewNumber(selectedCriticalPoint.value.stationarityTolerance)} />
+                  analysis: {criticalPointLabel(selectedCriticalPoint.value.classification)} ·
+                  tolerance ≈{' '}
+                  <NumberText
+                    value={viewNumber(selectedCriticalPoint.value.stationarityTolerance)}
+                  />
                 </span>
                 <span className="legend__range">
-                  ‖∇f(p)‖ ≈ <NumberText value={viewNumber(selectedCriticalPoint.value.gradientMagnitude)} />
+                  ‖∇f(p)‖ ≈{' '}
+                  <NumberText value={viewNumber(selectedCriticalPoint.value.gradientMagnitude)} />
                   {' · '}gradient sampling disagreement ≈{' '}
-                  <NumberText value={viewNumber(selectedCriticalPoint.value.gradient.estimatedError)} />
+                  <NumberText
+                    value={viewNumber(selectedCriticalPoint.value.gradient.estimatedError)}
+                  />
                 </span>
               </>
             ) : (
               <span className="legend__range">
                 critical-point analysis unresolved: {selectedCriticalPoint.issue.message}
               </span>
-            )
-          )}
+            ))}
           {state.selection === null && (
             <span className="legend__range">select a point, then drag the handle to choose u</span>
           )}
