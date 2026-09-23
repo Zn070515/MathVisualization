@@ -255,8 +255,9 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
       },
       {
         name: 'Critical points and extrema',
-        summary: 'Where the gradient vanishes, classified through the Hessian.',
-        status: 'planned',
+        summary:
+          'Selected points are checked with a numerical gradient and Hessian; local minima, maxima and saddle points are reported only when refinement evidence separates the classification from uncertainty.',
+        status: 'implemented',
       },
       {
         name: 'Double and triple integrals',

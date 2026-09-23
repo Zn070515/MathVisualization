@@ -55,6 +55,13 @@ export function hessianAt(
   y: number,
   options: HessianOptions = {},
 ): Result<Hessian, MathIssue> {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return fail({
+      kind: 'invalid-parameter',
+      message: 'A Hessian needs a finite selected point.',
+      detail: `(${x}, ${y})`,
+    });
+  }
   const step = options.step ?? defaultStep(x, y);
   if (!Number.isFinite(step) || step <= 0) {
     return fail({
@@ -174,11 +181,31 @@ function centralSecondDifferences(
   if (!minusMinus.ok) return minusMinus;
 
   const stepSquared = step * step;
-  const xx = (plusX.value - 2 * centre.value + minusX.value) / stepSquared;
-  const yy = (plusY.value - 2 * centre.value + minusY.value) / stepSquared;
-  const xy =
-    (plusPlus.value - plusMinus.value - minusPlus.value + minusMinus.value) /
-    (4 * stepSquared);
+  const denominator = 4 * stepSquared;
+  if (!Number.isFinite(stepSquared) || !Number.isFinite(denominator)) {
+    return fail({
+      kind: 'invalid-parameter',
+      message: 'The Hessian step is too large for finite second differences.',
+      detail: String(step),
+    });
+  }
+
+  // Subtract first so a large finite offset does not make `2 * centre`
+  // overflow before the curvature is measured.
+  const xxNumerator = plusX.value - centre.value + (minusX.value - centre.value);
+  const yyNumerator = plusY.value - centre.value + (minusY.value - centre.value);
+  const xyNumerator =
+    plusPlus.value - plusMinus.value - (minusPlus.value - minusMinus.value);
+  if (![xxNumerator, yyNumerator, xyNumerator].every(Number.isFinite)) {
+    return fail({
+      kind: 'singularity',
+      message: 'The Hessian second differences became non-finite at the selected point.',
+    });
+  }
+
+  const xx = xxNumerator / stepSquared;
+  const yy = yyNumerator / stepSquared;
+  const xy = xyNumerator / denominator;
   if (![xx, xy, yy].every(Number.isFinite)) {
     return fail({
       kind: 'singularity',

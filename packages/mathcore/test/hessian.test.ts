@@ -16,6 +16,28 @@ describe('numerical Hessians', () => {
     expect(result.value.determinantEstimatedError).toBeGreaterThanOrEqual(0);
   });
 
+  it('does not overflow when a finite field has a very large constant offset', () => {
+    const result = hessianAt(
+      (x, y) => ok(cx(1e308 + x * x + y * y, 0)),
+      0,
+      0,
+      { step: 1e153 },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(Number.isFinite(result.value.xx)).toBe(true);
+    expect(Number.isFinite(result.value.yy)).toBe(true);
+  });
+
+  it('rejects non-finite coordinates even when the step is supplied', () => {
+    const result = hessianAt(() => ok(cx(1, 0)), Number.NaN, 0, { step: 1 });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issue.kind).toBe('invalid-parameter');
+  });
+
   it('classifies a positive-definite quadratic as a local minimum', () => {
     const result = criticalPointAt((x, y) => ok(cx(x * x + 2 * y * y, 0)), 0, 0);
 
