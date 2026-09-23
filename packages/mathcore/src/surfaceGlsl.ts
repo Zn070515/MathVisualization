@@ -52,6 +52,7 @@ uniform vec3 uLightDirection;
 // they do not have would say they were part of the surface.
 uniform float uFlat;
 uniform vec3 uFlatColor;
+uniform float uOpacity;
 
 in vec3 vNormal;
 in float vValue;
@@ -65,7 +66,7 @@ ${scalarFieldColoringSource()}
 
 void main() {
   if (uFlat > 0.5) {
-    fragColor = vec4(uFlatColor, 1.0);
+    fragColor = vec4(uFlatColor, uOpacity);
     return;
   }
 
@@ -112,6 +113,7 @@ export function surfaceProgramSource(): SurfaceProgram {
       },
       { name: 'uFlat', kind: 'float', meaning: '1 to draw scaffolding in a flat colour' },
       { name: 'uFlatColor', kind: 'vec3', meaning: 'The colour the scaffolding is drawn in' },
+      { name: 'uOpacity', kind: 'float', meaning: 'Opacity of a flat overlay layer' },
     ],
   };
 }

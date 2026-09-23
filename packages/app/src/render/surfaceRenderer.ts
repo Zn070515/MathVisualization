@@ -35,6 +35,8 @@ const LIGHT_DIRECTION: Vec3 = { x: 0.45, y: 0.72, z: 0.53 };
 
 /** How thick the scaffolding lines are drawn. Line width is in device pixels. */
 const SCAFFOLD_LINE_WIDTH = 1;
+const TANGENT_PLANE_COLOR: readonly [number, number, number] = [0.72, 0.24, 0.16];
+const TANGENT_PLANE_OPACITY = 0.38;
 
 export interface SurfaceDrawRequest {
   readonly viewProjection: Mat4;
@@ -62,6 +64,7 @@ export class SurfaceRenderer {
   private readonly locations = new Map<string, WebGLUniformLocation | null>();
   private surface: Layer | null = null;
   private scaffold: Layer | null = null;
+  private tangentPlane: Layer | null = null;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const context = canvas.getContext('webgl2', {
@@ -94,6 +97,12 @@ export class SurfaceRenderer {
     this.disposeLayers();
     this.surface = this.uploadSurface(mesh, normals);
     this.scaffold = this.uploadScaffold(mesh);
+  }
+
+  /** Replace only the optional tangent-plane overlay. */
+  setTangentPlane(mesh: SurfaceMesh | null, normals: Float32Array | null): void {
+    this.disposeLayer(this.tangentPlane);
+    this.tangentPlane = mesh === null || normals === null ? null : this.uploadSurface(mesh, normals);
   }
 
   private uploadSurface(mesh: SurfaceMesh, normals: Float32Array): Layer | null {
@@ -218,7 +227,8 @@ export class SurfaceRenderer {
 
     const surface = this.surface;
     const scaffold = this.scaffold;
-    if (surface === null && scaffold === null) return;
+    const tangentPlane = this.tangentPlane;
+    if (surface === null && scaffold === null && tangentPlane === null) return;
 
     gl.useProgram(this.program);
     gl.uniformMatrix4fv(this.uniform('uViewProjection'), false, request.viewProjection);
@@ -235,14 +245,34 @@ export class SurfaceRenderer {
     if (scaffold !== null) {
       gl.uniform1f(this.uniform('uFlat'), 1);
       gl.uniform3f(this.uniform('uFlatColor'), 0.6, 0.58, 0.54);
+      gl.uniform1f(this.uniform('uOpacity'), 1);
       gl.bindVertexArray(scaffold.vertexArray);
       gl.drawArrays(gl.LINES, 0, scaffold.vertexCount);
     }
 
     if (surface !== null && surface.indexCount > 0) {
       gl.uniform1f(this.uniform('uFlat'), 0);
+      gl.uniform1f(this.uniform('uOpacity'), 1);
       gl.bindVertexArray(surface.vertexArray);
       gl.drawElements(gl.TRIANGLES, surface.indexCount, gl.UNSIGNED_INT, 0);
+    }
+
+    if (tangentPlane !== null && tangentPlane.indexCount > 0) {
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.depthMask(false);
+      gl.uniform1f(this.uniform('uFlat'), 1);
+      gl.uniform3f(
+        this.uniform('uFlatColor'),
+        TANGENT_PLANE_COLOR[0],
+        TANGENT_PLANE_COLOR[1],
+        TANGENT_PLANE_COLOR[2],
+      );
+      gl.uniform1f(this.uniform('uOpacity'), TANGENT_PLANE_OPACITY);
+      gl.bindVertexArray(tangentPlane.vertexArray);
+      gl.drawElements(gl.TRIANGLES, tangentPlane.indexCount, gl.UNSIGNED_INT, 0);
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
     }
 
     gl.bindVertexArray(null);
@@ -257,15 +287,20 @@ export class SurfaceRenderer {
   }
 
   private disposeLayers(): void {
-    const gl = this.gl;
-    for (const layer of [this.surface, this.scaffold]) {
-      if (layer === null) continue;
-      gl.deleteVertexArray(layer.vertexArray);
-      gl.deleteBuffer(layer.vertexBuffer);
-      if (layer.indexBuffer !== null) gl.deleteBuffer(layer.indexBuffer);
-    }
+    this.disposeLayer(this.surface);
+    this.disposeLayer(this.scaffold);
+    this.disposeLayer(this.tangentPlane);
     this.surface = null;
     this.scaffold = null;
+    this.tangentPlane = null;
+  }
+
+  private disposeLayer(layer: Layer | null): void {
+    if (layer === null) return;
+    const gl = this.gl;
+    gl.deleteVertexArray(layer.vertexArray);
+    gl.deleteBuffer(layer.vertexBuffer);
+    if (layer.indexBuffer !== null) gl.deleteBuffer(layer.indexBuffer);
   }
 
   dispose(): void {

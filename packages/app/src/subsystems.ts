@@ -249,8 +249,9 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
       },
       {
         name: 'Tangent planes and linear approximation',
-        summary: 'The tangent plane at a chosen point, with the error of the linear approximation.',
-        status: 'planned',
+        summary:
+          'A numerically derived tangent plane at a selected point, with sampled error of the linear approximation and unresolved samples kept visible.',
+        status: 'implemented',
       },
       {
         name: 'Critical points and extrema',

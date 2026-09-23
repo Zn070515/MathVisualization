@@ -29,6 +29,8 @@ import {
   axisTicks,
   cx,
   displayNumberToText,
+  linearizationAt,
+  linearizedValue,
   sampleSurface,
   surfaceNormals,
   type SurfaceMesh,
@@ -44,6 +46,7 @@ import { NumberText } from '../display/NumberText';
 import { useStore } from '../state/store';
 import { selectActiveExpression, type ViewRendererProps } from '../state/workspaceStore';
 import { makePointEvaluation } from './evaluation';
+import { measureTangentPlaneError, sampleTangentPlane } from './tangentPlane';
 import { useResizeVersion } from './useResizeVersion';
 
 /**
@@ -60,6 +63,8 @@ const ORBIT_PER_PIXEL = 0.008;
 
 /** How close to a projected vertex the pointer has to be to pick it, in pixels. */
 const PICK_RADIUS = 18;
+/** Keep the tangent plane local: a first-order approximation is not a global fit. */
+const MAX_TANGENT_PATCH_RADIUS = 1;
 
 /** How far apart two labels have to be before both are drawn. */
 const LABEL_CLEARANCE_X = 30;
@@ -69,7 +74,13 @@ export function Cartesian3DView({ store }: ViewRendererProps): React.JSX.Element
   const surfaceRef = useRef<HTMLCanvasElement>(null);
   const labelRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<SurfaceRenderer | null>(null);
-  const dragRef = useRef<{ x: number; y: number; panning: boolean } | null>(null);
+  const dragRef = useRef<{
+    originX: number;
+    originY: number;
+    x: number;
+    y: number;
+    panning: boolean;
+  } | null>(null);
   /** Projected vertices, in device pixels, rebuilt whenever the camera moves. */
   const projectedRef = useRef<Float32Array | null>(null);
 
@@ -80,6 +91,7 @@ export function Cartesian3DView({ store }: ViewRendererProps): React.JSX.Element
 
   const [ready, setReady] = useState(0);
   const [failure, setFailure] = useState<string | null>(null);
+  const [showTangentPlane, setShowTangentPlane] = useState(false);
 
   const active = useMemo(
     () => selectActiveExpression(workspace, focusedLineId, store.drawableKinds),
@@ -131,6 +143,58 @@ export function Cartesian3DView({ store }: ViewRendererProps): React.JSX.Element
   }, [drawable, evaluation, domain]);
 
   const normals = useMemo(() => (mesh === null ? null : surfaceNormals(mesh)), [mesh]);
+
+  const selectedLinearization = useMemo(() => {
+    if (!drawable || evaluation === null || state.selection === null) return null;
+    return linearizationAt(
+      (x, y) => evaluation.evaluate(cx(x, y)),
+      state.selection.re,
+      state.selection.im,
+    );
+  }, [drawable, evaluation, state.selection]);
+  const linearization = selectedLinearization?.ok ? selectedLinearization.value : null;
+  const tangentDomain = useMemo(() => {
+    if (state.selection === null) return null;
+    const radius = Math.min(state.viewport.halfWidth * 0.45, MAX_TANGENT_PATCH_RADIUS);
+    return {
+      xMin: Math.max(domain.xMin, state.selection.re - radius),
+      xMax: Math.min(domain.xMax, state.selection.re + radius),
+      yMin: Math.max(domain.yMin, state.selection.im - radius),
+      yMax: Math.min(domain.yMax, state.selection.im + radius),
+    };
+  }, [domain, state.selection, state.viewport.halfWidth]);
+  const tangentMesh = useMemo(() => {
+    if (!showTangentPlane || linearization === null || tangentDomain === null) return null;
+    return sampleTangentPlane(linearization, {
+      ...tangentDomain,
+      columns: RESOLUTION,
+      rows: RESOLUTION,
+    });
+  }, [linearization, showTangentPlane, tangentDomain]);
+  const tangentNormals = useMemo(
+    () => (tangentMesh === null ? null : surfaceNormals(tangentMesh)),
+    [tangentMesh],
+  );
+  const tangentDiagnostics = useMemo(() => {
+    if (
+      !showTangentPlane ||
+      linearization === null ||
+      evaluation === null ||
+      tangentDomain === null
+    ) {
+      return null;
+    }
+    return measureTangentPlaneError(
+      (x, y) => evaluation.evaluate(cx(x, y)),
+      linearization,
+      { ...tangentDomain, columns: 9, rows: 9 },
+    );
+  }, [evaluation, linearization, showTangentPlane, tangentDomain]);
+  const tangentCursor = state.hover ?? state.selection;
+  const tangentCursorValue = useMemo(() => {
+    if (!showTangentPlane || linearization === null || tangentCursor === null) return null;
+    return linearizedValue(linearization, tangentCursor.re, tangentCursor.im);
+  }, [linearization, showTangentPlane, tangentCursor]);
 
   /**
    * The scene: where its middle is, and how far out it reaches.
@@ -206,6 +270,16 @@ export function Cartesian3DView({ store }: ViewRendererProps): React.JSX.Element
       setFailure(error instanceof Error ? error.message : 'the surface could not be built');
     }
   }, [ready, mesh, normals]);
+
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    if (renderer === null) return;
+    try {
+      renderer.setTangentPlane(tangentMesh, tangentNormals);
+    } catch (error) {
+      setFailure(error instanceof Error ? error.message : 'the tangent plane could not be built');
+    }
+  }, [ready, tangentMesh, tangentNormals]);
 
   const draw = useCallback(() => {
     const surface = surfaceRef.current;
@@ -352,7 +426,7 @@ export function Cartesian3DView({ store }: ViewRendererProps): React.JSX.Element
 
   useEffect(() => {
     draw();
-  }, [draw, ready, resizeVersion]);
+  }, [draw, ready, resizeVersion, tangentMesh]);
 
   /** The vertex nearest the pointer, in device pixels, or null. */
   const vertexNear = (event: { clientX: number; clientY: number }): number | null => {
@@ -411,6 +485,8 @@ export function Cartesian3DView({ store }: ViewRendererProps): React.JSX.Element
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId);
           dragRef.current = {
+            originX: event.clientX,
+            originY: event.clientY,
             x: event.clientX,
             y: event.clientY,
             panning: event.shiftKey || event.button === 2,
@@ -432,8 +508,21 @@ export function Cartesian3DView({ store }: ViewRendererProps): React.JSX.Element
           }
           dragRef.current = { ...start, x: event.clientX, y: event.clientY };
         }}
-        onPointerUp={() => {
+        onPointerUp={(event) => {
+          const start = dragRef.current;
           dragRef.current = null;
+          if (
+            start !== null &&
+            !start.panning &&
+            Math.hypot(event.clientX - start.originX, event.clientY - start.originY) < 6
+          ) {
+            const index = vertexNear(event);
+            if (index !== null && mesh !== null) {
+              store.setSelection(
+                cx(mesh.positions[3 * index] ?? 0, mesh.positions[3 * index + 1] ?? 0),
+              );
+            }
+          }
         }}
         onPointerLeave={() => {
           dragRef.current = null;
@@ -503,6 +592,38 @@ export function Cartesian3DView({ store }: ViewRendererProps): React.JSX.Element
             <NumberText value={viewNumber(mesh.zMax)} />]
           </span>
           <span className="legend__range">drag to orbit · shift-drag to pan · wheel to zoom</span>
+          <label className="legend__range">
+            <input
+              type="checkbox"
+              checked={showTangentPlane}
+              disabled={selectedLinearization === null}
+              onChange={(event) => {
+                setShowTangentPlane(event.target.checked);
+              }}
+            />{' '}
+            tangent plane at selected point
+          </label>
+          {showTangentPlane && selectedLinearization !== null && !selectedLinearization.ok && (
+            <span className="legend__range">unresolved: {selectedLinearization.issue.message}</span>
+          )}
+          {showTangentPlane && linearization !== null && tangentDiagnostics !== null && (
+            <>
+              <span className="legend__range">
+                f(p) ≈ <NumberText value={viewNumber(linearization.value)} /> · ∇f(p) ≈ (
+                <NumberText value={viewNumber(linearization.gradient.x)} />,{' '}
+                <NumberText value={viewNumber(linearization.gradient.y)} />)
+              </span>
+              {tangentCursorValue !== null && (
+                <span className="legend__range">
+                  Lₚ(q) ≈ <NumberText value={viewNumber(tangentCursorValue)} /> · max sampled error ≈{' '}
+                  <NumberText value={viewNumber(tangentDiagnostics.maxAbsoluteError)} />
+                  {tangentDiagnostics.unresolvedSamples > 0
+                    ? ` · ${tangentDiagnostics.unresolvedSamples} samples unresolved`
+                    : ''}
+                </span>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>

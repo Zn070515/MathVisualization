@@ -34,6 +34,7 @@
  *   contour.ts      the integral of a function along a path
  *   surface.ts      sampling a scalar field into a mesh
  *   gradient.ts     numerical gradients and directional derivatives
+ *   linearization.ts numerical tangent planes and local approximation error
  *   surfaceGlsl.ts  the fixed shader a surface is drawn with
  *   workspace.ts    a document: many statements, analysed together
  *   coloring.ts     domain colouring, the CPU reference implementation
@@ -64,6 +65,7 @@ export * from './fourier';
 export * from './dft';
 export * from './surface';
 export * from './gradient';
+export * from './linearization';
 export * from './contours';
 export * from './surfaceGlsl';
 export * from './workspace';
