@@ -2,14 +2,19 @@ import {
   type Complex,
   type ConvolutionEstimate,
   type ConvolutionNode,
+  type DftTransformNode,
   type EvaluationEnvironment,
   type FieldMode,
   type Workspace,
   cabs,
+  dftOfPeriodicSamples,
   estimateConvolution,
+  estimateDft,
+  periodicSampledConvolution,
+  phaseCorrectedDftProduct,
   workspaceEnvironment,
 } from '@mathviz/mathcore';
-import type { ActiveExpression } from '../state/workspaceStore';
+import type { ActiveExpression, SamplingSettings } from '../state/workspaceStore';
 
 export interface ConvolutionSettings {
   readonly integrationWindow: { readonly min: number; readonly max: number };
@@ -26,6 +31,15 @@ export const DEFAULT_CONVOLUTION_SETTINGS: ConvolutionSettings = {
 };
 
 const estimateCache = new WeakMap<Workspace, Map<string, ConvolutionEstimate | null>>();
+const dftProductCache = new WeakMap<Workspace, Map<string, DftProductCheck | null>>();
+
+export interface DftProductCheck {
+  readonly values: readonly Complex[];
+  readonly maxAbsoluteDifference: number;
+  readonly estimatedError: number;
+  readonly status: 'consistent' | 'inconclusive' | 'inconsistent';
+  readonly diagnostics: readonly string[];
+}
 
 export function selectConvolution(active: ActiveExpression | null): ConvolutionNode | null {
   const statement = active?.entry.statement;
@@ -59,6 +73,111 @@ export function estimateActiveConvolution(
   );
   workspaceCache.set(key, estimate);
   return estimate;
+}
+
+/**
+ * Compare circular sampled convolution with the phase-corrected DFT product.
+ *
+ * This is intentionally separate from the direct finite-window convolution: the
+ * former is a periodic sample-grid identity, while the latter is a quadrature
+ * estimate over a finite integration window. Neither one certifies a whole-line
+ * continuous convolution theorem.
+ */
+export function estimateActiveDftProduct(
+  active: ActiveExpression | null,
+  workspace: Workspace,
+  parameterValues: ReadonlyMap<string, number>,
+  sampling: SamplingSettings,
+): DftProductCheck | null {
+  const convolution = selectConvolution(active);
+  if (convolution === null) return null;
+
+  const key = `${active?.entry.id ?? 'none'}|${parameterKey(parameterValues)}|${samplingKey(sampling)}`;
+  let workspaceCache = dftProductCache.get(workspace);
+  if (workspaceCache === undefined) {
+    workspaceCache = new Map();
+    dftProductCache.set(workspace, workspaceCache);
+  }
+  if (workspaceCache.has(key)) return workspaceCache.get(key) ?? null;
+
+  const environment = workspaceEnvironment(workspace, parameterValues);
+  const left = estimateDft(
+    sourceAsDft(convolution.left, convolution.sourceVariable),
+    environment,
+    sampling,
+  );
+  const right = estimateDft(
+    sourceAsDft(convolution.right, convolution.sourceVariable),
+    environment,
+    sampling,
+  );
+  const direct = estimateActiveConvolution(active, workspace, parameterValues, {
+    integrationWindow: sampling.timeWindow,
+    outputWindow: sampling.timeWindow,
+    outputSampleCount: sampling.sampleCount,
+    integrationSampleCount: sampling.sampleCount,
+  });
+  const baseDiagnostics = [
+    'Periodic sampled convolution uses circular wrap-around on the shared DFT grid.',
+    'The product includes the origin phase exp(i·ω·t_min).',
+    'This compares sampled periodic data; it does not certify the continuous whole-line convolution theorem.',
+  ];
+
+  if (
+    left.stability === 'unresolved' ||
+    right.stability === 'unresolved' ||
+    direct?.stability === 'unresolved'
+  ) {
+    const result = unresolvedProduct(baseDiagnostics, [...left.diagnostics, ...right.diagnostics]);
+    workspaceCache.set(key, result);
+    return result;
+  }
+
+  const circular = periodicSampledConvolution(left.samples, right.samples, left.sampleInterval);
+  if (!circular.ok) {
+    const result = unresolvedProduct(baseDiagnostics, [circular.issue.message]);
+    workspaceCache.set(key, result);
+    return result;
+  }
+  const product = phaseCorrectedDftProduct(left, right);
+  if (!product.ok) {
+    const result = unresolvedProduct(baseDiagnostics, [product.issue.message]);
+    workspaceCache.set(key, result);
+    return result;
+  }
+  const transformed = dftOfPeriodicSamples(circular.value, left);
+  if (!transformed.ok) {
+    const result = unresolvedProduct(baseDiagnostics, [transformed.issue.message]);
+    workspaceCache.set(key, result);
+    return result;
+  }
+
+  const maxAbsoluteDifference = maximumDifference(transformed.value, product.value);
+  const estimatedError =
+    left.estimatedError +
+    right.estimatedError +
+    (direct?.estimatedError ?? Number.POSITIVE_INFINITY);
+  const scale = Math.max(1, ...product.value.map(cabs));
+  const numericalFloor = scale * 1e-9;
+  const status =
+    Number.isFinite(maxAbsoluteDifference) && Number.isFinite(estimatedError)
+      ? maxAbsoluteDifference <= Math.max(numericalFloor, estimatedError)
+        ? 'consistent'
+        : 'inconsistent'
+      : 'inconclusive';
+  const result: DftProductCheck = {
+    values: [...product.value],
+    maxAbsoluteDifference,
+    estimatedError,
+    status,
+    diagnostics: [
+      ...baseDiagnostics,
+      `Maximum sampled DFT difference is ${maxAbsoluteDifference}.`,
+      `Combined source and convolution refinement indicator is ${estimatedError}.`,
+    ],
+  };
+  workspaceCache.set(key, result);
+  return result;
 }
 
 export function projectConvolutionValue(value: Complex, mode: FieldMode): number | null {
@@ -118,4 +237,42 @@ function settingsKey(settings: ConvolutionSettings): string {
     settings.outputSampleCount,
     settings.integrationSampleCount,
   ].join(',');
+}
+
+function sourceAsDft(source: ConvolutionNode['left'], sourceVariable: string): DftTransformNode {
+  return {
+    kind: 'dft-transform',
+    source,
+    sourceVariable,
+    span: source.span,
+  };
+}
+
+function samplingKey(sampling: SamplingSettings): string {
+  return `${sampling.timeWindow.min},${sampling.timeWindow.max},${sampling.sampleCount},${sampling.algorithm}`;
+}
+
+function maximumDifference(left: readonly Complex[], right: readonly Complex[]): number {
+  if (left.length !== right.length || left.length === 0) return Number.POSITIVE_INFINITY;
+  let maximum = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    const first = left[index];
+    const second = right[index];
+    if (first === undefined || second === undefined) return Number.POSITIVE_INFINITY;
+    maximum = Math.max(maximum, cabs({ re: first.re - second.re, im: first.im - second.im }));
+  }
+  return maximum;
+}
+
+function unresolvedProduct(
+  baseDiagnostics: readonly string[],
+  details: readonly string[],
+): DftProductCheck {
+  return {
+    values: [],
+    maxAbsoluteDifference: Number.POSITIVE_INFINITY,
+    estimatedError: Number.POSITIVE_INFINITY,
+    status: 'inconclusive',
+    diagnostics: [...baseDiagnostics, 'The sampled product check is inconclusive.', ...details],
+  };
 }

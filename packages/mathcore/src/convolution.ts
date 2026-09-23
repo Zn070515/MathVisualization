@@ -7,15 +7,7 @@
  * explicit and testable.
  */
 import type { ConvolutionNode } from './ast';
-import {
-  type Complex,
-  cadd,
-  cabs,
-  cmul,
-  cscale,
-  cx,
-  isFiniteComplex,
-} from './complex';
+import { type Complex, cadd, cabs, cmul, cscale, cx, isFiniteComplex } from './complex';
 import { NUMERICS } from './conventions';
 import type { DftEstimate } from './dft';
 import { fail, ok, type MathIssue, type Result } from './errors';
@@ -128,7 +120,8 @@ export function periodicSampledConvolution(
   ) {
     return fail({
       kind: 'invalid-parameter',
-      message: 'Periodic sampled convolution needs equally sized non-empty samples and a positive sample interval.',
+      message:
+        'Periodic sampled convolution needs equally sized non-empty samples and a positive sample interval.',
     });
   }
   if ([...left, ...right].some((value) => !isFiniteComplex(value))) {
@@ -146,6 +139,51 @@ export function periodicSampledConvolution(
       total = cadd(total, cmul(left[input] as Complex, right[wrapped] as Complex));
     }
     values.push(cscale(total, sampleInterval));
+  }
+  return ok(values);
+}
+
+/**
+ * Transform a periodic sample vector on the exact grid represented by a DFT
+ * estimate. This is the reference side of the sampled convolution theorem; it
+ * is not an estimate of a continuous whole-line transform.
+ */
+export function dftOfPeriodicSamples(
+  samples: readonly Complex[],
+  grid: Pick<DftEstimate, 'bins' | 'sampleInterval' | 'timeWindow'>,
+): Result<readonly Complex[], MathIssue> {
+  if (
+    samples.length === 0 ||
+    samples.length !== grid.bins.length ||
+    !Number.isFinite(grid.sampleInterval) ||
+    grid.sampleInterval <= 0 ||
+    !validTimeWindow(grid.timeWindow)
+  ) {
+    return fail({
+      kind: 'invalid-parameter',
+      message: 'The sampled DFT needs a non-empty vector and a valid matching time grid.',
+    });
+  }
+  if (samples.some((value) => !isFiniteComplex(value))) {
+    return fail({
+      kind: 'invalid-parameter',
+      message: 'The sampled DFT cannot use an undefined or non-finite sample.',
+    });
+  }
+
+  const values: Complex[] = [];
+  for (const bin of grid.bins) {
+    let total = cx(0, 0);
+    for (let index = 0; index < samples.length; index += 1) {
+      const sample = samples[index] as Complex;
+      const time = grid.timeWindow.min + index * grid.sampleInterval;
+      const phase = cx(
+        Math.cos(-bin.angularFrequency * time),
+        Math.sin(-bin.angularFrequency * time),
+      );
+      total = cadd(total, cmul(sample, phase));
+    }
+    values.push(cscale(total, grid.sampleInterval));
   }
   return ok(values);
 }
@@ -223,14 +261,13 @@ function estimateRaw(
     for (let index = 0; index < integrationTimes.length; index += 1) {
       const tau = integrationTimes[index] as number;
       const left = evaluateSource(node.left, node.sourceVariable, tau, environment);
-      if (!left.ok) return emptyRaw(`The left source is unresolved at τ=${tau}: ${left.issue.message}`);
-      const right = evaluateSource(
-        node.right,
-        node.sourceVariable,
-        outputTime - tau,
-        environment,
-      );
-      if (!right.ok) return emptyRaw(`The right source is unresolved at t-τ=${outputTime - tau}: ${right.issue.message}`);
+      if (!left.ok)
+        return emptyRaw(`The left source is unresolved at τ=${tau}: ${left.issue.message}`);
+      const right = evaluateSource(node.right, node.sourceVariable, outputTime - tau, environment);
+      if (!right.ok)
+        return emptyRaw(
+          `The right source is unresolved at t-τ=${outputTime - tau}: ${right.issue.message}`,
+        );
       const weight = index === 0 || index === integrationTimes.length - 1 ? 0.5 : 1;
       total = cadd(total, cscale(cmul(left.value, right.value), weight));
     }
@@ -271,7 +308,10 @@ function validateOptions(options: ConvolutionEstimateOptions): string | null {
   ) {
     return `Convolution sample counts must be integers from 2 through ${CONVOLUTION_MAX_SAMPLE_COUNT / 2}, with a finite refinement.`;
   }
-  if (options.tolerance !== undefined && (!Number.isFinite(options.tolerance) || options.tolerance < 0)) {
+  if (
+    options.tolerance !== undefined &&
+    (!Number.isFinite(options.tolerance) || options.tolerance < 0)
+  ) {
     return 'The convolution refinement tolerance must be finite and non-negative.';
   }
   return null;
@@ -326,4 +366,8 @@ function emptyRaw(issue: string): RawEstimate {
 
 function sameNumber(left: number, right: number): boolean {
   return Object.is(left, right) || Math.abs(left - right) <= NUMERICS.absoluteTolerance;
+}
+
+function validTimeWindow(window: { readonly min: number; readonly max: number }): boolean {
+  return Number.isFinite(window.min) && Number.isFinite(window.max) && window.max > window.min;
 }

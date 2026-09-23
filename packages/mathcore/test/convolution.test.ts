@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { collectVariableNames, type ConvolutionNode } from '../src/ast';
 import { cx, cabs } from '../src/complex';
 import {
+  dftOfPeriodicSamples,
   estimateConvolution,
   periodicSampledConvolution,
   phaseCorrectedDftProduct,
@@ -41,11 +42,7 @@ function estimateFor(
   options: ConvolutionEstimateOptions,
 ): ConvolutionEstimate {
   const workspace = buildWorkspace(inputs(...sources));
-  return estimateConvolution(
-    convolutionEntry(workspace),
-    workspaceEnvironment(workspace),
-    options,
-  );
+  return estimateConvolution(convolutionEntry(workspace), workspaceEnvironment(workspace), options);
 }
 
 function dftEstimateFor(bodySource: string, timeWindow: DftTimeWindow): DftEstimate {
@@ -119,9 +116,7 @@ describe('convolution workspace inference', () => {
   });
 
   it('rejects a convolution with a complex source variable', () => {
-    const workspace = buildWorkspace(
-      inputs('f(z)=z', 'g(z)=z', 'h(t)=Convolution(f(z), g(z))'),
-    );
+    const workspace = buildWorkspace(inputs('f(z)=z', 'g(z)=z', 'h(t)=Convolution(f(z), g(z))'));
     expect(workspace.entries[2]?.type).toBeNull();
     expect(workspace.entries[2]?.typeIssue?.message).toMatch(/real|source|variable/i);
   });
@@ -148,15 +143,12 @@ describe('unsupported convolution backends', () => {
 
 describe('finite-window numerical convolution', () => {
   it('estimates constant finite-window convolution', () => {
-    const estimate = estimateFor(
-      ['f(t)=1', 'g(t)=1', 'h(t)=Convolution(f(t), g(t))'],
-      {
-        integrationWindow: { min: 0, max: 2 },
-        outputWindow: { min: -1, max: 1 },
-        outputSampleCount: 8,
-        integrationSampleCount: 8,
-      },
-    );
+    const estimate = estimateFor(['f(t)=1', 'g(t)=1', 'h(t)=Convolution(f(t), g(t))'], {
+      integrationWindow: { min: 0, max: 2 },
+      outputWindow: { min: -1, max: 1 },
+      outputSampleCount: 8,
+      integrationSampleCount: 8,
+    });
 
     expect(estimate.stability).toBe('stable');
     expect(estimate.values.every((value) => value.re === 2 && value.im === 0)).toBe(true);
@@ -178,15 +170,12 @@ describe('finite-window numerical convolution', () => {
   });
 
   it('returns unresolved when a source is not finite', () => {
-    const estimate = estimateFor(
-      ['f(t)=1/(t-t)', 'g(t)=1', 'h(t)=Convolution(f(t), g(t))'],
-      {
-        integrationWindow: { min: -1, max: 1 },
-        outputWindow: { min: -1, max: 1 },
-        outputSampleCount: 8,
-        integrationSampleCount: 8,
-      },
-    );
+    const estimate = estimateFor(['f(t)=1/(t-t)', 'g(t)=1', 'h(t)=Convolution(f(t), g(t))'], {
+      integrationWindow: { min: -1, max: 1 },
+      outputWindow: { min: -1, max: 1 },
+      outputSampleCount: 8,
+      integrationSampleCount: 8,
+    });
 
     expect(estimate.stability).toBe('unresolved');
     expect(estimate.values).toEqual([]);
@@ -225,13 +214,36 @@ describe('periodic sampled convolution', () => {
       Math.sin(bin.angularFrequency * timeWindow.min),
     );
     const expected = {
-      re: expectedPhase.re * (leftValue.re * rightValue.re - leftValue.im * rightValue.im) -
+      re:
+        expectedPhase.re * (leftValue.re * rightValue.re - leftValue.im * rightValue.im) -
         expectedPhase.im * (leftValue.re * rightValue.im + leftValue.im * rightValue.re),
-      im: expectedPhase.re * (leftValue.re * rightValue.im + leftValue.im * rightValue.re) +
+      im:
+        expectedPhase.re * (leftValue.re * rightValue.im + leftValue.im * rightValue.re) +
         expectedPhase.im * (leftValue.re * rightValue.re - leftValue.im * rightValue.im),
     };
     const actual = product.value[1];
     if (actual === undefined) throw new Error('expected a product value');
     expect(cabs({ re: actual.re - expected.re, im: actual.im - expected.im })).toBeLessThan(1e-12);
+  });
+
+  it('matches the phase-corrected product on the same circular sample grid', () => {
+    const timeWindow = { min: 0.25, max: 8.25 };
+    const left = dftEstimateFor('cos(t)', timeWindow);
+    const right = dftEstimateFor('sin(t)', timeWindow);
+    const circular = periodicSampledConvolution(left.samples, right.samples, left.sampleInterval);
+    const product = phaseCorrectedDftProduct(left, right);
+    expect(circular.ok).toBe(true);
+    expect(product.ok).toBe(true);
+    if (!circular.ok || !product.ok) return;
+
+    const transformed = dftOfPeriodicSamples(circular.value, left);
+    expect(transformed.ok).toBe(true);
+    if (!transformed.ok) return;
+    const maximum = transformed.value.reduce((largest, value, index) => {
+      const reference = product.value[index];
+      if (reference === undefined) return Number.POSITIVE_INFINITY;
+      return Math.max(largest, cabs({ re: value.re - reference.re, im: value.im - reference.im }));
+    }, 0);
+    expect(maximum).toBeLessThan(1e-9);
   });
 });

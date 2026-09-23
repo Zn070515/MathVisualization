@@ -17,6 +17,7 @@ import { selectActiveExpression, type ViewRendererProps } from '../state/workspa
 import { useResizeVersion } from './useResizeVersion';
 import {
   estimateActiveConvolution,
+  estimateActiveDftProduct,
   projectConvolutionValue,
   selectConvolution,
   type ConvolutionSettings,
@@ -58,6 +59,10 @@ export function ConvolutionView({ store, view }: ViewRendererProps): React.JSX.E
   const estimate = useMemo(
     () => estimateActiveConvolution(active, state.workspace, state.parameterValues, settings),
     [active, state.workspace, state.parameterValues, settings],
+  );
+  const productCheck = useMemo(
+    () => estimateActiveDftProduct(active, state.workspace, state.parameterValues, state.sampling),
+    [active, state.workspace, state.parameterValues, state.sampling],
   );
   const mode = normaliseMode(view.mode);
   const curves = useMemo(
@@ -166,6 +171,19 @@ export function ConvolutionView({ store, view }: ViewRendererProps): React.JSX.E
             refinement error {displayNumberToText(viewNumber(estimate.estimatedError))} ·{' '}
             {estimate.stability}
           </span>
+        )}
+        {productCheck !== null && (
+          <>
+            <span className="legend__range">DFT product check · periodic sampled convolution</span>
+            <span className="legend__range">
+              origin phase: exp(i·ω·t_min) · {productCheck.status}
+            </span>
+            {Number.isFinite(productCheck.maxAbsoluteDifference) && (
+              <span className="legend__range">
+                max difference {displayNumberToText(viewNumber(productCheck.maxAbsoluteDifference))}
+              </span>
+            )}
+          </>
         )}
       </div>
 
