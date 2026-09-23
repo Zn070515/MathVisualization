@@ -163,8 +163,10 @@ export function ConvolutionView({ store, view }: ViewRendererProps): React.JSX.E
           {MODE_LABELS[mode]} projection · finite t-window {rangeText}
         </span>
         <span className="legend__range">
-          {settings.outputSampleCount} output samples · {settings.integrationSampleCount}{' '}
+          {settings.outputSampleCount} output samples ·{' '}
+          {estimate?.refinedIntegrationSampleCount ?? settings.integrationSampleCount} refined
           integration samples
+          {estimate !== null && <> · refinement from {estimate.primaryIntegrationSampleCount}</>}
         </span>
         {estimate !== null && Number.isFinite(estimate.estimatedError) && (
           <span className="legend__range">

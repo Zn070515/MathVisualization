@@ -24,6 +24,7 @@ export interface ConvolutionEstimateOptions {
   readonly integrationWindow: ConvolutionWindow;
   readonly outputWindow: ConvolutionWindow;
   readonly outputSampleCount: number;
+  /** The number of integration samples in the primary estimate. */
   readonly integrationSampleCount: number;
   readonly tolerance?: number;
 }
@@ -36,7 +37,10 @@ export interface ConvolutionEstimate {
   readonly integrationWindow: ConvolutionWindow;
   readonly outputWindow: ConvolutionWindow;
   readonly outputSampleCount: number;
-  readonly integrationSampleCount: number;
+  /** The number of integration samples in the primary estimate. */
+  readonly primaryIntegrationSampleCount: number;
+  /** The number of integration samples used for the returned refined value. */
+  readonly refinedIntegrationSampleCount: number;
   readonly estimatedError: number;
   readonly stability: ConvolutionStability;
   readonly diagnostics: readonly string[];
@@ -99,7 +103,8 @@ export function estimateConvolution(
     integrationWindow: { ...options.integrationWindow },
     outputWindow: { ...options.outputWindow },
     outputSampleCount: options.outputSampleCount,
-    integrationSampleCount: options.integrationSampleCount,
+    primaryIntegrationSampleCount: options.integrationSampleCount,
+    refinedIntegrationSampleCount: refinedCount,
     estimatedError,
     stability,
     diagnostics: [...diagnostics, statusDiagnostic],
@@ -353,7 +358,8 @@ function unresolvedEstimate(
     integrationWindow: { ...options.integrationWindow },
     outputWindow: { ...options.outputWindow },
     outputSampleCount: options.outputSampleCount,
-    integrationSampleCount: options.integrationSampleCount,
+    primaryIntegrationSampleCount: options.integrationSampleCount,
+    refinedIntegrationSampleCount: options.integrationSampleCount * 2,
     estimatedError: Number.POSITIVE_INFINITY,
     stability: 'unresolved',
     diagnostics,

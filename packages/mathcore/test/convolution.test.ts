@@ -166,6 +166,8 @@ describe('finite-window numerical convolution', () => {
     );
 
     expect(estimate.estimatedError).toBeGreaterThanOrEqual(0);
+    expect(estimate.primaryIntegrationSampleCount).toBe(16);
+    expect(estimate.refinedIntegrationSampleCount).toBe(32);
     expect(estimate.diagnostics.join(' ')).toMatch(/finite-window/i);
   });
 

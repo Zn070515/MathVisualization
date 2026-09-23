@@ -45,7 +45,7 @@ The node represents a map from one real variable to a real or complex value:
 
 \[
 (f*g)(x) = \int_{\tau_{\min}}^{\tau_{\max}}
-  f(\tau)g(x-\tau)\,d\tau.
+f(\tau)g(x-\tau)\,d\tau.
 \]
 
 The integration interval and output sampling interval are numerical settings,
@@ -60,7 +60,7 @@ whole real line has been certified. The result carries:
 
 - output sample times and complex values;
 - the integration and output windows;
-- primary and refined sample counts;
+- output sample count plus explicit primary and refined integration sample counts;
 - an estimated refinement error, or `Infinity` when no finite comparison is
   available;
 - a stability status (`stable`, `sampling-sensitive`, or `unresolved`);
@@ -89,8 +89,8 @@ With this repository's time-integral-scaled DFT convention, its DFT obeys
 
 \[
 \operatorname{DFT}(c)_k
-  = e^{i\omega_k t_{\min}}
-    \operatorname{DFT}(f)_k\operatorname{DFT}(g)_k
+= e^{i\omega_k t_{\min}}
+\operatorname{DFT}(f)_k\operatorname{DFT}(g)_k
 \]
 
 up to floating-point error. The phase factor is required because each DFT
@@ -103,9 +103,11 @@ and the finite sample window are part of the calculation.
 
 The continuous numerical convolution and this sampled relation are separate
 estimates. Their differences are diagnostic evidence, not a theorem verdict.
-The product comparison combines the source DFT refinement errors, the sampled
-convolution error, and floating-point tolerance. If any required estimate is
-unresolved, the comparison is inconclusive.
+The sampled identity check uses a scale-aware floating-point tolerance on the
+same fixed grid. Sampling stability is reported separately from that identity;
+finite-window quadrature error must not be used to excuse a discrepancy in the
+discrete identity. If the required samples cannot be computed, the identity is
+inconclusive.
 
 ## Architecture
 
