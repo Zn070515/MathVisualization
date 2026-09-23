@@ -31,6 +31,7 @@ import { Cartesian3DView } from './Cartesian3DView';
 import { CartesianView } from './CartesianView';
 import { ComplexPlaneView } from './ComplexPlaneView';
 import { ContourView } from './ContourView';
+import { ConvolutionView } from './ConvolutionView';
 import { FieldView } from './FieldView';
 import { FrequencyDomainView } from './FrequencyDomainView';
 import { DftDomainView } from './DftDomainView';
@@ -42,6 +43,7 @@ const VIEW_TITLES: Readonly<Record<ViewKind, string>> = {
   'cartesian-3d': '3D surface',
   'complex-plane': 'Complex plane',
   contour: 'Contours',
+  convolution: 'Convolution',
   'domain-coloring': 'Domain colouring',
   'dft-domain': 'DFT spectrum',
   'frequency-domain': 'Frequency domain',
@@ -60,6 +62,7 @@ const MODED_KINDS: ReadonlySet<ViewKind> = new Set<ViewKind>([
   'domain-coloring',
   'dft-domain',
   'frequency-domain',
+  'convolution',
 ]);
 
 /**
@@ -75,6 +78,7 @@ const VIEW_RENDERERS: Readonly<Record<ViewKind, (props: ViewRendererProps) => Re
     'cartesian-3d': Cartesian3DView,
     'complex-plane': ComplexPlaneView,
     contour: ContourView,
+    convolution: ConvolutionView,
     'domain-coloring': FieldView,
     'dft-domain': DftDomainView,
     'frequency-domain': FrequencyDomainView,
@@ -216,9 +220,12 @@ function ViewFrame({
                 store.setViewMode(view.id, event.target.value as FieldMode);
               }}
             >
-              {(view.kind === 'frequency-domain' || view.kind === 'dft-domain'
+              {(view.kind === 'frequency-domain' ||
+              view.kind === 'dft-domain' ||
+              view.kind === 'convolution'
                 ? FIELD_MODES.filter((mode) => mode !== 'complex')
-                : FIELD_MODES).map((mode) => (
+                : FIELD_MODES
+              ).map((mode) => (
                 <option key={mode} value={mode} title={FIELD_MODE_DESCRIPTIONS[mode]}>
                   {FIELD_MODE_LABELS[mode]}
                 </option>

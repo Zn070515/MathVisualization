@@ -135,6 +135,7 @@ export type ViewKind =
   | 'cartesian-3d'
   | 'complex-plane'
   | 'contour'
+  | 'convolution'
   | 'domain-coloring'
   | 'dft-domain'
   | 'frequency-domain'

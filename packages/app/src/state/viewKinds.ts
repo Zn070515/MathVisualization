@@ -35,6 +35,7 @@ export const VIEW_KIND_STATUS: Readonly<Record<ViewKind, ViewStatus>> = {
   'cartesian-3d': 'available',
   'complex-plane': 'available',
   contour: 'available',
+  convolution: 'available',
   'domain-coloring': 'available',
   'dft-domain': 'available',
   'frequency-domain': 'available',
@@ -50,7 +51,9 @@ export function defaultModeFor(codomain: Space | undefined): FieldMode {
 
 /** The initial projection is a property of the view, not only of the codomain. */
 export function defaultModeForView(kind: ViewKind, codomain: Space | undefined): FieldMode {
-  return kind === 'frequency-domain' || kind === 'dft-domain'
+  return kind === 'frequency-domain' ||
+    kind === 'dft-domain' ||
+    (kind === 'convolution' && codomain?.kind === 'C')
     ? 'magnitude'
     : defaultModeFor(codomain);
 }
@@ -74,6 +77,14 @@ export function preferredViewKinds(
   if (classification === 'transform-pair') {
     return domain.kind === 'R' && domain.dim === 1 && codomain.kind === 'C'
       ? ['cartesian-2d', transformKind === 'dft' ? 'dft-domain' : 'frequency-domain']
+      : [];
+  }
+
+  if (classification === 'convolution-pair') {
+    return domain.kind === 'R' &&
+      domain.dim === 1 &&
+      (codomain.kind === 'R' || codomain.kind === 'C')
+      ? ['convolution']
       : [];
   }
 
@@ -145,6 +156,14 @@ function intendedDefaults(
   if (classification === 'transform-pair') {
     return domain.kind === 'R' && domain.dim === 1 && codomain.kind === 'C'
       ? ['cartesian-2d', transformKind === 'dft' ? 'dft-domain' : 'frequency-domain']
+      : [];
+  }
+
+  if (classification === 'convolution-pair') {
+    return domain.kind === 'R' &&
+      domain.dim === 1 &&
+      (codomain.kind === 'R' || codomain.kind === 'C')
+      ? ['convolution']
       : [];
   }
 

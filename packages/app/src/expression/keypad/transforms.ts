@@ -35,15 +35,12 @@ export const TRANSFORMS_FUNCTION_ROWS: readonly KeypadRow[] = [
   {
     kind: 'wrap',
     keys: [
+      key('ℱ', '\\operatorname{Fourier}\\left(#?\\right)', 'A numerical Fourier transform'),
+      key('DFT', '\\operatorname{DFT}\\left(#?\\right)', 'A numerical discrete Fourier transform'),
       key(
-        'ℱ',
-        '\\operatorname{Fourier}\\left(#?\\right)',
-        'A numerical Fourier transform',
-      ),
-      key(
-        'DFT',
-        '\\operatorname{DFT}\\left(#?\\right)',
-        'A numerical discrete Fourier transform',
+        'Convolution',
+        '\\operatorname{Convolution}\\left(#0,#1\\right)',
+        'A finite-window numerical convolution',
       ),
     ],
   },
@@ -57,7 +54,6 @@ export const TRANSFORMS_PLANNED_ROWS: readonly KeypadRow[] = [
       plannedKey('ℱ⁻¹', 'the inverse Fourier transform'),
       plannedKey('ℒ', 'the Laplace transform'),
       plannedKey('ℒ⁻¹', 'the inverse Laplace transform'),
-      plannedKey('∗', 'convolution'),
       plannedKey('δ', 'the impulse'),
       plannedKey('u(t)', 'the unit step'),
       plannedKey('∫', 'integration'),

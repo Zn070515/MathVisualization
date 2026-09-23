@@ -174,8 +174,8 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
       {
         name: 'Convolution',
         summary:
-          'The reflected and shifted kernel, the pointwise product and the accumulated area, animated in t.',
-        status: 'planned',
+          'A finite-window numerical convolution with integration refinement diagnostics, alongside the corresponding periodic sampled DFT product convention.',
+        status: 'implemented',
       },
       {
         name: 'Laplace transform and the s-plane',

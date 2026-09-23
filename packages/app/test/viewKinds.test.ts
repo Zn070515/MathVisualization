@@ -35,6 +35,7 @@ describe('the taxonomy', () => {
       'cartesian-3d',
       'complex-plane',
       'contour',
+      'convolution',
       'dft-domain',
       'domain-coloring',
       'frequency-domain',
@@ -110,11 +111,20 @@ describe('what each object calls for', () => {
       'cartesian-2d',
       'dft-domain',
     ]);
-    expect(defaultViewKinds(sig(R1, C1), 'transform-pair', 'dft').map((view) => view.kind)).toEqual([
-      'cartesian-2d',
-      'dft-domain',
-    ]);
+    expect(defaultViewKinds(sig(R1, C1), 'transform-pair', 'dft').map((view) => view.kind)).toEqual(
+      ['cartesian-2d', 'dft-domain'],
+    );
     expect(defaultViewKinds(sig(R1, C1), 'transform-pair', 'dft')[1]?.mode).toBe('magnitude');
+  });
+
+  it('opens a convolution definition on its dedicated view', () => {
+    expect(
+      preferredViewKinds(
+        { domain: { kind: 'R', dim: 1 }, codomain: { kind: 'R', dim: 1 } },
+        'convolution-pair',
+      ),
+    ).toEqual(['convolution']);
+    expect(VIEW_KIND_STATUS.convolution).toBe('available');
   });
 
   it('asks for a surface for a scalar over the plane, with the heatmap behind it', () => {

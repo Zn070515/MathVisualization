@@ -61,6 +61,16 @@ describe('page structure', () => {
     await user.click(screen.getByRole('tab', { name: 'func' }));
     expect(screen.getByRole('button', { name: 'Sine' })).toBeTruthy();
   });
+
+  it('offers explicit Convolution input rather than an ambiguous star', async () => {
+    const user = userEvent.setup();
+    renderWithKeypad(makeStore(['f(t)=t'], 'transforms'));
+    await user.click(screen.getByRole('tab', { name: 'func' }));
+    expect(
+      screen.getByRole('button', { name: 'A finite-window numerical convolution' }),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '∗' })).toBeNull();
+  });
 });
 
 describe('insertion at the caret', () => {
@@ -319,16 +329,23 @@ describe('keys for mathematics the language does not have yet', () => {
               contexts.push('\\operatorname{Fourier}\\left(f(t)\\right)');
             } else if (entry.title === 'A numerical discrete Fourier transform') {
               contexts.push('\\operatorname{DFT}\\left(f(t)\\right)');
+            } else if (entry.title === 'A finite-window numerical convolution') {
+              contexts.push('\\operatorname{Convolution}\\left(f(t),g(t)\\right)');
             }
             expect(
-              contexts.some((candidate) =>
-                parseLatexStatement(
-                  candidate,
-                  entry.title === 'A numerical Fourier transform' ||
-                  entry.title === 'A numerical discrete Fourier transform'
-                    ? { knownFunctions: new Set(['f']) }
-                    : undefined,
-                ).ok,
+              contexts.some(
+                (candidate) =>
+                  parseLatexStatement(
+                    candidate,
+                    entry.title === 'A numerical Fourier transform' ||
+                      entry.title === 'A numerical discrete Fourier transform' ||
+                      entry.title === 'A finite-window numerical convolution'
+                      ? { knownFunctions: new Set(['f', 'g']) }
+                      : entry.title === 'A numerical Fourier transform' ||
+                          entry.title === 'A numerical discrete Fourier transform'
+                        ? { knownFunctions: new Set(['f']) }
+                        : undefined,
+                  ).ok,
               ),
               `${subsystem} key "${entry.title}" inserts ${entry.insert}`,
             ).toBe(true);
