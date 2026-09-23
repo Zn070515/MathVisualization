@@ -121,6 +121,26 @@ describe('DFT app evaluation', () => {
     expect(readout?.aliasing.aliases[2]).toBeCloseTo(8 * Math.PI);
   });
 
+  it('carries the DFT time origin into the alias phase relation', () => {
+    const store = dftStore();
+    const state = store.getState();
+    const estimate = estimateActiveDft(
+      store.activeExpression(),
+      state.workspace,
+      state.parameterValues,
+      {
+        ...DEFAULT_DFT_SAMPLING,
+        timeWindow: { min: 0.1, max: 8.1 },
+      },
+    );
+    if (estimate === null) throw new Error('expected a DFT estimate');
+
+    const readout = readoutAtFrequency(0.03, estimate);
+    expect(readout?.aliasing.sampleOrigin).toBe(0.1);
+    expect(readout?.aliasing.phasePerSamplingFrequency.re).not.toBeCloseTo(1);
+    expect(readout?.aliasing.phasePerSamplingFrequency.im).not.toBeCloseTo(0);
+  });
+
   it('does not invent a phase for a zero-magnitude bin', () => {
     expect(projectDftValue({ re: 0, im: 0 }, 'phase')).toBeNull();
   });

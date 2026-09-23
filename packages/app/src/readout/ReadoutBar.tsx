@@ -160,6 +160,10 @@ function DftFrequencyValueCells({
         value={<NumberText value={displayNumber(readout.sampleInterval, { digits: 5 })} />}
       />
       <Cell
+        label="t₀"
+        value={<NumberText value={displayNumber(readout.aliasing.sampleOrigin, { digits: 5 })} />}
+      />
+      <Cell
         label="Nyquist"
         value={<NumberText value={displayNumber(readout.nyquistAngularFrequency, { digits: 5 })} />}
       />
@@ -185,7 +189,11 @@ function DftFrequencyValueCells({
         }
       />
       <span className="readout__reason">
-        same samples for {frequencyVariable} + k·Ωs
+        index-domain aliases: {frequencyVariable} + k·Ωs
+        {' · '}phase per +Ωs ={' '}
+        <ComplexText
+          value={displayComplex(readout.aliasing.phasePerSamplingFrequency, { digits: 5 })}
+        />
         {' · '}Ωs ={' '}
         <NumberText
           value={displayNumber(readout.aliasing.samplingAngularFrequency, { digits: 5 })}

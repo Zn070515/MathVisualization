@@ -182,7 +182,11 @@ export interface DftBinReadout extends SnappedDftBin {
 export function readoutAtFrequency(frequency: number, estimate: DftEstimate): DftBinReadout | null {
   const snapped = snapDftBin(frequency, estimate);
   if (snapped === null) return null;
-  const aliasing = describeAliasing(snapped.frequency, estimate.sampleInterval);
+  const aliasing = describeAliasing(
+    snapped.frequency,
+    estimate.sampleInterval,
+    estimate.timeWindow.min,
+  );
   if (!aliasing.ok) return null;
   return {
     ...snapped,

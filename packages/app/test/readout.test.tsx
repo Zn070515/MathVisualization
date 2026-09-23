@@ -111,7 +111,8 @@ describe('at a discrete Fourier frequency', () => {
     expect(readCell(container, '|D[k]|')).toBe('16');
     expect(readCell(container, 'Δt')).toBe('0.25');
     expect(readCell(container, 'alias representatives')).toContain('0');
-    expect(screen.getByText(/same samples for ω \+ k·Ωs/)).toBeTruthy();
+    expect(screen.getByText(/index-domain aliases: ω \+ k·Ωs/)).toBeTruthy();
+    expect(screen.getByText(/phase per \+Ωs/)).toBeTruthy();
   });
 
   it('keeps the raw array index distinct from the signed frequency index', () => {
