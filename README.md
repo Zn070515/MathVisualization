@@ -111,22 +111,63 @@ is a thing that would have been easier.
 
 ---
 
-## What you need
+## Run locally
 
-Three pieces of software. Only the first two are required.
+The repository includes a cross-platform bootstrap script. It installs the pinned
+JavaScript dependencies, a project-local Python 3.12 environment, and SymPy 1.14.0.
+You do not need to install Python or open a second terminal for the symbolic service.
 
-|                                  | Version                                                                  | What it is                                                                                                              | For                          |
-| -------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| [Node.js](https://nodejs.org)    | 20 or newer                                                              | the program that runs JavaScript outside a browser — this application is written in JavaScript, so it needs this to run | everything                   |
-| pnpm                             | 11.22.0 (written down in `package.json`; Corepack fetches the right one) | a _package manager_: it downloads the libraries the project depends on                                                  | everything                   |
-| [Python](https://www.python.org) | 3.12 or newer                                                            | another language, used by one optional feature that does algebra in closed form                                         | **only** the symbolic engine |
+### Windows
 
-Nothing else. There is no database to install, no account to create and no server to
-set up.
+After cloning the repository or extracting its ZIP archive, open PowerShell in the
+project folder and run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap.ps1
+.\scripts\start.ps1
+```
+
+### macOS / Linux
+
+Open a terminal in the project folder and run:
+
+```bash
+bash scripts/bootstrap.sh
+bash scripts/start.sh
+```
+
+The start script launches both the Vite application and the local symbolic engine,
+then opens <http://127.0.0.1:5173>. Press **Ctrl+C** once to stop both services.
+
+To inspect the environment later without starting the app:
+
+```bash
+pnpm run doctor
+```
+
+The scripts only install dependencies and create files inside the project (apart from
+the normal per-user Node/pnpm/uv installations they invoke when those tools are
+missing). They do not change firewall rules, global PowerShell policy, or system
+configuration. See the manual setup below if you prefer to manage each dependency
+yourself.
 
 ---
 
-## Setting it up
+## Manual setup prerequisites
+
+The bootstrap scripts are the recommended path. For manual setup, use these versions:
+
+|                                  | Version                                                                  | What it is                                                                                                              | For                          |
+| -------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| [Node.js](https://nodejs.org)    | 24 LTS or newer                                                          | the program that runs JavaScript outside a browser — this application is written in JavaScript, so it needs this to run | everything                   |
+| pnpm                             | 11.22.0 (written down in `package.json`; Corepack fetches the right one) | a _package manager_: it downloads the libraries the project depends on                                                  | everything                   |
+| [uv](https://docs.astral.sh/uv/) | 0.12 or newer                                                            | manages the project-local Python installation and dependencies                                                          | **only** the symbolic engine |
+
+There is no database to install, no account to create and no remote server to set up.
+
+---
+
+## Manual setup (without bootstrap)
 
 Six steps, in order. Every command is meant to be typed into a terminal — that is the
 window where you type words and press Enter — and step 2 shows you how to open one if
@@ -215,7 +256,7 @@ already use `nvm`, `nvm install --lts` is the shortest route.
 node -v
 ```
 
-You should see something like `v20.11.1` or a larger number. If instead you see
+You should see something like `v24.21.0` or a larger number. If instead you see
 `command not found` or `not recognized`, the install did not take: close the terminal,
 open a new one, and try again. If it still fails, the installer probably did not finish
 — run it again and watch for an error.

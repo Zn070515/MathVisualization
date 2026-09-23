@@ -6,6 +6,7 @@
   "description": "Expression-first environment for complex analysis, integral transforms and multivariable calculus.",
   "scripts": {
     "dev": "pnpm --filter @mathviz/app dev",
+    "start": "node scripts/start.mjs",
     "build": "pnpm --filter @mathviz/mathcore build && pnpm --filter @mathviz/app build",
     "preview": "pnpm --filter @mathviz/app preview",
     "test": "pnpm -r test",
@@ -18,12 +19,14 @@
     "demo:calculus": "node scripts/demo/record.mjs calculus",
     "demo:transforms": "node scripts/demo/record.mjs transforms",
     "demo": "node scripts/demo/record.mjs all",
+    "doctor": "node scripts/doctor.mjs",
+    "test:tooling": "node --test scripts/doctor.test.mjs scripts/tooling.test.mjs",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:tooling && pnpm build"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",
@@ -39,6 +42,6 @@
   },
   "packageManager": "pnpm@11.22.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   }
 }

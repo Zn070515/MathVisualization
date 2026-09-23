@@ -7,11 +7,30 @@ than guessing.
 
 ## Running
 
+From the repository root, the recommended setup is:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap.ps1
+.\scripts\start.ps1
+```
+
+On macOS or Linux:
+
+```bash
+bash scripts/bootstrap.sh
+bash scripts/start.sh
+```
+
+The start script launches the symbolic service together with the Vite application.
+For a service-only manual setup, use `uv` so the repository's Python version and
+SymPy requirement stay reproducible:
+
 ```bash
 cd services/symbolic
-python -m venv .venv
-.venv/Scripts/python -m pip install -r requirements.txt    # Windows
-.venv/bin/python -m pip install -r requirements.txt        # macOS / Linux
+uv python install 3.12
+uv venv --python 3.12 .venv
+uv pip install --python .venv/Scripts/python.exe -r requirements.txt    # Windows
+# uv pip install --python .venv/bin/python -r requirements.txt              # macOS / Linux
 .venv/Scripts/python server.py
 ```
 
@@ -65,7 +84,7 @@ a dependency to install, pin, and keep patched.
 ignored. Symbols are constructed from the `symbols` list and expressions are parsed
 against an explicit allowlist of names, so the only thing a request can do is
 construct and differentiate an expression. A service that evaluates arbitrary
-expressions *and* evaluates arbitrary code would be two problems instead of one.
+expressions _and_ evaluates arbitrary code would be two problems instead of one.
 
 ## Layering
 
