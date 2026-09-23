@@ -52,6 +52,7 @@ const VIEW_KIND_MIGRATION: Readonly<Record<string, ViewKind>> = {
   'complex-plane': 'complex-plane',
   contour: 'contour',
   'domain-coloring': 'domain-coloring',
+  'dft-domain': 'dft-domain',
   'frequency-domain': 'frequency-domain',
   'mapped-grid': 'mapped-grid',
   gradient: 'gradient',
@@ -188,7 +189,10 @@ function parseView(value: unknown): PersistedView | null {
     kind: migrated,
     // Frequency frames never had a complex projection; normalize a malformed
     // or hand-edited persisted value to the visible default.
-    mode: migrated === 'frequency-domain' && mode === 'complex' ? 'magnitude' : (mode as FieldMode),
+    mode:
+      (migrated === 'frequency-domain' || migrated === 'dft-domain') && mode === 'complex'
+        ? 'magnitude'
+        : (mode as FieldMode),
   };
 }
 

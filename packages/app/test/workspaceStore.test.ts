@@ -472,6 +472,30 @@ describe('choosing what to draw', () => {
     if (focusedSourcePair?.kind === 'function-definition') expect(focusedSourcePair.name).toBe('G');
   });
 
+  it('follows the focused DFT pair instead of the first transform pair', () => {
+    const store = makeStoreFromLatex(
+      [
+        'f(t)=t',
+        'F(\\omega)=\\operatorname{Fourier}(f(t))',
+        'g(t)=t^{2}',
+        'G(\\omega)=\\operatorname{DFT}(g(t))',
+      ],
+      'transforms',
+    );
+
+    const secondPair = store.getState().lines[3]?.id as string;
+    store.focusLine(secondPair);
+    const focusedPair = store.activeExpression()?.entry.statement;
+    expect(focusedPair?.kind).toBe('function-definition');
+    if (focusedPair?.kind === 'function-definition') expect(focusedPair.name).toBe('G');
+
+    const secondSource = store.getState().lines[2]?.id as string;
+    store.focusLine(secondSource);
+    const focusedSourcePair = store.activeExpression()?.entry.statement;
+    expect(focusedSourcePair?.kind).toBe('function-definition');
+    if (focusedSourcePair?.kind === 'function-definition') expect(focusedSourcePair.name).toBe('G');
+  });
+
   it('skips expressions this subsystem cannot draw', () => {
     // A scalar field is not a complex function, so the complex subsystem has
     // nothing to show for it.

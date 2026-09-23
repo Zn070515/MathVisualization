@@ -31,7 +31,12 @@ import {
   walk,
 } from '@mathviz/mathcore';
 import { MutableStore } from './store';
-import { defaultModeFor, defaultViewKinds, nominalViewKind } from './viewKinds';
+import {
+  defaultModeFor,
+  defaultViewKinds,
+  nominalViewKind,
+  type TransformViewKind,
+} from './viewKinds';
 import { DEFAULT_CAMERA_3D, dolly, orbit, panTarget, type Camera3d } from '../render/camera3d';
 import type { SubsystemId } from '../subsystems';
 
@@ -122,6 +127,7 @@ export type ViewKind =
   | 'complex-plane'
   | 'contour'
   | 'domain-coloring'
+  | 'dft-domain'
   | 'frequency-domain'
   | 'mapped-grid'
   | 'gradient';
@@ -288,7 +294,7 @@ export function selectActiveExpression(
       const body = entry.statement?.kind === 'function-definition' ? entry.statement.body : null;
       return (
         entry.type?.classification.kind === 'transform-pair' &&
-        body?.kind === 'fourier-transform' &&
+        (body?.kind === 'fourier-transform' || body?.kind === 'dft-transform') &&
         body.source.kind === 'call' &&
         body.source.callee === focusedFunctionName
       );
@@ -334,7 +340,7 @@ export function selectSourceExpression(
   const active = selectActiveExpression(workspace, focusedLineId, drawableKinds);
   const statement = active?.entry.statement;
   const body = statement?.kind === 'function-definition' ? statement.body : null;
-  if (body?.kind !== 'fourier-transform') return active;
+  if (body?.kind !== 'fourier-transform' && body?.kind !== 'dft-transform') return active;
 
   const source = body.source;
   if (source.kind !== 'call') return active;
@@ -768,10 +774,22 @@ function planOpeningViews(
   subsystem: SubsystemId,
 ): readonly ViewBlueprint[] {
   const active = selectActiveExpression(workspace, focusedLineId, drawableKinds);
-  const blueprints = defaultViewKinds(active?.signature, active?.entry.type?.classification.kind);
+  const blueprints = defaultViewKinds(
+    active?.signature,
+    active?.entry.type?.classification.kind,
+    transformViewKindOf(active),
+  );
   if (blueprints.length > 0) return blueprints;
   // Nothing drawable to infer from: open on a pane that can explain itself.
   return [{ kind: nominalViewKind(subsystem), mode: defaultModeFor(active?.signature.codomain) }];
+}
+
+export function transformViewKindOf(active: ActiveExpression | null): TransformViewKind | undefined {
+  const body =
+    active?.entry.statement?.kind === 'function-definition' ? active.entry.statement.body : null;
+  if (body?.kind === 'dft-transform') return 'dft';
+  if (body?.kind === 'fourier-transform') return 'fourier';
+  return undefined;
 }
 
 /** Give a plan its identities. The only place a view identifier is minted. */

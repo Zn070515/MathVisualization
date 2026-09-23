@@ -35,6 +35,7 @@ describe('the taxonomy', () => {
       'cartesian-3d',
       'complex-plane',
       'contour',
+      'dft-domain',
       'domain-coloring',
       'frequency-domain',
       'gradient',
@@ -77,6 +78,7 @@ describe('the taxonomy', () => {
 describe('what each object calls for', () => {
   it('starts frequency views on a selectable projection', () => {
     expect(defaultModeForView('frequency-domain', C1)).toBe('magnitude');
+    expect(defaultModeForView('dft-domain', C1)).toBe('magnitude');
     expect(defaultModeForView('cartesian-2d', C1)).toBe('complex');
   });
 
@@ -101,6 +103,18 @@ describe('what each object calls for', () => {
       'frequency-domain',
     ]);
     expect(defaultViewKinds(sig(R1, C1), 'transform-pair')[1]?.mode).toBe('magnitude');
+  });
+
+  it('gives a DFT transform pair its time and discrete-frequency views', () => {
+    expect(preferredViewKinds(sig(R1, C1), 'transform-pair', 'dft')).toEqual([
+      'cartesian-2d',
+      'dft-domain',
+    ]);
+    expect(defaultViewKinds(sig(R1, C1), 'transform-pair', 'dft').map((view) => view.kind)).toEqual([
+      'cartesian-2d',
+      'dft-domain',
+    ]);
+    expect(defaultViewKinds(sig(R1, C1), 'transform-pair', 'dft')[1]?.mode).toBe('magnitude');
   });
 
   it('asks for a surface for a scalar over the plane, with the heatmap behind it', () => {

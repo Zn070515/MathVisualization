@@ -28,12 +28,15 @@ import type { ViewBlueprint, ViewKind } from './workspaceStore';
  */
 export type ViewStatus = 'available' | 'planned';
 
+export type TransformViewKind = 'fourier' | 'dft';
+
 export const VIEW_KIND_STATUS: Readonly<Record<ViewKind, ViewStatus>> = {
   'cartesian-2d': 'available',
   'cartesian-3d': 'available',
   'complex-plane': 'available',
   contour: 'available',
   'domain-coloring': 'available',
+  'dft-domain': 'available',
   'frequency-domain': 'available',
   'mapped-grid': 'available',
   gradient: 'available',
@@ -47,7 +50,9 @@ export function defaultModeFor(codomain: Space | undefined): FieldMode {
 
 /** The initial projection is a property of the view, not only of the codomain. */
 export function defaultModeForView(kind: ViewKind, codomain: Space | undefined): FieldMode {
-  return kind === 'frequency-domain' ? 'magnitude' : defaultModeFor(codomain);
+  return kind === 'frequency-domain' || kind === 'dft-domain'
+    ? 'magnitude'
+    : defaultModeFor(codomain);
 }
 
 /**
@@ -61,13 +66,14 @@ export function defaultModeForView(kind: ViewKind, codomain: Space | undefined):
 export function preferredViewKinds(
   signature: Signature | undefined,
   classification?: MathObjectKind,
+  transformKind?: TransformViewKind,
 ): readonly ViewKind[] {
   if (signature === undefined) return [];
   const { domain, codomain } = signature;
 
   if (classification === 'transform-pair') {
     return domain.kind === 'R' && domain.dim === 1 && codomain.kind === 'C'
-      ? ['cartesian-2d', 'frequency-domain']
+      ? ['cartesian-2d', transformKind === 'dft' ? 'dft-domain' : 'frequency-domain']
       : [];
   }
 
@@ -99,8 +105,9 @@ export function preferredViewKinds(
 export function drawableViewKinds(
   signature: Signature | undefined,
   classification?: MathObjectKind,
+  transformKind?: TransformViewKind,
 ): readonly ViewKind[] {
-  return preferredViewKinds(signature, classification).filter(
+  return preferredViewKinds(signature, classification, transformKind).filter(
     (kind) => VIEW_KIND_STATUS[kind] === 'available',
   );
 }
@@ -117,8 +124,9 @@ export function drawableViewKinds(
 export function defaultViewKinds(
   signature: Signature | undefined,
   classification?: MathObjectKind,
+  transformKind?: TransformViewKind,
 ): readonly ViewBlueprint[] {
-  return intendedDefaults(signature, classification)
+  return intendedDefaults(signature, classification, transformKind)
     .filter((kind) => VIEW_KIND_STATUS[kind] === 'available')
     .map((kind) => ({
       kind,
@@ -129,13 +137,14 @@ export function defaultViewKinds(
 function intendedDefaults(
   signature: Signature | undefined,
   classification?: MathObjectKind,
+  transformKind?: TransformViewKind,
 ): readonly ViewKind[] {
   if (signature === undefined) return [];
   const { domain, codomain } = signature;
 
   if (classification === 'transform-pair') {
     return domain.kind === 'R' && domain.dim === 1 && codomain.kind === 'C'
-      ? ['cartesian-2d', 'frequency-domain']
+      ? ['cartesian-2d', transformKind === 'dft' ? 'dft-domain' : 'frequency-domain']
       : [];
   }
 

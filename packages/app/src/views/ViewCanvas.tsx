@@ -20,6 +20,7 @@ import {
 import { useStore } from '../state/store';
 import {
   selectActiveExpression,
+  transformViewKindOf,
   type ViewKind,
   type ViewRendererProps,
   type ViewSpec,
@@ -32,6 +33,7 @@ import { ComplexPlaneView } from './ComplexPlaneView';
 import { ContourView } from './ContourView';
 import { FieldView } from './FieldView';
 import { FrequencyDomainView } from './FrequencyDomainView';
+import { DftDomainView } from './DftDomainView';
 import { GradientView } from './GradientView';
 import { MappedGridView } from './MappedGridView';
 
@@ -41,6 +43,7 @@ const VIEW_TITLES: Readonly<Record<ViewKind, string>> = {
   'complex-plane': 'Complex plane',
   contour: 'Contours',
   'domain-coloring': 'Domain colouring',
+  'dft-domain': 'DFT spectrum',
   'frequency-domain': 'Frequency domain',
   'mapped-grid': 'Mapped grid',
   gradient: 'Gradient field',
@@ -55,6 +58,7 @@ const VIEW_TITLES: Readonly<Record<ViewKind, string>> = {
  */
 const MODED_KINDS: ReadonlySet<ViewKind> = new Set<ViewKind>([
   'domain-coloring',
+  'dft-domain',
   'frequency-domain',
 ]);
 
@@ -72,6 +76,7 @@ const VIEW_RENDERERS: Readonly<Record<ViewKind, (props: ViewRendererProps) => Re
     'complex-plane': ComplexPlaneView,
     contour: ContourView,
     'domain-coloring': FieldView,
+    'dft-domain': DftDomainView,
     'frequency-domain': FrequencyDomainView,
     'mapped-grid': MappedGridView,
     gradient: GradientView,
@@ -117,7 +122,11 @@ export function ViewCanvas({
   );
 
   const addable = useMemo((): readonly ViewKind[] => {
-    const preferred = drawableViewKinds(active?.signature, active?.entry.type?.classification.kind);
+    const preferred = drawableViewKinds(
+      active?.signature,
+      active?.entry.type?.classification.kind,
+      transformViewKindOf(active),
+    );
     // With nothing drawable there is no signature to consult, and a row of "Add
     // view" with nothing under it is a dead end. A nominal view is offered
     // instead, and it renders its own explanation rather than an empty frame.
@@ -207,10 +216,9 @@ function ViewFrame({
                 store.setViewMode(view.id, event.target.value as FieldMode);
               }}
             >
-              {(view.kind === 'frequency-domain'
+              {(view.kind === 'frequency-domain' || view.kind === 'dft-domain'
                 ? FIELD_MODES.filter((mode) => mode !== 'complex')
-                : FIELD_MODES
-              ).map((mode) => (
+                : FIELD_MODES).map((mode) => (
                 <option key={mode} value={mode} title={FIELD_MODE_DESCRIPTIONS[mode]}>
                   {FIELD_MODE_LABELS[mode]}
                 </option>
