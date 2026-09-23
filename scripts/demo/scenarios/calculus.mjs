@@ -19,6 +19,7 @@ export default {
     await surfaceCanvas.waitFor();
     const slider = page.locator('.expr-row__parameters input[type="range"]');
     await slider.waitFor();
+    await pause(page, 900);
 
     const surfaceBounds = await surfaceCanvas.boundingBox();
     if (surfaceBounds === null) throw new Error('3D surface canvas has no visible bounds.');
@@ -31,6 +32,7 @@ export default {
     await page.mouse.down();
     await moveHumanLike(page, orbitFrom, orbitTo, { steps: 24, durationMs: 700 });
     await page.mouse.up();
+    await pause(page, 800);
 
     await moveHumanLike(
       page,
@@ -43,6 +45,7 @@ export default {
     );
     await page.locator('.readout:not(.readout--idle)').waitFor();
     await pause(page, 1000);
+    await pause(page, 800);
 
     const sliderBounds = await slider.boundingBox();
     if (sliderBounds === null) throw new Error('Parameter slider has no visible bounds.');
@@ -58,6 +61,6 @@ export default {
     await page.mouse.down();
     await moveHumanLike(page, from, to, { steps: 20, durationMs: 650 });
     await page.mouse.up();
-    await pause(page, 1200);
+    await pause(page, 2400);
   },
 };

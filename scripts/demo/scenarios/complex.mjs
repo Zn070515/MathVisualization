@@ -16,6 +16,7 @@ export default {
     await plane.waitFor();
     await plane.locator('canvas[role="img"]').waitFor();
     await plane.locator('.legend__range').filter({ hasText: '○ 2 poles' }).waitFor();
+    await pause(page, 700);
 
     const canvas = plane.locator('canvas[role="img"]');
     const bounds = await canvas.boundingBox();
@@ -40,6 +41,7 @@ export default {
     await pressEnter(page, 0);
     await replaceMathField(page, 1, 'gamma(t)=2e^(it)');
     await pressEnter(page, 1);
+    await pause(page, 700);
 
     const contourField = fields.nth(2);
     await page.getByRole('button', { name: 'Show the mathematical keypad' }).click();
@@ -59,6 +61,6 @@ export default {
       const line = globalThis.document.querySelector('.expr-row__value:last-of-type');
       return line?.textContent?.includes('over') === true;
     });
-    await pause(page, 1200);
+    await pause(page, 2200);
   },
 };
