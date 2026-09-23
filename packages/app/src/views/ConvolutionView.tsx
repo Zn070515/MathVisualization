@@ -178,13 +178,16 @@ export function ConvolutionView({ store, view }: ViewRendererProps): React.JSX.E
           <>
             <span className="legend__range">DFT product check · periodic sampled convolution</span>
             <span className="legend__range">
-              origin phase: exp(i·ω·t_min) · {productCheck.status}
+              origin phase: exp(i·ω·t_min) · sampled identity: {productCheck.status}
             </span>
             {Number.isFinite(productCheck.maxAbsoluteDifference) && (
               <span className="legend__range">
                 max difference {displayNumberToText(viewNumber(productCheck.maxAbsoluteDifference))}
               </span>
             )}
+            <span className="legend__range">
+              sampling representation: {productCheck.samplingStatus}
+            </span>
           </>
         )}
       </div>

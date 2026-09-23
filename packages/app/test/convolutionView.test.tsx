@@ -44,6 +44,8 @@ describe('convolution sampled-product diagnostic', () => {
 
     if (check === null) throw new Error('expected a product check');
     expect(check.status).toBe('consistent');
+    expect(['stable', 'sampling-sensitive']).toContain(check.samplingStatus);
+    expect(check.maxAbsoluteDifference).toBeLessThanOrEqual(check.identityTolerance);
     expect(check.diagnostics.join(' ')).toMatch(/origin phase|t_min/i);
   });
 
@@ -69,6 +71,7 @@ describe('convolution sampled-product diagnostic', () => {
     );
 
     expect(check?.status).toBe('inconclusive');
-    expect(check?.estimatedError).toBe(Infinity);
+    expect(check?.identityTolerance).toBe(Infinity);
+    expect(check?.samplingStatus).toBe('unresolved');
   });
 });
