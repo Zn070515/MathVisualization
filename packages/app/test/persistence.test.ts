@@ -115,6 +115,12 @@ describe('which version is read', () => {
     expect(loadWorkspace('transforms')?.frequencyViewport).toEqual(frequencyViewport);
   });
 
+  it('round-trips a contour view as a current view kind', () => {
+    saveWorkspace('calculus', workspace({ views: [{ kind: 'contour', mode: 'real' }] }));
+
+    expect(loadWorkspace('calculus')?.views.views).toEqual([{ kind: 'contour', mode: 'real' }]);
+  });
+
   it('normalizes an invalid complex mode on a frequency view', () => {
     writeFile(V3, {
       transforms: {

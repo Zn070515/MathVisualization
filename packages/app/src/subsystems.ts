@@ -227,7 +227,7 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
       {
         name: 'Contours and level sets',
         summary: 'Level curves of the field, drawn over the heatmap or on their own.',
-        status: 'planned',
+        status: 'implemented',
       },
       {
         name: 'Gradient and directional derivatives',

@@ -94,6 +94,7 @@ export type ViewKind =
   | 'cartesian-2d'
   | 'cartesian-3d'
   | 'complex-plane'
+  | 'contour'
   | 'domain-coloring'
   | 'frequency-domain'
   | 'mapped-grid';

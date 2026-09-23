@@ -61,6 +61,7 @@ export * from './zerosAndPoles';
 export * from './contour';
 export * from './fourier';
 export * from './surface';
+export * from './contours';
 export * from './surfaceGlsl';
 export * from './workspace';
 export * from './coloring';

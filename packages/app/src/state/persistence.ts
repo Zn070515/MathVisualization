@@ -50,6 +50,7 @@ const VIEW_KIND_MIGRATION: Readonly<Record<string, ViewKind>> = {
   'cartesian-2d': 'cartesian-2d',
   'cartesian-3d': 'cartesian-3d',
   'complex-plane': 'complex-plane',
+  contour: 'contour',
   'domain-coloring': 'domain-coloring',
   'frequency-domain': 'frequency-domain',
   'mapped-grid': 'mapped-grid',

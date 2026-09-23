@@ -32,6 +32,7 @@ export const VIEW_KIND_STATUS: Readonly<Record<ViewKind, ViewStatus>> = {
   'cartesian-2d': 'available',
   'cartesian-3d': 'available',
   'complex-plane': 'available',
+  contour: 'available',
   'domain-coloring': 'available',
   'frequency-domain': 'available',
   'mapped-grid': 'available',
@@ -77,10 +78,12 @@ export function preferredViewKinds(
     return codomain.kind === 'C' ? ['cartesian-2d', 'complex-plane'] : ['cartesian-2d'];
   }
 
-  // A scalar over the plane is a surface. The heatmap is the fallback, and it is
-  // a real one: it is the same numbers, read from above.
+  // A scalar over the plane is a surface. Contours and the heatmap are two
+  // readings from above of the same sampled field.
   if (domain.dim === 2) {
-    return codomain.kind === 'R' && codomain.dim === 1 ? ['cartesian-3d', 'domain-coloring'] : [];
+    return codomain.kind === 'R' && codomain.dim === 1
+      ? ['cartesian-3d', 'contour', 'domain-coloring']
+      : [];
   }
 
   return [];

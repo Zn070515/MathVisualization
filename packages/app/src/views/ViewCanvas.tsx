@@ -29,6 +29,7 @@ import { defaultModeFor, drawableViewKinds, nominalViewKind } from '../state/vie
 import { Cartesian3DView } from './Cartesian3DView';
 import { CartesianView } from './CartesianView';
 import { ComplexPlaneView } from './ComplexPlaneView';
+import { ContourView } from './ContourView';
 import { FieldView } from './FieldView';
 import { FrequencyDomainView } from './FrequencyDomainView';
 import { MappedGridView } from './MappedGridView';
@@ -37,6 +38,7 @@ const VIEW_TITLES: Readonly<Record<ViewKind, string>> = {
   'cartesian-2d': 'Cartesian plot',
   'cartesian-3d': '3D surface',
   'complex-plane': 'Complex plane',
+  contour: 'Contours',
   'domain-coloring': 'Domain colouring',
   'frequency-domain': 'Frequency domain',
   'mapped-grid': 'Mapped grid',
@@ -66,6 +68,7 @@ const VIEW_RENDERERS: Readonly<Record<ViewKind, (props: ViewRendererProps) => Re
     'cartesian-2d': CartesianView,
     'cartesian-3d': Cartesian3DView,
     'complex-plane': ComplexPlaneView,
+    contour: ContourView,
     'domain-coloring': FieldView,
     'frequency-domain': FrequencyDomainView,
     'mapped-grid': MappedGridView,
