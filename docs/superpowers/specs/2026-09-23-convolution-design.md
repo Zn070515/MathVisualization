@@ -89,13 +89,17 @@ With this repository's time-integral-scaled DFT convention, its DFT obeys
 
 \[
 \operatorname{DFT}(c)_k
-  = \operatorname{DFT}(f)_k\operatorname{DFT}(g)_k
+  = e^{i\omega_k t_{\min}}
+    \operatorname{DFT}(f)_k\operatorname{DFT}(g)_k
 \]
 
-up to floating-point error. The UI must call this **periodic sampled
-convolution** or **DFT product check**. It must not call it the continuous
-convolution theorem, and it must state that circular wrap-around and the finite
-sample window are part of the calculation.
+up to floating-point error. The phase factor is required because each DFT
+value uses the actual sample coordinate `t_min + n·Δt`; it becomes one only
+when the sample origin is zero. The UI must call this **periodic sampled
+convolution** or **DFT product check**, show the origin phase when it is not
+trivial, and compare against the phase-corrected product. It must not call this
+the continuous convolution theorem, and it must state that circular wrap-around
+and the finite sample window are part of the calculation.
 
 The continuous numerical convolution and this sampled relation are separate
 estimates. Their differences are diagnostic evidence, not a theorem verdict.
@@ -186,7 +190,8 @@ would create an ambiguous expression language.
 4. Verify that the refined estimate is returned and the refinement difference
    is reported as its error indicator.
 5. Verify periodic sampled convolution against the existing direct DFT and FFT
-   routes using the exact repository normalisation.
+   routes using the exact repository normalisation, including a nonzero
+   `t_min` case that requires the origin phase factor.
 6. Verify symbolic and GLSL backends reject the node explicitly rather than
    producing a formal or fake pointwise result.
 
