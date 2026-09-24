@@ -30,8 +30,11 @@ S(t) = FourierSeries(f(u), 2π)
 `FourierSeries(source-call, period)` is an expression. The source variable `u` is
 bound by the node; `t` is the variable of the containing function definition. The
 period expression must evaluate to one finite positive real number in the current
-workspace. The source must be a unary real-valued function call. The result is a real
-function of the outer variable.
+workspace. It may use constants and workspace parameters, but may not depend on the
+source integration variable `u` or the outer evaluation variable `t`; the period is a
+property of the series, not a value that changes at every evaluation point. The source
+must be a unary real-valued function call. The result is a real function of the outer
+variable.
 
 The explicit source variable keeps the two roles distinct:
 
@@ -81,11 +84,22 @@ and evaluates the order-`N` partial sum:
 Sₙ(t) = a₀/2 + Σ[k=1..N] (aₖ cos(kω₀t) + bₖ sin(kω₀t))
 ```
 
-The integrals use composite trapezoid quadrature. A base integration grid with `Q`
-intervals is compared with a refined grid with `2Q` intervals. The returned estimate
-must contain both the coefficients used for the displayed partial sum and an explicit
-coefficient disagreement metric. That metric is a refinement indicator, not a
-rigorous error bound and not a proof of convergence.
+The integrals use composite trapezoid quadrature. A requested base grid with `Q`
+intervals is compared with a refined grid with `2Q` intervals. The numerical core
+must use an effective base count
+
+```text
+Q_eff = max(Q, 4N)
+```
+
+so the highest requested harmonic is not under-resolved by the coefficient grid. The
+result must report both the requested count and the effective base/refined counts; the
+`4N` floor is an anti-aliasing safeguard, not a convergence proof. The returned
+estimate must contain both the coefficients used for the displayed partial sum and an
+explicit coefficient disagreement metric. That metric is a refinement indicator, not
+a rigorous error bound and not a proof of convergence. Its stability test uses the
+same scale-aware tolerance convention as the existing numerical transform estimates:
+`disagreement <= tolerance × max(1, largest refined coefficient magnitude)`.
 
 The view must state the finite period, the order, the base/refined quadrature counts,
 and whether the refinement was numerically stable. If the source is undefined or
@@ -158,17 +172,44 @@ interface FourierSeriesSettings {
 
 Use a bounded, documented set of integration counts and a positive order control.
 The order is a mathematical approximation setting shared by all series
-representations; a camera or viewport remains view-local/persistent as appropriate.
+representations; the effective `Q_eff` floor above remains in the core even if a user
+chooses an order larger than the requested integration count. A camera or viewport
+remains view-local/persistent as appropriate.
 Persist and restore these settings with the existing workspace state conventions.
+
+Give the series representation its own persistent Cartesian frame, analogous to the
+existing frequency and convolution frames. The stored value is nullable because the
+first frame depends on the expression's evaluated period:
+
+```ts
+interface SeriesViewport {
+  xMin: number;
+  xMax: number;
+  yMin: number;
+  yMax: number;
+}
+```
+
+`WorkspaceState.seriesViewport` is `SeriesViewport | null`. `null` means that no
+explicit frame has been chosen yet; the view derives one centered period from the
+current estimate. Once the user pans, zooms, or presses Fit, the derived frame is
+stored and reused until Reset clears it back to `null`.
+
+The initial series frame is centered on one period when the view is first inferred;
+subsequent panning, zooming, and explicit Fit actions persist in `seriesViewport` and
+must not alter the ordinary Cartesian or complex-plane frame.
 
 Add a dedicated `series-domain` view kind. It is a Cartesian time-domain view with:
 
-- the source signal sampled over one displayed period;
+- the source signal and partial sum sampled over the current persistent time frame,
+  whose initial frame is one centered period `[-P/2, P/2]`;
 - the order-`N` partial sum over the same horizontal coordinates;
-- a shared hover/selection readout for `t`, source value, and partial-sum value;
+- a shared real-axis hover/selection readout represented by the existing point state
+  `cx(t, 0)`, showing `t`, source value, and partial-sum value rather than using the
+  separate frequency cursor;
 - visible finite-window/refinement diagnostics;
-- an explicit order control and an explicit Fit action if the measured range leaves
-  the persistent frame.
+- explicit order and requested integration-count controls, plus an explicit Fit action
+  if the measured range leaves the persistent frame.
 
 The view must not auto-rescale its vertical frame whenever `N` changes. A change in
 the curve must remain attributable to the approximation order, with Fit as an
