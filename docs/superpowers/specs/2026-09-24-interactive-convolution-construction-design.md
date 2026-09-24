@@ -22,7 +22,7 @@ g(t)=exp(-2*t^2)
 h(t)=Convolution(f(t),g(t))
 ```
 
-and a selected output coordinate (t=T), show the actual finite-window
+and a selected output coordinate $t=T$, show the actual finite-window
 construction:
 
 \[
@@ -38,7 +38,7 @@ A_T(\tau)=\int_{a}^{\tau}q_T(u)\,du,
 (f*g)(T)\approx A_T(b),
 \]
 
-where ([a,b]) is the explicitly displayed finite integration window.
+where $[a,b]$ is the explicitly displayed finite integration window.
 
 The feature must make the sequence
 
@@ -53,15 +53,15 @@ whole-real-line convolution.
 
 ### One shared output coordinate
 
-The construction coordinate (T) is not a new local mathematical state.
+The construction coordinate $T$ is not a new local mathematical state.
 It is the existing linked workspace coordinate:
 
 ```text
 T = hover ?? selection
 ```
 
-Moving the pointer over the existing convolution output plot changes (T).
-Holding a point keeps (T) selected across linked views. The construction
+Moving the pointer over the existing convolution output plot changes $T$.
+Holding a point keeps $T$ selected across linked views. The construction
 panel reads this same value, so the source curves, output curve, readout and
 construction cannot disagree about which convolution slice is being shown.
 
@@ -89,10 +89,10 @@ product = left * right
 ```
 
 The shifted curve is therefore not a translated copy of a previously sampled
-array. It is evaluated at (T-\tau_j), including parameter values and
+array. It is evaluated at $T-τ_j$, including parameter values and
 complex-valued source results.
 
-The returned construction samples use the refined (2M) grid. The primary
+The returned construction samples use the refined $2M$ grid. The primary
 and refined counts are both reported, following the existing convolution
 estimate contract. The refined product and accumulated integral are the
 displayed numerical answer; the primary/refined comparison is only a
@@ -108,10 +108,12 @@ A_{j+1}=A_j+\frac{\Delta\tau}{2}
 \left(q_T(\tau_j)+q_T(\tau_{j+1})\right).
 \]
 
-The first resolved sample in a segment starts that segment's accumulator at
-zero. A segment's final accumulated value is meaningful only for that
-segment; it must not be presented as the total convolution if the integration
-window contains an unresolved gap.
+For a fully resolved window, the first accumulated value is zero at
+\(\tau_0=a\). If a product sample is unresolved, the accumulated value at
+that index and every later index is `null`: the prefix integral from \(a\) is
+no longer known. The source and product curves still expose their resolved
+segments for inspection, but no post-gap accumulator is restarted at zero or
+presented as the total convolution.
 
 The construction estimate exposes the final accumulated value for the fully
 resolved window and a refinement indicator. It does not add a second
@@ -147,9 +149,11 @@ interface ConvolutionConstructionEstimate {
 ```
 
 `null` is a deliberate unresolved sample, not a zero value. `segments` gives
-the renderer an unambiguous way to break every curve at an invalid sample;
-`startIndex` and `endIndex` are inclusive indices into `tau` and the four
-parallel sample arrays.
+the renderer an unambiguous way to break the source and product curves at an
+invalid sample; `startIndex` and `endIndex` are inclusive indices into `tau`
+and the four parallel sample arrays. The accumulation array is additionally
+null after the first unresolved prefix, so it cannot be mistaken for a
+restarted integral.
 The estimator may return an unresolved status while still returning resolved
 segments for educational inspection. It must never interpolate across a
 missing value or turn it into a continuous curve.
@@ -157,7 +161,7 @@ missing value or turn it into a continuous curve.
 The `estimatedError` compares corresponding primary and refined accumulated
 results at the same output time. It is `Infinity` when either refinement
 cannot be compared honestly. This is a discretisation indicator, not a bound
-for truncation outside ([a,b]).
+for truncation outside $[a,b]$.
 
 ## UI design
 
@@ -169,7 +173,7 @@ The existing convolution plot remains the primary plot and continues to show:
 f(t) · g(t) · (f*g)(t)
 ```
 
-Its pointer interaction remains the source of the shared (T) coordinate.
+Its pointer interaction remains the source of the shared $T$ coordinate.
 The existing finite-window and refined-integration diagnostics remain visible.
 
 ### Construction toggle
@@ -186,12 +190,12 @@ settings; it only controls whether the linked construction panel is rendered.
 
 ### Construction panel
 
-When enabled and (T) exists, the view adds a second canvas below the output
-plot with one shared horizontal axis labelled \(\tau\):
+When enabled and $T$ exists, the view adds a second canvas below the output
+plot with one shared horizontal axis labelled $τ$:
 
-1. An integrand band draws (f(\tau)), (g(T-\tau)), and
-   (q_T(\tau)=f(\tau)g(T-\tau)), with a legend identifying each curve.
-2. An accumulation band draws (A_T(\tau)) using the same \(\tau\) samples.
+1. An integrand band draws $f(τ)$, $g(T-τ)$, and
+   $q_T(τ)=f(τ)g(T-τ)$, with a legend identifying each curve.
+2. An accumulation band draws $A_T(τ)$ using the same $τ$ samples.
 3. The panel states `T = ...`, `τ ∈ [a,b]`, the refined sample count, and
    the finite-window qualifier.
 
@@ -200,7 +204,7 @@ and accumulated integral have different scales. Each range is labelled as a
 measured display range; no range is presented as a mathematical bound.
 
 The construction panel is read-only in the first slice. Selecting or moving
-over the existing output plot is sufficient to drag (T), and avoids adding
+over the existing output plot is sufficient to drag $T$, and avoids adding
 another pointer interaction whose coordinate could diverge from the shared
 workspace selection.
 
@@ -223,15 +227,15 @@ complex.
 
 ## Error and boundary handling
 
-- A non-finite or undefined value in either (f(\tau)) or (g(T-\tau))
+- A non-finite or undefined value in either $f(τ)$ or $g(T-τ)$
   produces a `null` sample and a diagnostic naming the argument that failed.
 - All rendered paths break at `null`; no line crosses an unresolved sample.
 - If a gap exists, the accumulation path also breaks. The UI says that the
   full-window accumulation is unresolved instead of displaying the last
   segment's value as the convolution result.
-- If (T) is finite but outside the output window, the construction may still
-  be evaluated because (T) is a linked coordinate from another view. The
-  panel states the selected (T) explicitly and keeps the integration window
+- If $T$ is finite but outside the output window, the construction may still
+  be evaluated because $T$ is a linked coordinate from another view. The
+  panel states the selected $T$ explicitly and keeps the integration window
   unchanged.
 - An empty or invalid time window is rejected before evaluation and produces
   the existing unresolved diagnostic path.
@@ -256,12 +260,12 @@ Modify `packages/app/src/views/convolutionEvaluation.ts` to select the active
 convolution, build the evaluator environment, cache construction estimates by
 workspace, active expression, parameter values, output time, and numerical
 settings, and expose projection helpers. Cursor-only updates must reuse an
-identical estimate when (T) has not changed.
+identical estimate when $T$ has not changed.
 
 ### App view
 
 Modify `packages/app/src/views/ConvolutionView.tsx` to own only the visual
-toggle, consume the shared (T), draw the construction canvases, and display
+toggle, consume the shared $T$, draw the construction canvases, and display
 diagnostics. Keep mathematical evaluation out of pointer handlers.
 
 Add only the CSS needed for the second panel and controls. Do not create demo
@@ -278,21 +282,21 @@ Numerical convolution and sampled DFT product remain separately described.
 ### Mathcore tests
 
 1. For constant or Gaussian sources, verify the shifted right values use
-   (T-\tau), not (T+\tau) or a translated sample index.
+   $T-τ$, not $T+τ$ or a translated sample index.
 2. Verify the final accumulated value agrees with the existing finite-window
    convolution estimate within the refinement indicator.
 3. Verify primary/refined sample counts and the refined grid are returned.
 4. Verify a singular source produces `null`/broken segments and an unresolved
    status without bridging the gap.
 5. Verify complex multiplication occurs before real/magnitude projection.
-6. Verify invalid (T), window, and sample-count inputs return explicit
+6. Verify invalid $T$, window, and sample-count inputs return explicit
    diagnostics without NaN paths.
 
 ### App tests
 
 1. Verify the construction toggle is keyboard accessible and does not alter
    shared workspace selection.
-2. Verify changing the linked (T) changes the construction data and the
+2. Verify changing the linked $T$ changes the construction data and the
    displayed `T` readout.
 3. Verify the construction panel uses the cached estimate and does not run
    numerical integration inside pointer handlers.
@@ -306,7 +310,7 @@ Numerical convolution and sampled DFT product remain separately described.
 
 The feature is ready only when the full workspace tests, lint, typecheck,
 build, and tooling contracts pass. A user can enter the three expressions in
-this document, move across the output curve, and observe the same (T)
+this document, move across the output curve, and observe the same $T$
 driving the shifted signal, product, and accumulation. Every displayed
 number remains labelled as a finite-window numerical result with its
 refinement status.
