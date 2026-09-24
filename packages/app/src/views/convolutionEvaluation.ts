@@ -1,5 +1,6 @@
 import {
   type Complex,
+  type ConvolutionConstructionEstimate,
   type ConvolutionEstimate,
   type ConvolutionNode,
   type DftStability,
@@ -9,6 +10,7 @@ import {
   type Workspace,
   cabs,
   dftOfPeriodicSamples,
+  estimateConvolutionConstruction,
   estimateConvolution,
   estimateDft,
   periodicSampledConvolution,
@@ -22,6 +24,7 @@ export interface ConvolutionSettings {
   readonly outputWindow: { readonly min: number; readonly max: number };
   readonly outputSampleCount: number;
   readonly integrationSampleCount: number;
+  readonly tolerance?: number;
 }
 
 export const DEFAULT_CONVOLUTION_SETTINGS: ConvolutionSettings = {
@@ -32,6 +35,10 @@ export const DEFAULT_CONVOLUTION_SETTINGS: ConvolutionSettings = {
 };
 
 const estimateCache = new WeakMap<Workspace, Map<string, ConvolutionEstimate | null>>();
+const constructionCache = new WeakMap<
+  Workspace,
+  Map<string, ConvolutionConstructionEstimate | null>
+>();
 const dftProductCache = new WeakMap<Workspace, Map<string, DftProductCheck | null>>();
 
 export interface DftProductCheck {
@@ -75,6 +82,38 @@ export function estimateActiveConvolution(
     convolution,
     workspaceEnvironment(workspace, parameterValues),
     settings,
+  );
+  workspaceCache.set(key, estimate);
+  return estimate;
+}
+
+export function estimateActiveConvolutionConstruction(
+  active: ActiveExpression | null,
+  workspace: Workspace,
+  parameterValues: ReadonlyMap<string, number>,
+  outputTime: number | null,
+  settings: ConvolutionSettings = DEFAULT_CONVOLUTION_SETTINGS,
+): ConvolutionConstructionEstimate | null {
+  const convolution = selectConvolution(active);
+  if (convolution === null || outputTime === null) return null;
+
+  const key = `${active?.entry.id ?? 'none'}|${parameterKey(parameterValues)}|${outputTime}|${settingsKey(settings)}`;
+  let workspaceCache = constructionCache.get(workspace);
+  if (workspaceCache === undefined) {
+    workspaceCache = new Map();
+    constructionCache.set(workspace, workspaceCache);
+  }
+  if (workspaceCache.has(key)) return workspaceCache.get(key) ?? null;
+
+  const estimate = estimateConvolutionConstruction(
+    convolution,
+    workspaceEnvironment(workspace, parameterValues),
+    outputTime,
+    {
+      integrationWindow: settings.integrationWindow,
+      integrationSampleCount: settings.integrationSampleCount,
+      tolerance: settings.tolerance,
+    },
   );
   workspaceCache.set(key, estimate);
   return estimate;
@@ -203,6 +242,13 @@ export function projectConvolutionValue(value: Complex, mode: FieldMode): number
   }
 }
 
+export function projectConstructionValue(
+  value: Complex | null,
+  mode: Exclude<FieldMode, 'complex'>,
+): number | null {
+  return value === null ? null : projectConvolutionValue(value, mode);
+}
+
 export interface ConvolutionCurve {
   readonly times: readonly number[];
   readonly values: readonly number[];
@@ -245,6 +291,7 @@ function settingsKey(settings: ConvolutionSettings): string {
     settings.outputWindow.max,
     settings.outputSampleCount,
     settings.integrationSampleCount,
+    settings.tolerance ?? '',
   ].join(',');
 }
 
