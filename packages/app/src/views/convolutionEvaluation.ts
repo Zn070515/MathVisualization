@@ -49,6 +49,9 @@ export interface DftProductCheck {
   /** Separate refinement indicator for the sampled representations. */
   readonly samplingEstimatedError: number;
   readonly samplingStatus: DftStability;
+  /** Refinement information for the separate finite-window continuous estimate. */
+  readonly continuousConvolutionEstimatedError: number;
+  readonly continuousConvolutionStatus: DftStability;
   readonly status: 'consistent' | 'inconclusive' | 'inconsistent';
   readonly diagnostics: readonly string[];
 }
@@ -167,11 +170,9 @@ export function estimateActiveDftProduct(
     'This compares sampled periodic data; it does not certify the continuous whole-line convolution theorem.',
   ];
 
-  const samplingStatus = combinedSamplingStatus(
-    left.stability,
-    right.stability,
-    direct?.stability ?? 'unresolved',
-  );
+  const samplingStatus = combineDftSamplingStatus(left.stability, right.stability);
+  const continuousConvolutionStatus = direct?.stability ?? 'unresolved';
+  const continuousConvolutionEstimatedError = direct?.estimatedError ?? Infinity;
   if (left.stability === 'unresolved' || right.stability === 'unresolved') {
     const result = unresolvedProduct(baseDiagnostics, [...left.diagnostics, ...right.diagnostics]);
     workspaceCache.set(key, result);
@@ -198,10 +199,7 @@ export function estimateActiveDftProduct(
   }
 
   const maxAbsoluteDifference = maximumDifference(transformed.value, product.value);
-  const samplingEstimatedError =
-    left.estimatedError +
-    right.estimatedError +
-    (direct?.estimatedError ?? Number.POSITIVE_INFINITY);
+  const samplingEstimatedError = left.estimatedError + right.estimatedError;
   const scale = Math.max(1, ...product.value.map(cabs), ...transformed.value.map(cabs));
   const identityTolerance = Number.EPSILON * scale * Math.max(1, left.values.length) * 256;
   const status =
@@ -216,12 +214,15 @@ export function estimateActiveDftProduct(
     identityTolerance,
     samplingEstimatedError,
     samplingStatus,
+    continuousConvolutionEstimatedError,
+    continuousConvolutionStatus,
     status,
     diagnostics: [
       ...baseDiagnostics,
       `Maximum sampled DFT difference is ${maxAbsoluteDifference}.`,
       `Fixed-grid identity tolerance is ${identityTolerance}.`,
       `Sampling representation is ${samplingStatus}; its combined refinement indicator is ${samplingEstimatedError}.`,
+      `Continuous finite-window convolution is ${continuousConvolutionStatus}; its separate refinement indicator is ${continuousConvolutionEstimatedError}.`,
     ],
   };
   workspaceCache.set(key, result);
@@ -330,12 +331,16 @@ function unresolvedProduct(
     identityTolerance: Number.POSITIVE_INFINITY,
     samplingEstimatedError: Number.POSITIVE_INFINITY,
     samplingStatus: 'unresolved',
+    continuousConvolutionEstimatedError: Number.POSITIVE_INFINITY,
+    continuousConvolutionStatus: 'unresolved',
     status: 'inconclusive',
     diagnostics: [...baseDiagnostics, 'The sampled product check is inconclusive.', ...details],
   };
 }
 
-function combinedSamplingStatus(...statuses: readonly DftStability[]): DftStability {
+export function combineDftSamplingStatus(
+  ...statuses: readonly [DftStability, DftStability]
+): DftStability {
   if (statuses.some((status) => status === 'unresolved')) return 'unresolved';
   if (statuses.some((status) => status === 'sampling-sensitive')) return 'sampling-sensitive';
   return 'stable';

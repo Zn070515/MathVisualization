@@ -101,6 +101,11 @@ export interface PersistedFrequencyViewport {
   readonly yMax: number;
 }
 
+export interface PersistedConvolutionViewport {
+  readonly yMin: number;
+  readonly yMax: number;
+}
+
 export type PersistedSampling = SamplingSettings;
 
 /** What is written. */
@@ -109,6 +114,7 @@ export interface PersistedWorkspace {
   readonly parameterValues: Record<string, number>;
   readonly viewport: { centreRe: number; centreIm: number; halfWidth: number };
   readonly frequencyViewport?: PersistedFrequencyViewport;
+  readonly convolutionViewport?: PersistedConvolutionViewport;
   readonly sampling?: PersistedSampling;
   /** The selected contour level, optional for records written before contours were linked. */
   readonly contourLevel?: number;
@@ -146,6 +152,7 @@ export interface LoadedWorkspace {
   readonly parameterValues: Record<string, number>;
   readonly viewport: PersistedWorkspace['viewport'];
   readonly frequencyViewport: PersistedWorkspace['frequencyViewport'];
+  readonly convolutionViewport: PersistedWorkspace['convolutionViewport'];
   readonly sampling: PersistedWorkspace['sampling'];
   readonly contourLevel: PersistedWorkspace['contourLevel'];
   /** Null when nothing usable was stored, which is what the store's default is for. */
@@ -250,6 +257,23 @@ function readFrequencyViewport(
   return usable ? { xMin, xMax, yMin, yMax } : undefined;
 }
 
+function readConvolutionViewport(
+  entry: Record<string, unknown>,
+): PersistedWorkspace['convolutionViewport'] {
+  const stored = entry['convolutionViewport'];
+  if (!isRecord(stored)) return undefined;
+
+  const yMin = stored['yMin'];
+  const yMax = stored['yMax'];
+  const usable =
+    typeof yMin === 'number' &&
+    Number.isFinite(yMin) &&
+    typeof yMax === 'number' &&
+    Number.isFinite(yMax) &&
+    yMax > yMin;
+  return usable ? { yMin, yMax } : undefined;
+}
+
 function readSampling(entry: Record<string, unknown>): PersistedWorkspace['sampling'] {
   const stored = entry['sampling'];
   if (!isRecord(stored)) return undefined;
@@ -350,6 +374,7 @@ function readEntry(
     parameterValues: readParameterValues(entry),
     viewport: readViewport(entry),
     frequencyViewport: readFrequencyViewport(entry),
+    convolutionViewport: readConvolutionViewport(entry),
     sampling: readSampling(entry),
     contourLevel: readContourLevel(entry),
     camera: readCamera(entry),

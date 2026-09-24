@@ -265,6 +265,20 @@ describe('interactive convolution construction', () => {
     expect(estimate.productValues[0]?.re).toBeCloseTo(1);
     expect(estimate.productValues[0]?.im).toBeCloseTo(0);
   });
+
+  it('marks non-finite products and accumulations as unresolved', () => {
+    const estimate = constructionFor(
+      ['f(t)=10^308', 'g(t)=10^308', 'h(t)=Convolution(f(t), g(t))'],
+      0,
+      { integrationWindow: { min: 0, max: 1 }, integrationSampleCount: 5 },
+    );
+
+    expect(estimate.stability).toBe('unresolved');
+    expect(estimate.productValues.every((value) => value === null)).toBe(true);
+    expect(estimate.accumulatedValues.every((value) => value === null)).toBe(true);
+    expect(estimate.segments).toEqual([]);
+    expect(estimate.diagnostics.join(' ')).toMatch(/non-finite|unresolved/i);
+  });
 });
 
 describe('periodic sampled convolution', () => {

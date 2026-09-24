@@ -421,9 +421,19 @@ function sampleConstruction(
     }
     leftValues.push(leftValue);
     shiftedRightValues.push(rightValue);
-    productValues.push(
-      leftValue === null || rightValue === null ? null : cmul(leftValue, rightValue),
-    );
+    if (leftValue === null || rightValue === null) {
+      productValues.push(null);
+      continue;
+    }
+    const product = cmul(leftValue, rightValue);
+    if (!isFiniteComplex(product)) {
+      if (firstIssue === null) {
+        firstIssue = `The convolution product became non-finite at τ=${value}.`;
+      }
+      productValues.push(null);
+      continue;
+    }
+    productValues.push(product);
   }
 
   let accumulationAvailable = true;
@@ -449,9 +459,22 @@ function sampleConstruction(
       accumulatedValues.push(null);
       continue;
     }
-    accumulatedValues.push(
-      cadd(previousAccumulation, cscale(cadd(previousProduct, product), step / 2)),
-    );
+    const trapezoid = cadd(previousProduct, product);
+    const increment = cscale(trapezoid, step / 2);
+    const nextAccumulation = cadd(previousAccumulation, increment);
+    if (
+      !isFiniteComplex(trapezoid) ||
+      !isFiniteComplex(increment) ||
+      !isFiniteComplex(nextAccumulation)
+    ) {
+      if (firstIssue === null) {
+        firstIssue = `The accumulated convolution became non-finite at τ=${tau[index]}.`;
+      }
+      accumulationAvailable = false;
+      accumulatedValues.push(null);
+      continue;
+    }
+    accumulatedValues.push(nextAccumulation);
   }
 
   const segments: { startIndex: number; endIndex: number }[] = [];

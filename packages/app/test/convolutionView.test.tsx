@@ -98,4 +98,35 @@ describe('convolution sampled-product diagnostic', () => {
     expect(screen.getByText(/accumulated integral/i)).toBeTruthy();
     expect(screen.getByRole('img', { name: /convolution construction at T=/i })).toBeTruthy();
   });
+
+  it('shows unresolved construction diagnostics instead of a false accumulated result', () => {
+    const store = nonzeroOriginConvolutionStore();
+    store.setLineLatex(store.getState().lines[0]?.id as string, 'f(t)=10^{200}');
+    store.setLineLatex(store.getState().lines[1]?.id as string, 'g(t)=10^{200}');
+    store.focusLine(store.getState().lines[2]?.id as string);
+    store.setSelection({ re: 0, im: 0 });
+    render(<ConvolutionView {...propsForConvolutionStore(store)} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: /show convolution construction/i }));
+
+    expect(screen.getByRole('status').textContent).toMatch(/non-finite|unresolved/i);
+    expect(screen.getByText(/accumulated integral unavailable/i)).toBeTruthy();
+  });
+
+  it('fits the measured output range only when the user asks', () => {
+    const store = makeStoreFromLatex(
+      ['f(t)=100', 'g(t)=100', 'h(t)=\\operatorname{Convolution}(f(t),g(t))'],
+      'transforms',
+    );
+    store.focusLine(store.getState().lines[2]?.id as string);
+    render(<ConvolutionView {...propsForConvolutionStore(store)} />);
+
+    expect(store.getState().convolutionViewport).toEqual({ yMin: -2, yMax: 2 });
+    const fit = screen.getByRole('button', { name: /fit convolution y range/i });
+    fireEvent.click(fit);
+
+    expect(store.getState().convolutionViewport).not.toEqual({ yMin: -2, yMax: 2 });
+    expect(store.getState().convolutionViewport.yMax).toBeGreaterThan(
+      store.getState().convolutionViewport.yMin,
+    );
+  });
 });

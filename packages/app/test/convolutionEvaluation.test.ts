@@ -3,6 +3,7 @@ import { cx } from '@mathviz/mathcore';
 import { makeStoreFromLatex } from './helpers';
 import {
   DEFAULT_CONVOLUTION_SETTINGS,
+  combineDftSamplingStatus,
   estimateActiveConvolution,
   estimateActiveConvolutionConstruction,
   projectConstructionValue,
@@ -28,6 +29,12 @@ function simpleConvolutionStore() {
 }
 
 describe('convolution app evaluation', () => {
+  it('combines only the sampled DFT refinement statuses', () => {
+    expect(combineDftSamplingStatus('stable', 'stable')).toBe('stable');
+    expect(combineDftSamplingStatus('stable', 'sampling-sensitive')).toBe('sampling-sensitive');
+    expect(combineDftSamplingStatus('stable', 'unresolved')).toBe('unresolved');
+  });
+
   it('selects the focused convolution definition', () => {
     const store = convolutionStore();
     expect(selectConvolution(store.activeExpression())).not.toBeNull();

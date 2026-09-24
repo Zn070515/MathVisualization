@@ -115,6 +115,13 @@ describe('which version is read', () => {
     expect(loadWorkspace('transforms')?.frequencyViewport).toEqual(frequencyViewport);
   });
 
+  it('round-trips the explicit convolution viewport', () => {
+    const convolutionViewport = { yMin: -5, yMax: 7 };
+    saveWorkspace('transforms', workspace({ convolutionViewport }));
+
+    expect(loadWorkspace('transforms')?.convolutionViewport).toEqual(convolutionViewport);
+  });
+
   it('round-trips shared DFT sampling settings', () => {
     const sampling = {
       timeWindow: { min: -4, max: 4 },

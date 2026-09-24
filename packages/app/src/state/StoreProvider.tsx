@@ -77,6 +77,9 @@ export function WorkspaceProvider({
             ...(restored.frequencyViewport === undefined
               ? {}
               : { frequencyViewport: restored.frequencyViewport }),
+            ...(restored.convolutionViewport === undefined
+              ? {}
+              : { convolutionViewport: restored.convolutionViewport }),
             ...(restored.sampling === undefined ? {} : { sampling: restored.sampling }),
             ...(restored.contourLevel === undefined ? {} : { contourLevel: restored.contourLevel }),
             ...(restored.camera === null ? {} : { camera3d: restored.camera }),
@@ -100,6 +103,7 @@ export function WorkspaceProvider({
           halfWidth: state.viewport.halfWidth,
         },
         frequencyViewport: state.frequencyViewport,
+        convolutionViewport: state.convolutionViewport,
         sampling: state.sampling,
         contourLevel: state.contourLevel,
         camera: {

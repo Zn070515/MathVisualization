@@ -11,6 +11,7 @@ import { latex, makeStore, makeStoreFromLatex, toLatex } from './helpers';
 import { cx } from '@mathviz/mathcore';
 import {
   DEFAULT_DFT_SAMPLING,
+  DEFAULT_CONVOLUTION_VIEWPORT,
   DEFAULT_FREQUENCY_VIEWPORT,
   DEFAULT_VIEWPORT,
   collectSliderValues,
@@ -280,6 +281,7 @@ describe('the viewport', () => {
     const store = makeStore(['f(x,y)=x^2-y^2'], 'calculus');
     store.setViewport({ centre: cx(4, -3), halfWidth: 0.5 });
     store.setFrequencyViewport({ xMin: -2, xMax: 2, yMin: -1, yMax: 1 });
+    store.setConvolutionViewport({ yMin: -5, yMax: 5 });
     store.setCamera3d({
       azimuth: 1,
       elevation: 0.4,
@@ -290,6 +292,7 @@ describe('the viewport', () => {
 
     expect(store.getState().viewport).toEqual(DEFAULT_VIEWPORT);
     expect(store.getState().frequencyViewport).toEqual(DEFAULT_FREQUENCY_VIEWPORT);
+    expect(store.getState().convolutionViewport).toEqual(DEFAULT_CONVOLUTION_VIEWPORT);
     expect(store.getState().camera3d).toEqual({
       azimuth: Math.PI / 4,
       elevation: Math.PI / 7,

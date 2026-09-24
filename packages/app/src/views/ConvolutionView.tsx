@@ -100,10 +100,10 @@ export function ConvolutionView({ store, view }: ViewRendererProps): React.JSX.E
     () => ({
       xMin: settings.outputWindow.min,
       xMax: settings.outputWindow.max,
-      yMin: measured.min,
-      yMax: measured.max,
+      yMin: state.convolutionViewport.yMin,
+      yMax: state.convolutionViewport.yMax,
     }),
-    [measured, settings.outputWindow],
+    [settings.outputWindow, state.convolutionViewport],
   );
   const constructionCurves = useMemo(
     () =>
@@ -234,7 +234,11 @@ export function ConvolutionView({ store, view }: ViewRendererProps): React.JSX.E
   }, [constructionResizeVersion, drawConstruction]);
 
   const sourceNames = sourceLabels(convolution);
-  const diagnostic = diagnosticText(estimate);
+  const diagnosticParts = [
+    diagnosticText(estimate),
+    constructionDiagnosticText(construction),
+  ].filter((value): value is string => value !== null);
+  const diagnostic = diagnosticParts.length === 0 ? null : diagnosticParts.join(' ');
   const rangeText = `t ∈ [${displayNumberToText(viewNumber(plot.xMin))}, ${displayNumberToText(
     viewNumber(plot.xMax),
   )}]`;
@@ -292,6 +296,19 @@ export function ConvolutionView({ store, view }: ViewRendererProps): React.JSX.E
         </span>
         <span className="legend__range">
           {MODE_LABELS[mode]} projection · finite t-window {rangeText}
+        </span>
+        <span className="legend__range">
+          y frame [{displayNumberToText(viewNumber(plot.yMin))},{' '}
+          {displayNumberToText(viewNumber(plot.yMax))}] · measured range [
+          {displayNumberToText(viewNumber(measured.min))},{' '}
+          {displayNumberToText(viewNumber(measured.max))}]
+          <button
+            type="button"
+            aria-label="fit convolution y range"
+            onClick={() => store.setConvolutionViewport({ yMin: measured.min, yMax: measured.max })}
+          >
+            Fit
+          </button>
         </span>
         <label className="legend__range legend__control">
           <input
@@ -352,6 +369,13 @@ export function ConvolutionView({ store, view }: ViewRendererProps): React.JSX.E
             )}
             <span className="legend__range">
               sampling representation: {productCheck.samplingStatus}
+            </span>
+            <span className="legend__range">
+              continuous finite-window estimate: {productCheck.continuousConvolutionStatus}
+              {Number.isFinite(productCheck.continuousConvolutionEstimatedError) &&
+                ` · refinement ${displayNumberToText(
+                  viewNumber(productCheck.continuousConvolutionEstimatedError),
+                )}`}
             </span>
           </>
         )}
@@ -608,4 +632,19 @@ function diagnosticText(estimate: ReturnType<typeof estimateActiveConvolution>):
   if (estimate === null) return 'Add Convolution(f(t), g(t)) to open a convolution view.';
   if (estimate.stability === 'stable' && estimate.values.length > 0) return null;
   return estimate.diagnostics.join(' ');
+}
+
+function constructionDiagnosticText(
+  construction: ReturnType<typeof estimateActiveConvolutionConstruction>,
+): string | null {
+  if (construction === null) return null;
+  const finalValue = construction.accumulatedValues.at(-1);
+  if (construction.stability === 'stable' && finalValue !== null && finalValue !== undefined) {
+    return null;
+  }
+  const details = construction.diagnostics.join(' ');
+  const accumulationUnavailable = construction.accumulatedValues.at(-1) === null;
+  return accumulationUnavailable
+    ? `${details} Accumulated integral unavailable because unresolved samples prevent a finite prefix.`
+    : details;
 }

@@ -88,6 +88,17 @@ export const DEFAULT_FREQUENCY_VIEWPORT: FrequencyViewport = {
   yMax: 2,
 };
 
+/** The persistent vertical frame for the finite-window convolution output. */
+export interface ConvolutionViewport {
+  readonly yMin: number;
+  readonly yMax: number;
+}
+
+export const DEFAULT_CONVOLUTION_VIEWPORT: ConvolutionViewport = {
+  yMin: -2,
+  yMax: 2,
+};
+
 export interface SamplingSettings {
   readonly timeWindow: { readonly min: number; readonly max: number };
   readonly sampleCount: number;
@@ -183,6 +194,7 @@ export interface WorkspaceState {
   readonly frequencyHover: number | null;
   readonly frequencySelection: number | null;
   readonly frequencyViewport: FrequencyViewport;
+  readonly convolutionViewport: ConvolutionViewport;
   readonly sampling: SamplingSettings;
   /** The shared unit direction used by directional-derivative views. */
   readonly direction: Direction2d;
@@ -414,6 +426,7 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
       frequencyHover: null,
       frequencySelection: null,
       frequencyViewport: DEFAULT_FREQUENCY_VIEWPORT,
+      convolutionViewport: DEFAULT_CONVOLUTION_VIEWPORT,
       sampling: DEFAULT_DFT_SAMPLING,
       direction: DEFAULT_DIRECTION,
       contourLevel: 0,
@@ -443,6 +456,7 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
     parameterValues?: ReadonlyMap<string, number>;
     viewport?: Viewport;
     frequencyViewport?: FrequencyViewport;
+    convolutionViewport?: ConvolutionViewport;
     sampling?: SamplingSettings;
     contourLevel?: number;
     camera3d?: Camera3d;
@@ -456,6 +470,7 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
           : reconcileParameters(state.workspace, parts.parameterValues),
       viewport: parts.viewport ?? state.viewport,
       frequencyViewport: parts.frequencyViewport ?? state.frequencyViewport,
+      convolutionViewport: parts.convolutionViewport ?? state.convolutionViewport,
       sampling: parts.sampling ?? state.sampling,
       contourLevel:
         parts.contourLevel !== undefined && Number.isFinite(parts.contourLevel)
@@ -586,6 +601,21 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
     this.update((state) => ({ ...state, frequencyViewport }));
   }
 
+  /** Set the convolution output frame explicitly; estimates never change its scale. */
+  setConvolutionViewport(convolutionViewport: ConvolutionViewport): void {
+    if (
+      !Number.isFinite(convolutionViewport.yMin) ||
+      !Number.isFinite(convolutionViewport.yMax) ||
+      convolutionViewport.yMax <= convolutionViewport.yMin
+    ) {
+      return;
+    }
+    this.update((state) => ({
+      ...state,
+      convolutionViewport: { ...convolutionViewport },
+    }));
+  }
+
   setSamplingSettings(sampling: SamplingSettings): void {
     if (
       !Number.isFinite(sampling.timeWindow.min) ||
@@ -655,6 +685,7 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
       ...state,
       viewport: DEFAULT_VIEWPORT,
       frequencyViewport: DEFAULT_FREQUENCY_VIEWPORT,
+      convolutionViewport: DEFAULT_CONVOLUTION_VIEWPORT,
       camera3d: DEFAULT_CAMERA_3D,
     }));
   }
