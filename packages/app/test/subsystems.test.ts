@@ -32,6 +32,6 @@ describe('subsystem capability registry', () => {
     expect(
       transforms.capabilities.find((entry) => entry.name === 'Interactive convolution construction')
         ?.status,
-    ).toBe('planned');
+    ).toBe('implemented');
   });
 });

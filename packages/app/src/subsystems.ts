@@ -186,8 +186,8 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
       {
         name: 'Interactive convolution construction',
         summary:
-          'The flip, shift, pointwise product, and accumulated integral for f(τ)g(t−τ) as t moves.',
-        status: 'planned',
+          'A selected output T exposes f(τ), g(T−τ), their pointwise product, and the accumulated trapezoid integral on one shared τ grid.',
+        status: 'implemented',
       },
       {
         name: 'Laplace transform and the s-plane',

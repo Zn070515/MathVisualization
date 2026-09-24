@@ -1177,6 +1177,27 @@ math-field::part(virtual-keyboard-toggle) {
   cursor: default;
 }
 
+.convolution-view__plots {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.view--convolution-construction .convolution-view__plots > .view__canvas {
+  flex: 1 1 50%;
+  min-height: 0;
+  height: auto;
+}
+
+.view__canvas--construction {
+  pointer-events: none;
+}
+
+.view__canvas--construction-hidden {
+  display: none;
+}
+
 /* The labels of the 3D view float over the surface: only text is drawn here, so
    the occlusion between the surface and the grid underneath it is still the depth
    buffer's business, and the text itself stays as sharp as the browser can set it

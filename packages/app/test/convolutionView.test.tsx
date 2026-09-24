@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ConvolutionView } from '../src/views/ConvolutionView';
 import { estimateActiveDftProduct } from '../src/views/convolutionEvaluation';
@@ -73,5 +73,29 @@ describe('convolution sampled-product diagnostic', () => {
     expect(check?.status).toBe('inconclusive');
     expect(check?.identityTolerance).toBe(Infinity);
     expect(check?.samplingStatus).toBe('unresolved');
+  });
+
+  it('shows the construction toggle without changing shared selection', () => {
+    const store = nonzeroOriginConvolutionStore();
+    const before = store.getState().selection;
+    render(<ConvolutionView {...propsForConvolutionStore(store)} />);
+
+    const toggle = screen.getByRole('checkbox', { name: /show convolution construction/i });
+    expect((toggle as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(toggle);
+    expect((toggle as HTMLInputElement).checked).toBe(true);
+    expect(store.getState().selection).toBe(before);
+    expect(screen.getByText(/select or move over an output coordinate/i)).toBeTruthy();
+  });
+
+  it('renders a selected construction with the shared T readout', () => {
+    const store = nonzeroOriginConvolutionStore();
+    store.setSelection({ re: 1, im: 0 });
+    render(<ConvolutionView {...propsForConvolutionStore(store)} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: /show convolution construction/i }));
+
+    expect(screen.getByText(/T =/i)).toBeTruthy();
+    expect(screen.getByText(/accumulated integral/i)).toBeTruthy();
+    expect(screen.getByRole('img', { name: /convolution construction at T=/i })).toBeTruthy();
   });
 });
