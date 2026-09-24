@@ -46,6 +46,31 @@ export interface ConvolutionEstimate {
   readonly diagnostics: readonly string[];
 }
 
+export interface ConvolutionConstructionOptions {
+  readonly integrationWindow: ConvolutionWindow;
+  readonly integrationSampleCount: number;
+  readonly tolerance?: number;
+}
+
+export interface ConvolutionConstructionEstimate {
+  readonly outputTime: number;
+  readonly integrationWindow: ConvolutionWindow;
+  readonly tau: readonly number[];
+  readonly leftValues: readonly (Complex | null)[];
+  readonly shiftedRightValues: readonly (Complex | null)[];
+  readonly productValues: readonly (Complex | null)[];
+  readonly accumulatedValues: readonly (Complex | null)[];
+  readonly segments: readonly {
+    readonly startIndex: number;
+    readonly endIndex: number;
+  }[];
+  readonly primaryIntegrationSampleCount: number;
+  readonly refinedIntegrationSampleCount: number;
+  readonly estimatedError: number;
+  readonly stability: ConvolutionStability;
+  readonly diagnostics: readonly string[];
+}
+
 export const CONVOLUTION_DEFAULT_TOLERANCE = NUMERICS.methodTolerance;
 export const CONVOLUTION_MAX_SAMPLE_COUNT = 2048;
 
@@ -54,6 +79,17 @@ interface RawEstimate {
   readonly leftValues: readonly Complex[];
   readonly rightValues: readonly Complex[];
   readonly values: readonly Complex[];
+  readonly issue: string | null;
+}
+
+interface RawConstruction {
+  readonly tau: readonly number[];
+  readonly leftValues: readonly (Complex | null)[];
+  readonly shiftedRightValues: readonly (Complex | null)[];
+  readonly productValues: readonly (Complex | null)[];
+  readonly accumulatedValues: readonly (Complex | null)[];
+  readonly segments: readonly { readonly startIndex: number; readonly endIndex: number }[];
+  readonly finalValue: Complex | null;
   readonly issue: string | null;
 }
 
@@ -108,6 +144,81 @@ export function estimateConvolution(
     estimatedError,
     stability,
     diagnostics: [...diagnostics, statusDiagnostic],
+  };
+}
+
+/**
+ * Estimate the finite-window construction for one output time. The returned
+ * refined samples expose f(τ), g(T-τ), their product, and its accumulated
+ * trapezoid integral without claiming a whole-real-line convolution.
+ */
+export function estimateConvolutionConstruction(
+  node: ConvolutionNode,
+  environment: EvaluationEnvironment,
+  outputTime: number,
+  options: ConvolutionConstructionOptions,
+): ConvolutionConstructionEstimate {
+  const diagnostics = [
+    'Finite-window convolution construction using composite trapezoid quadrature.',
+    'The integration window is not a certification of the whole real line.',
+  ];
+  const validation = validateConstructionOptions(outputTime, options);
+  if (validation !== null) {
+    return unresolvedConstruction(outputTime, options, [...diagnostics, validation]);
+  }
+
+  const primary = sampleConstruction(
+    node,
+    environment,
+    outputTime,
+    options,
+    options.integrationSampleCount,
+  );
+  const refinedCount = options.integrationSampleCount * 2;
+  const refined = sampleConstruction(node, environment, outputTime, options, refinedCount);
+  const estimatedError = constructionDifference(primary.finalValue, refined.finalValue);
+  const scale = Math.max(1, refined.finalValue === null ? 0 : cabs(refined.finalValue));
+  const relativeDifference = estimatedError / scale;
+  const tolerance = options.tolerance ?? CONVOLUTION_DEFAULT_TOLERANCE;
+  const stability: ConvolutionStability =
+    primary.finalValue !== null &&
+    refined.finalValue !== null &&
+    Number.isFinite(estimatedError) &&
+    Number.isFinite(relativeDifference)
+      ? relativeDifference <= tolerance
+        ? 'stable'
+        : 'sampling-sensitive'
+      : 'unresolved';
+  const statusDiagnostic =
+    stability === 'stable'
+      ? `Construction refinement stayed within relative difference ${relativeDifference}.`
+      : stability === 'sampling-sensitive'
+        ? `Construction refinement changed the result by relative difference ${relativeDifference}.`
+        : 'Construction refinement could not produce a finite full-window comparison.';
+  const unresolvedCount = refined.productValues.filter((value) => value === null).length;
+
+  return {
+    outputTime,
+    integrationWindow: { ...options.integrationWindow },
+    tau: [...refined.tau],
+    leftValues: [...refined.leftValues],
+    shiftedRightValues: [...refined.shiftedRightValues],
+    productValues: [...refined.productValues],
+    accumulatedValues: [...refined.accumulatedValues],
+    segments: [...refined.segments],
+    primaryIntegrationSampleCount: options.integrationSampleCount,
+    refinedIntegrationSampleCount: refinedCount,
+    estimatedError,
+    stability,
+    diagnostics: [
+      ...diagnostics,
+      ...(unresolvedCount === 0
+        ? []
+        : [`${unresolvedCount} construction samples were unresolved.`]),
+      ...(primary.issue === null ? [] : [primary.issue]),
+      ...(refined.issue === null ? [] : [refined.issue]),
+      statusDiagnostic,
+    ],
   };
 }
 
@@ -282,6 +393,93 @@ function estimateRaw(
   return { sampleTimes, leftValues, rightValues, values, issue: null };
 }
 
+function sampleConstruction(
+  node: ConvolutionNode,
+  environment: EvaluationEnvironment,
+  outputTime: number,
+  options: ConvolutionConstructionOptions,
+  sampleCount: number,
+): RawConstruction {
+  const tau = grid(options.integrationWindow, sampleCount);
+  const step = (options.integrationWindow.max - options.integrationWindow.min) / (sampleCount - 1);
+  const leftValues: (Complex | null)[] = [];
+  const shiftedRightValues: (Complex | null)[] = [];
+  const productValues: (Complex | null)[] = [];
+  const accumulatedValues: (Complex | null)[] = [];
+  let firstIssue: string | null = null;
+
+  for (const value of tau) {
+    const left = evaluateSource(node.left, node.sourceVariable, value, environment);
+    const right = evaluateSource(node.right, node.sourceVariable, outputTime - value, environment);
+    const leftValue = left.ok ? left.value : null;
+    const rightValue = right.ok ? right.value : null;
+    if (!left.ok && firstIssue === null) {
+      firstIssue = `The left source is unresolved at τ=${value}: ${left.issue.message}`;
+    }
+    if (!right.ok && firstIssue === null) {
+      firstIssue = `The right source is unresolved at t-τ=${outputTime - value}: ${right.issue.message}`;
+    }
+    leftValues.push(leftValue);
+    shiftedRightValues.push(rightValue);
+    productValues.push(
+      leftValue === null || rightValue === null ? null : cmul(leftValue, rightValue),
+    );
+  }
+
+  let accumulationAvailable = true;
+  for (let index = 0; index < productValues.length; index += 1) {
+    const product = productValues[index];
+    if (index === 0) {
+      accumulatedValues.push(product === null || product === undefined ? null : cx(0, 0));
+      if (product === null || product === undefined) accumulationAvailable = false;
+      continue;
+    }
+    const previousProduct = productValues[index - 1];
+    const previousAccumulation = accumulatedValues[index - 1];
+    if (
+      !accumulationAvailable ||
+      product === null ||
+      product === undefined ||
+      previousProduct === null ||
+      previousProduct === undefined ||
+      previousAccumulation === null ||
+      previousAccumulation === undefined
+    ) {
+      accumulationAvailable = false;
+      accumulatedValues.push(null);
+      continue;
+    }
+    accumulatedValues.push(
+      cadd(previousAccumulation, cscale(cadd(previousProduct, product), step / 2)),
+    );
+  }
+
+  const segments: { startIndex: number; endIndex: number }[] = [];
+  let startIndex: number | null = null;
+  for (let index = 0; index < productValues.length; index += 1) {
+    if (productValues[index] !== null && productValues[index] !== undefined) {
+      if (startIndex === null) startIndex = index;
+      continue;
+    }
+    if (startIndex !== null) {
+      segments.push({ startIndex, endIndex: index - 1 });
+      startIndex = null;
+    }
+  }
+  if (startIndex !== null) segments.push({ startIndex, endIndex: productValues.length - 1 });
+
+  return {
+    tau,
+    leftValues,
+    shiftedRightValues,
+    productValues,
+    accumulatedValues,
+    segments,
+    finalValue: accumulatedValues.at(-1) ?? null,
+    issue: firstIssue,
+  };
+}
+
 function evaluateSource(
   source: ConvolutionNode['left'],
   variable: string,
@@ -322,12 +520,57 @@ function validateOptions(options: ConvolutionEstimateOptions): string | null {
   return null;
 }
 
+function validateConstructionOptions(
+  outputTime: number,
+  options: ConvolutionConstructionOptions,
+): string | null {
+  if (!Number.isFinite(outputTime)) return 'The construction output time must be finite.';
+  if (!validWindow(options.integrationWindow)) {
+    return 'The construction integration window must be finite and strictly increasing.';
+  }
+  if (
+    !validSampleCount(options.integrationSampleCount) ||
+    options.integrationSampleCount * 2 > CONVOLUTION_MAX_SAMPLE_COUNT
+  ) {
+    return `Construction sample counts must be integers from 2 through ${CONVOLUTION_MAX_SAMPLE_COUNT / 2}, with a finite refinement.`;
+  }
+  if (
+    options.tolerance !== undefined &&
+    (!Number.isFinite(options.tolerance) || options.tolerance < 0)
+  ) {
+    return 'The construction refinement tolerance must be finite and non-negative.';
+  }
+  return null;
+}
+
 function validWindow(window: ConvolutionWindow): boolean {
   return Number.isFinite(window.min) && Number.isFinite(window.max) && window.max > window.min;
 }
 
 function validSampleCount(value: number): boolean {
   return Number.isInteger(value) && value >= 2 && value <= CONVOLUTION_MAX_SAMPLE_COUNT / 2;
+}
+
+function unresolvedConstruction(
+  outputTime: number,
+  options: ConvolutionConstructionOptions,
+  diagnostics: readonly string[],
+): ConvolutionConstructionEstimate {
+  return {
+    outputTime,
+    integrationWindow: { ...options.integrationWindow },
+    tau: [],
+    leftValues: [],
+    shiftedRightValues: [],
+    productValues: [],
+    accumulatedValues: [],
+    segments: [],
+    primaryIntegrationSampleCount: options.integrationSampleCount,
+    refinedIntegrationSampleCount: options.integrationSampleCount * 2,
+    estimatedError: Number.POSITIVE_INFINITY,
+    stability: 'unresolved',
+    diagnostics,
+  };
 }
 
 function grid(window: ConvolutionWindow, count: number): number[] {
@@ -344,6 +587,11 @@ function maximumDifference(primary: readonly Complex[], refined: readonly Comple
     maximum = Math.max(maximum, cabs({ re: first.re - second.re, im: first.im - second.im }));
   }
   return maximum;
+}
+
+function constructionDifference(primary: Complex | null, refined: Complex | null): number {
+  if (primary === null || refined === null) return Number.POSITIVE_INFINITY;
+  return cabs({ re: primary.re - refined.re, im: primary.im - refined.im });
 }
 
 function unresolvedEstimate(

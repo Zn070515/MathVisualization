@@ -3,9 +3,12 @@ import { collectVariableNames, type ConvolutionNode } from '../src/ast';
 import { cx, cabs } from '../src/complex';
 import {
   dftOfPeriodicSamples,
+  estimateConvolutionConstruction,
   estimateConvolution,
   periodicSampledConvolution,
   phaseCorrectedDftProduct,
+  type ConvolutionConstructionEstimate,
+  type ConvolutionConstructionOptions,
   type ConvolutionEstimate,
   type ConvolutionEstimateOptions,
 } from '../src/convolution';
@@ -43,6 +46,20 @@ function estimateFor(
 ): ConvolutionEstimate {
   const workspace = buildWorkspace(inputs(...sources));
   return estimateConvolution(convolutionEntry(workspace), workspaceEnvironment(workspace), options);
+}
+
+function constructionFor(
+  sources: readonly string[],
+  outputTime: number,
+  options: ConvolutionConstructionOptions,
+): ConvolutionConstructionEstimate {
+  const workspace = buildWorkspace(inputs(...sources));
+  return estimateConvolutionConstruction(
+    convolutionEntry(workspace),
+    workspaceEnvironment(workspace),
+    outputTime,
+    options,
+  );
 }
 
 function dftEstimateFor(bodySource: string, timeWindow: DftTimeWindow): DftEstimate {
@@ -183,6 +200,70 @@ describe('finite-window numerical convolution', () => {
     expect(estimate.values).toEqual([]);
     expect(estimate.estimatedError).toBe(Infinity);
     expect(estimate.diagnostics.join(' ')).toMatch(/undefined|finite|unresolved/i);
+  });
+});
+
+describe('interactive convolution construction', () => {
+  it('evaluates the shifted source at T minus tau before multiplying', () => {
+    const estimate = constructionFor(['f(t)=1', 'g(t)=t', 'h(t)=Convolution(f(t), g(t))'], 1, {
+      integrationWindow: { min: 0, max: 2 },
+      integrationSampleCount: 5,
+    });
+
+    expect(estimate.stability).toBe('stable');
+    expect(estimate.tau).toHaveLength(10);
+    expect(estimate.tau[0]).toBe(0);
+    expect(estimate.tau.at(-1)).toBe(2);
+    expect(estimate.shiftedRightValues[0]?.re).toBe(1);
+    expect(estimate.shiftedRightValues.at(-1)?.re).toBe(-1);
+    expect(estimate.productValues[0]?.re).toBe(1);
+    expect(estimate.productValues.at(-1)?.re).toBe(-1);
+  });
+
+  it('returns the refined accumulation and agrees with finite-window convolution', () => {
+    const construction = constructionFor(
+      ['f(t)=1', 'g(t)=1', 'h(t)=Convolution(f(t), g(t))'],
+      0.5,
+      { integrationWindow: { min: 0, max: 2 }, integrationSampleCount: 5 },
+    );
+    const convolution = estimateFor(['f(t)=1', 'g(t)=1', 'h(t)=Convolution(f(t), g(t))'], {
+      integrationWindow: { min: 0, max: 2 },
+      outputWindow: { min: 0.5, max: 0.501 },
+      outputSampleCount: 2,
+      integrationSampleCount: 5,
+    });
+
+    expect(construction.primaryIntegrationSampleCount).toBe(5);
+    expect(construction.refinedIntegrationSampleCount).toBe(10);
+    expect(construction.accumulatedValues.at(-1)?.re).toBeCloseTo(2);
+    expect(construction.accumulatedValues.at(-1)?.re).toBeCloseTo(
+      convolution.values[0]?.re ?? Number.NaN,
+    );
+    expect(Number.isFinite(construction.estimatedError)).toBe(true);
+  });
+
+  it('breaks paths and never restarts accumulation after an undefined sample', () => {
+    const estimate = constructionFor(['f(t)=1/t', 'g(t)=1', 'h(t)=Convolution(f(t), g(t))'], 0, {
+      integrationWindow: { min: 0, max: 1 },
+      integrationSampleCount: 5,
+    });
+
+    expect(estimate.stability).toBe('unresolved');
+    expect(estimate.segments[0]?.startIndex).toBe(1);
+    expect(estimate.productValues[0]).toBeNull();
+    expect(estimate.accumulatedValues.slice(0, -1).every((value) => value === null)).toBe(true);
+    expect(estimate.diagnostics.join(' ')).toMatch(/unresolved|finite|tau/i);
+  });
+
+  it('multiplies complex values before projection', () => {
+    const estimate = constructionFor(
+      ['f(t)=exp(i*t)', 'g(t)=exp(i*t)', 'h(t)=Convolution(f(t), g(t))'],
+      0,
+      { integrationWindow: { min: 0, max: 1 }, integrationSampleCount: 5 },
+    );
+
+    expect(estimate.productValues[0]?.re).toBeCloseTo(1);
+    expect(estimate.productValues[0]?.im).toBeCloseTo(0);
   });
 });
 
