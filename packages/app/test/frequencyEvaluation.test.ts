@@ -3,6 +3,7 @@ import { cx, type FourierEstimate } from '@mathviz/mathcore';
 import {
   fitFrequencyViewport,
   frequencyRange,
+  fourierSamplingMetrics,
   estimateActiveFourierTransform,
   projectFourierValue,
   snapFrequency,
@@ -10,6 +11,7 @@ import {
   type TransformMode,
 } from '../src/views/frequencyEvaluation';
 import { makeStoreFromLatex } from './helpers';
+import { DEFAULT_DFT_SAMPLING } from '../src/state/workspaceStore';
 
 describe('frequency-domain projections', () => {
   const value = cx(3, 4);
@@ -51,6 +53,24 @@ describe('frequency-domain projections', () => {
     }
   });
 
+  it('reports metrics for the returned refined quadrature grid', () => {
+    const estimate: FourierEstimate = {
+      values: [cx(0, 0)],
+      frequencies: [0],
+      timeWindow: { min: 0, max: 4 },
+      timeSamples: 8,
+      estimatedError: 0,
+      convergence: 'converged',
+      diagnostics: [],
+    };
+
+    expect(fourierSamplingMetrics(estimate)).toEqual({
+      sampleInterval: 0.5,
+      samplingFrequency: 2,
+      nyquistAngularFrequency: 2 * Math.PI,
+    });
+  });
+
   it('fits only when the caller explicitly requests a new frame', () => {
     const estimate: FourierEstimate = {
       values: [cx(0, 0), cx(4, 0)],
@@ -85,5 +105,30 @@ describe('frequency-domain projections', () => {
     const second = estimateActiveFourierTransform(active, state.workspace, state.parameterValues);
     expect(first).not.toBeNull();
     expect(second).toBe(first);
+  });
+
+  it('re-estimates when the shared sampling window changes', () => {
+    const store = makeStoreFromLatex(
+      ['f(t)=\\exp\\left(-t^{2}\\right)', 'F(\\omega)=\\operatorname{Fourier}(f(t))'],
+      'transforms',
+    );
+    const active = store.activeExpression();
+    expect(active).not.toBeNull();
+    if (active === null) return;
+    const state = store.getState();
+    const first = estimateActiveFourierTransform(
+      active,
+      state.workspace,
+      state.parameterValues,
+      DEFAULT_DFT_SAMPLING,
+    );
+    const changed = estimateActiveFourierTransform(active, state.workspace, state.parameterValues, {
+      ...DEFAULT_DFT_SAMPLING,
+      timeWindow: { min: 0, max: 4 },
+    });
+
+    expect(first).not.toBeNull();
+    expect(changed).not.toBe(first);
+    expect(changed?.timeWindow).toEqual({ min: 0, max: 4 });
   });
 });

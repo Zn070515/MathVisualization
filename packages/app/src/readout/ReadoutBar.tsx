@@ -52,8 +52,14 @@ export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Elem
   const active = store.sourceExpression();
   const transform = store.activeExpression();
   const transformEstimate = useMemo(
-    () => estimateActiveFourierTransform(transform, state.workspace, state.parameterValues),
-    [transform, state.workspace, state.parameterValues],
+    () =>
+      estimateActiveFourierTransform(
+        transform,
+        state.workspace,
+        state.parameterValues,
+        state.sampling,
+      ),
+    [transform, state.workspace, state.parameterValues, state.sampling],
   );
   const dftEstimate = useMemo(
     () => estimateActiveDft(transform, state.workspace, state.parameterValues, state.sampling),

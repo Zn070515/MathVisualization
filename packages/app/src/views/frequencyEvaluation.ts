@@ -8,7 +8,12 @@ import {
   estimateFourierTransform,
   workspaceEnvironment,
 } from '@mathviz/mathcore';
-import type { ActiveExpression, FrequencyViewport } from '../state/workspaceStore';
+import {
+  DEFAULT_DFT_SAMPLING,
+  type ActiveExpression,
+  type FrequencyViewport,
+  type SamplingSettings,
+} from '../state/workspaceStore';
 
 /** Estimates are shared by the frequency canvas and the readout. */
 const estimateCache = new WeakMap<Workspace, Map<string, FourierEstimate | null>>();
@@ -16,9 +21,8 @@ const estimateCache = new WeakMap<Workspace, Map<string, FourierEstimate | null>
 export type TransformMode = Exclude<FieldMode, 'complex'>;
 
 export const DEFAULT_FREQUENCY_WINDOW = { min: -8, max: 8 } as const;
-export const DEFAULT_TIME_WINDOW = { min: -8, max: 8 } as const;
+export const DEFAULT_TIME_WINDOW = DEFAULT_DFT_SAMPLING.timeWindow;
 export const DEFAULT_FREQUENCY_SAMPLES = 161;
-export const DEFAULT_TIME_SAMPLES = 256;
 
 export function transformModeOf(mode: FieldMode): TransformMode {
   return mode === 'complex' ? 'magnitude' : mode;
@@ -63,10 +67,11 @@ export function estimateActiveFourierTransform(
   active: ActiveExpression | null,
   workspace: Workspace,
   parameterValues: ReadonlyMap<string, number>,
+  sampling: SamplingSettings = DEFAULT_DFT_SAMPLING,
 ): FourierEstimate | null {
   const transform = selectFourierTransform(active);
   if (transform === null) return null;
-  const key = `${active?.entry.id ?? 'none'}|${parameterKey(parameterValues)}`;
+  const key = `${active?.entry.id ?? 'none'}|${parameterKey(parameterValues)}|${samplingKey(sampling)}`;
   let workspaceCache = estimateCache.get(workspace);
   if (workspaceCache === undefined) {
     workspaceCache = new Map();
@@ -79,12 +84,28 @@ export function estimateActiveFourierTransform(
     workspaceEnvironment(workspace, parameterValues),
     {
       frequencies: frequencyGrid(),
-      timeWindow: DEFAULT_TIME_WINDOW,
-      timeSamples: DEFAULT_TIME_SAMPLES,
+      timeWindow: sampling.timeWindow,
+      timeSamples: sampling.sampleCount,
     },
   );
   workspaceCache.set(key, estimate);
   return estimate;
+}
+
+export interface FourierSamplingMetrics {
+  readonly sampleInterval: number;
+  readonly samplingFrequency: number;
+  readonly nyquistAngularFrequency: number;
+}
+
+/** Metrics for the refined quadrature grid used by the returned estimate. */
+export function fourierSamplingMetrics(estimate: FourierEstimate): FourierSamplingMetrics {
+  const sampleInterval = (estimate.timeWindow.max - estimate.timeWindow.min) / estimate.timeSamples;
+  return {
+    sampleInterval,
+    samplingFrequency: 1 / sampleInterval,
+    nyquistAngularFrequency: Math.PI / sampleInterval,
+  };
 }
 
 function parameterKey(parameters: ReadonlyMap<string, number>): string {
@@ -92,6 +113,10 @@ function parameterKey(parameters: ReadonlyMap<string, number>): string {
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([name, value]) => `${name}=${String(value)}`)
     .join(';');
+}
+
+function samplingKey(sampling: SamplingSettings): string {
+  return `${sampling.timeWindow.min},${sampling.timeWindow.max},${sampling.sampleCount}`;
 }
 
 export function projectFourierValue(value: Complex, mode: TransformMode): number | null {

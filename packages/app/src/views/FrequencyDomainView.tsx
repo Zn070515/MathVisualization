@@ -1,16 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type FourierEstimate, displayNumberToText } from '@mathviz/mathcore';
 import { drawGridAndAxes } from '../render/axes2d';
 import { CANVAS_COLORS, prepareCanvas2d } from '../render/canvasSurface';
 import { viewNumber } from '../display/numbers';
 import { useStore } from '../state/store';
-import { selectActiveExpression, type ViewRendererProps } from '../state/workspaceStore';
+import {
+  DFT_SAMPLE_COUNTS,
+  selectActiveExpression,
+  type SamplingSettings,
+  type ViewRendererProps,
+} from '../state/workspaceStore';
 import type { FrequencyViewport } from '../state/workspaceStore';
 import { useResizeVersion } from './useResizeVersion';
 import {
   estimateActiveFourierTransform,
   fitFrequencyViewport,
   frequencyRange,
+  fourierSamplingMetrics,
   projectFourierValue,
   snapFrequency,
   transformModeOf,
@@ -34,9 +40,25 @@ export function FrequencyDomainView({ store, view }: ViewRendererProps): React.J
     [state.workspace, state.focusedLineId, store.drawableKinds],
   );
   const estimate = useMemo(
-    () => estimateActiveFourierTransform(active, state.workspace, state.parameterValues),
-    [active, state.workspace, state.parameterValues],
+    () =>
+      estimateActiveFourierTransform(
+        active,
+        state.workspace,
+        state.parameterValues,
+        state.sampling,
+      ),
+    [active, state.workspace, state.parameterValues, state.sampling],
   );
+  const [timeWindowDraft, setTimeWindowDraft] = useState(() => ({
+    min: String(state.sampling.timeWindow.min),
+    max: String(state.sampling.timeWindow.max),
+  }));
+  useEffect(() => {
+    setTimeWindowDraft({
+      min: String(state.sampling.timeWindow.min),
+      max: String(state.sampling.timeWindow.max),
+    });
+  }, [state.sampling.timeWindow.max, state.sampling.timeWindow.min]);
   const mode = transformModeOf(view.mode);
   const frequencyCursor = state.frequencyHover ?? state.frequencySelection;
   const measuredRange = useMemo(
@@ -139,11 +161,80 @@ export function FrequencyDomainView({ store, view }: ViewRendererProps): React.J
         <span className="legend__title">{MODE_LABELS[mode]} over ω ∈ [-8, 8]</span>
         {estimate !== null && (
           <span className="legend__range">
-            finite t-window [-8, 8] · {estimate.timeSamples} samples ·{' '}
+            finite t-window [{displayNumberToText(viewNumber(estimate.timeWindow.min))},{' '}
+            {displayNumberToText(viewNumber(estimate.timeWindow.max))}] · quadrature refined to{' '}
+            {estimate.timeSamples} intervals ·{' '}
             {estimate.convergence === 'converged' ? 'refined' : 'unresolved'}
             {Number.isFinite(estimate.estimatedError) && (
               <> · error {displayNumberToText(viewNumber(estimate.estimatedError))}</>
             )}
+          </span>
+        )}
+        <label className="legend__range legend__control">
+          <span>quadrature N</span>{' '}
+          <select
+            aria-label="Fourier time sample count"
+            value={state.sampling.sampleCount}
+            onChange={(event) => {
+              store.setSamplingSettings({
+                ...state.sampling,
+                sampleCount: Number(event.target.value),
+              });
+            }}
+          >
+            {DFT_SAMPLE_COUNTS.map((count) => (
+              <option key={count} value={count}>
+                {count}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="legend__range legend__control">
+          t ∈ [
+          <input
+            aria-label="Fourier time window minimum"
+            className="legend__number-input"
+            inputMode="decimal"
+            type="number"
+            step="any"
+            value={timeWindowDraft.min}
+            onChange={(event) => {
+              setTimeWindowDraft((draft) => ({ ...draft, min: event.target.value }));
+            }}
+            onBlur={() =>
+              commitTimeWindowDraft(store, state.sampling, timeWindowDraft, setTimeWindowDraft)
+            }
+          />
+          ,{' '}
+          <input
+            aria-label="Fourier time window maximum"
+            className="legend__number-input"
+            inputMode="decimal"
+            type="number"
+            step="any"
+            value={timeWindowDraft.max}
+            onChange={(event) => {
+              setTimeWindowDraft((draft) => ({ ...draft, max: event.target.value }));
+            }}
+            onBlur={() =>
+              commitTimeWindowDraft(store, state.sampling, timeWindowDraft, setTimeWindowDraft)
+            }
+          />
+          ]
+        </span>
+        {estimate !== null && (
+          <span className="legend__range">
+            {(() => {
+              const metrics = fourierSamplingMetrics(estimate);
+              return (
+                <>
+                  Δt<sub>q</sub> {displayNumberToText(viewNumber(metrics.sampleInterval))} · f
+                  <sub>s,q</sub> {displayNumberToText(viewNumber(metrics.samplingFrequency))} ·
+                  Nyquist indicator{' '}
+                  {displayNumberToText(viewNumber(metrics.nyquistAngularFrequency))}
+                </>
+              );
+            })()}
           </span>
         )}
         {measuredRange !== null && (
@@ -173,6 +264,34 @@ export function FrequencyDomainView({ store, view }: ViewRendererProps): React.J
       )}
     </div>
   );
+}
+
+function commitTimeWindowDraft(
+  store: ViewRendererProps['store'],
+  sampling: SamplingSettings,
+  draft: { readonly min: string; readonly max: string },
+  setDraft: (draft: { min: string; max: string }) => void,
+): void {
+  const min = Number(draft.min);
+  const max = Number(draft.max);
+  if (
+    draft.min.trim() === '' ||
+    draft.max.trim() === '' ||
+    !Number.isFinite(min) ||
+    !Number.isFinite(max) ||
+    max <= min
+  ) {
+    setDraft({
+      min: String(sampling.timeWindow.min),
+      max: String(sampling.timeWindow.max),
+    });
+    return;
+  }
+  if (min === sampling.timeWindow.min && max === sampling.timeWindow.max) return;
+  store.setSamplingSettings({
+    ...sampling,
+    timeWindow: { min, max },
+  });
 }
 
 function plotWindow(viewport: FrequencyViewport): Window2d {
