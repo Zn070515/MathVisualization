@@ -180,7 +180,8 @@ export type ViewKind =
   | 'dft-domain'
   | 'frequency-domain'
   | 'mapped-grid'
-  | 'gradient';
+  | 'gradient'
+  | 'series-domain';
 
 /**
  * A view without an identity: what kind it is and what it shows.

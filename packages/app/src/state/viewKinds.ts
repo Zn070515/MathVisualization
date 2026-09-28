@@ -41,6 +41,7 @@ export const VIEW_KIND_STATUS: Readonly<Record<ViewKind, ViewStatus>> = {
   'frequency-domain': 'available',
   'mapped-grid': 'available',
   gradient: 'available',
+  'series-domain': 'available',
 };
 
 /** Which mode is the natural default for a codomain. */
@@ -77,6 +78,12 @@ export function preferredViewKinds(
   if (classification === 'transform-pair') {
     return domain.kind === 'R' && domain.dim === 1 && codomain.kind === 'C'
       ? ['cartesian-2d', transformKind === 'dft' ? 'dft-domain' : 'frequency-domain']
+      : [];
+  }
+
+  if (classification === 'series-pair') {
+    return domain.kind === 'R' && domain.dim === 1 && codomain.kind === 'R' && codomain.dim === 1
+      ? ['cartesian-2d', 'series-domain']
       : [];
   }
 
@@ -156,6 +163,12 @@ function intendedDefaults(
   if (classification === 'transform-pair') {
     return domain.kind === 'R' && domain.dim === 1 && codomain.kind === 'C'
       ? ['cartesian-2d', transformKind === 'dft' ? 'dft-domain' : 'frequency-domain']
+      : [];
+  }
+
+  if (classification === 'series-pair') {
+    return domain.kind === 'R' && domain.dim === 1 && codomain.kind === 'R' && codomain.dim === 1
+      ? ['cartesian-2d', 'series-domain']
       : [];
   }
 

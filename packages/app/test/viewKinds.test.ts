@@ -41,6 +41,7 @@ describe('the taxonomy', () => {
       'frequency-domain',
       'gradient',
       'mapped-grid',
+      'series-domain',
     ]);
   });
 
@@ -117,6 +118,17 @@ describe('what each object calls for', () => {
     expect(defaultViewKinds(sig(R1, C1), 'transform-pair', 'dft')[1]?.mode).toBe('magnitude');
   });
 
+  it('gives a Fourier series pair its source and partial-sum views', () => {
+    expect(preferredViewKinds(sig(R1, R1), 'series-pair')).toEqual([
+      'cartesian-2d',
+      'series-domain',
+    ]);
+    expect(defaultViewKinds(sig(R1, R1), 'series-pair').map((view) => view.kind)).toEqual([
+      'cartesian-2d',
+      'series-domain',
+    ]);
+  });
+
   it('opens a convolution definition on its dedicated view', () => {
     expect(
       preferredViewKinds(
@@ -151,6 +163,10 @@ describe('what each object calls for', () => {
 describe('the views a workspace opens on', () => {
   it('are what the object calls for, minus anything not built yet', () => {
     expect(defaultViewKinds(sig(R1, R1)).map((view) => view.kind)).toEqual(['cartesian-2d']);
+    expect(defaultViewKinds(sig(R1, R1), 'series-pair').map((view) => view.kind)).toEqual([
+      'cartesian-2d',
+      'series-domain',
+    ]);
     expect(defaultViewKinds(sig(R1, C1)).map((view) => view.kind)).toEqual(['cartesian-2d']);
     // The plane is the space a map of the plane lives on, so it opens first and
     // the colouring of the map opens beside it. The mapped grid is a third

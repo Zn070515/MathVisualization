@@ -37,6 +37,7 @@ import { FrequencyDomainView } from './FrequencyDomainView';
 import { DftDomainView } from './DftDomainView';
 import { GradientView } from './GradientView';
 import { MappedGridView } from './MappedGridView';
+import { SeriesDomainView } from './SeriesDomainView';
 
 const VIEW_TITLES: Readonly<Record<ViewKind, string>> = {
   'cartesian-2d': 'Cartesian plot',
@@ -49,6 +50,7 @@ const VIEW_TITLES: Readonly<Record<ViewKind, string>> = {
   'frequency-domain': 'Frequency domain',
   'mapped-grid': 'Mapped grid',
   gradient: 'Gradient field',
+  'series-domain': 'Fourier series partial sums',
 };
 
 /**
@@ -84,6 +86,7 @@ const VIEW_RENDERERS: Readonly<Record<ViewKind, (props: ViewRendererProps) => Re
     'frequency-domain': FrequencyDomainView,
     'mapped-grid': MappedGridView,
     gradient: GradientView,
+    'series-domain': SeriesDomainView,
   };
 
 /**

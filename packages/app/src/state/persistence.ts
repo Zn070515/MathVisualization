@@ -65,6 +65,7 @@ const VIEW_KIND_MIGRATION: Readonly<Record<string, ViewKind>> = {
   'frequency-domain': 'frequency-domain',
   'mapped-grid': 'mapped-grid',
   gradient: 'gradient',
+  'series-domain': 'series-domain',
   // The old `field` view *is* the fragment-shader view with its modes, so it
   // becomes domain colouring. A returning user keeps the heatmap they had; a
   // fresh one gets whatever the object calls for now. Nobody's picture changes
