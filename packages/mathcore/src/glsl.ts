@@ -365,6 +365,15 @@ class Lowering {
             'A convolution is a finite-window estimate, so it cannot be drawn by the pointwise shader backend.',
           span: expr.span,
         });
+
+      case 'fourier-series':
+        return fail({
+          kind: 'unsupported',
+          detail: 'Fourier series lowered to a shader',
+          message:
+            'A Fourier series is a numerical partial-sum family, so it cannot be drawn by the pointwise shader backend.',
+          span: expr.span,
+        });
     }
   }
 

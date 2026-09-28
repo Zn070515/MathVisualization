@@ -804,6 +804,49 @@ class Parser {
       };
     }
 
+    if (callee.text === 'FourierSeries') {
+      if (args.length !== 2) {
+        return {
+          ok: false,
+          issue: this.errorAt(
+            callee,
+            'FourierSeries needs exactly two arguments, as in FourierSeries(f(t), 2*pi).',
+          ),
+        };
+      }
+      const source = args[0] as Expr;
+      const period = args[1] as Expr;
+      if (source.kind !== 'call' || source.args.length !== 1) {
+        return {
+          ok: false,
+          issue: this.errorAt(
+            callee,
+            'FourierSeries needs a one-variable source function call, as in FourierSeries(f(t), 2*pi).',
+          ),
+        };
+      }
+      const variable = source.args[0] as Expr;
+      if (variable.kind !== 'variable') {
+        return {
+          ok: false,
+          issue: this.errorAt(
+            callee,
+            'FourierSeries needs the source variable explicitly, as in FourierSeries(f(t), 2*pi).',
+          ),
+        };
+      }
+      return {
+        ok: true,
+        value: {
+          kind: 'fourier-series',
+          source,
+          sourceVariable: variable.name,
+          period,
+          span: span(callee.start, this.lastTokenEnd(args)),
+        },
+      };
+    }
+
     if (callee.text === 'Convolution') {
       if (args.length !== 2) {
         return {

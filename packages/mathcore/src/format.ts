@@ -61,6 +61,7 @@ function precedenceOf(expr: Expr): number {
     case 'fourier-transform':
     case 'dft-transform':
     case 'convolution':
+    case 'fourier-series':
       return PRECEDENCE_ATOM;
     default:
       return PRECEDENCE_ATOM;
@@ -126,6 +127,9 @@ function print(expr: Expr, minimumPrecedence: number): string {
 
     case 'convolution':
       return `Convolution(${print(expr.left, 0)}, ${print(expr.right, 0)})`;
+
+    case 'fourier-series':
+      return `FourierSeries(${print(expr.source, 0)}, ${print(expr.period, 0)})`;
   }
 }
 

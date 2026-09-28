@@ -147,6 +147,23 @@ describe('functions', () => {
     // and as a product when it does not
     expect(canonical('g(z)')).toBe('g * z');
   });
+
+  it('reads a Fourier series operator with its source variable and period', () => {
+    const statement = latexStatement(
+      'S\u005cleft(t\u005cright)=\u005coperatorname{FourierSeries}(f(u),2\u005cpi)',
+      ['f'],
+    );
+    if (statement.kind !== 'function-definition') throw new Error('expected a definition');
+    expect(statement.body).toMatchObject({
+      kind: 'fourier-series',
+      sourceVariable: 'u',
+      period: { kind: 'binary', op: 'mul' },
+    });
+    const printed = exprToLatex(statement.body);
+    expect(printed).toContain('FourierSeries');
+    expect(printed).toContain('2 ');
+    expect(printed).toContain('pi');
+  });
 });
 
 describe('greek letters and subscripts', () => {

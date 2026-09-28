@@ -165,6 +165,23 @@ export interface ConvolutionNode {
   readonly span: SourceSpan;
 }
 
+/**
+ * A Fourier series partial-sum family, `FourierSeries(f(u), P)`.
+ *
+ * The source variable is bound by this node. The outer variable is the point at
+ * which the partial sum is evaluated, e.g. `S(t)=FourierSeries(f(u), P)`.
+ */
+export interface FourierSeriesNode {
+  readonly kind: 'fourier-series';
+  /** The source call, normally `f(u)`. */
+  readonly source: Expr;
+  /** The real variable integrated over one period. */
+  readonly sourceVariable: string;
+  /** The finite positive period expression. */
+  readonly period: Expr;
+  readonly span: SourceSpan;
+}
+
 export type Expr =
   | NumberLiteralNode
   | VariableNode
@@ -176,7 +193,8 @@ export type Expr =
   | ContourIntegralNode
   | FourierTransformNode
   | DftTransformNode
-  | ConvolutionNode;
+  | ConvolutionNode
+  | FourierSeriesNode;
 
 export type ExprKind = Expr['kind'];
 
@@ -250,6 +268,8 @@ export function childNodes(expr: Expr): readonly Expr[] {
       return [expr.source];
     case 'convolution':
       return [expr.left, expr.right];
+    case 'fourier-series':
+      return [expr.source, expr.period];
   }
 }
 
@@ -300,6 +320,13 @@ export function collectVariableNames(expr: Expr): string[] {
       const convolutionBound = new Set([...bound, node.sourceVariable]);
       visit(node.left, convolutionBound);
       visit(node.right, convolutionBound);
+      return;
+    }
+    if (node.kind === 'fourier-series') {
+      visit(node.source, new Set([...bound, node.sourceVariable]));
+      // The period is outside the source binding. This deliberately keeps an
+      // illegal `FourierSeries(f(u), u)` dependency visible to inference.
+      visit(node.period, bound);
       return;
     }
     for (const child of childNodes(node)) visit(child, bound);

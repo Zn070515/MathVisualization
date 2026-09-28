@@ -309,8 +309,7 @@ function lower(expr: Expr, symbols: Map<string, string>): Result<string, MathIss
       return fail({
         kind: 'unsupported',
         detail: `${transformName} transform handed to the symbolic engine`,
-        message:
-          `${transformName} transforms are evaluated numerically over a finite window, so the symbolic engine is not given this node.`,
+        message: `${transformName} transforms are evaluated numerically over a finite window, so the symbolic engine is not given this node.`,
         span: expr.span,
       });
     }
@@ -321,6 +320,15 @@ function lower(expr: Expr, symbols: Map<string, string>): Result<string, MathIss
         detail: 'Convolution handed to the symbolic engine',
         message:
           'A convolution is evaluated numerically over a finite window, so the symbolic engine is not given this node.',
+        span: expr.span,
+      });
+
+    case 'fourier-series':
+      return fail({
+        kind: 'unsupported',
+        detail: 'Fourier series handed to the symbolic engine',
+        message:
+          'A Fourier series is evaluated numerically as partial sums, so the symbolic engine is not given this node.',
         span: expr.span,
       });
   }

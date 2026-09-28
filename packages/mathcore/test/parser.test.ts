@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { exprToText, statementToText } from '../src/format';
 import { detectDefinitionHeader, parseExpression, parseStatement } from '../src/parser';
+import { collectVariableNames } from '../src/ast';
 import type { Statement } from '../src/ast';
 
 interface Names {
@@ -241,6 +242,36 @@ describe('definition header detection', () => {
     expect(detectDefinitionHeader('sin(z)')).toBeNull();
     expect(detectDefinitionHeader('a = 2')).toBeNull();
     expect(detectDefinitionHeader('f(2) = 4')).toBeNull();
+  });
+});
+
+describe('Fourier series syntax', () => {
+  it('parses a source call and preserves its period expression', () => {
+    const statement = parseOrThrow('S(t) = FourierSeries(f(u), 2*pi)', { functions: ['f'] });
+    if (statement.kind !== 'function-definition') throw new Error('expected a definition');
+    expect(statement.body).toMatchObject({
+      kind: 'fourier-series',
+      sourceVariable: 'u',
+      period: { kind: 'binary', op: 'mul' },
+    });
+    expect(exprToText(statement.body)).toBe('FourierSeries(f(u), 2 * pi)');
+    expect(collectVariableNames(statement.body)).toEqual([]);
+  });
+
+  it('keeps a period dependency visible when it uses the bound source variable', () => {
+    const statement = parseOrThrow('S(t) = FourierSeries(f(u), u)', { functions: ['f'] });
+    if (statement.kind !== 'function-definition') throw new Error('expected a definition');
+    expect(collectVariableNames(statement.body)).toEqual(['u']);
+  });
+
+  it('rejects malformed source calls and missing periods', () => {
+    expect(failureMessage('S(t) = FourierSeries(f(u, v), 2*pi)')).toContain(
+      'one-variable source function call',
+    );
+    expect(failureMessage('S(t) = FourierSeries(f(u + 1), 2*pi)')).toContain(
+      'source variable explicitly',
+    );
+    expect(failureMessage('S(t) = FourierSeries(f(u))')).toContain('needs exactly two arguments');
   });
 });
 

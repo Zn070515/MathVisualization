@@ -75,6 +75,7 @@ export const BUILTIN_FUNCTION_NAMES: ReadonlySet<string> = new Set([
   'Fourier',
   'DFT',
   'Convolution',
+  'FourierSeries',
 ]);
 
 export function builtinFunction(name: string): BuiltinFunction | undefined {

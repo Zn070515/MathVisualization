@@ -202,6 +202,15 @@ export function inferSpace(
     case 'convolution':
       return inferConvolutionSpace(expr, context);
 
+    case 'fourier-series':
+      return fail({
+        kind: 'unsupported',
+        detail: 'Fourier series typing is handled by the series classifier.',
+        message:
+          'A Fourier series needs its real source and period to be validated as a series object.',
+        span: expr.span,
+      });
+
     case 'unary':
       return inferSpace(expr.operand, context);
 

@@ -133,6 +133,7 @@ const OPERATOR_NAMES: Readonly<Record<string, string>> = {
   Fourier: 'Fourier',
   DFT: 'DFT',
   Convolution: 'Convolution',
+  FourierSeries: 'FourierSeries',
 };
 
 /** Sizing and spacing commands carry no mathematical content. */
@@ -175,6 +176,7 @@ const OPERATOR_BY_FUNCTION: Readonly<Record<string, string>> = {
   Fourier: 'Fourier',
   DFT: 'DFT',
   Convolution: 'Convolution',
+  FourierSeries: 'FourierSeries',
 };
 
 // ---------------------------------------------------------------------------
@@ -1513,6 +1515,49 @@ class LatexParser {
       };
     }
 
+    if (callee === 'FourierSeries') {
+      if (args.length !== 2) {
+        return {
+          ok: false,
+          issue: wrong(
+            start,
+            'FourierSeries needs exactly two arguments, as in FourierSeries(f(t), 2*pi).',
+          ),
+        };
+      }
+      const source = args[0] as Expr;
+      const period = args[1] as Expr;
+      if (source.kind !== 'call' || source.args.length !== 1) {
+        return {
+          ok: false,
+          issue: wrong(
+            start,
+            'FourierSeries needs a one-variable source function call, as in FourierSeries(f(t), 2*pi).',
+          ),
+        };
+      }
+      const variable = source.args[0] as Expr;
+      if (variable.kind !== 'variable') {
+        return {
+          ok: false,
+          issue: wrong(
+            start,
+            'FourierSeries needs the source variable explicitly, as in FourierSeries(f(t), 2*pi).',
+          ),
+        };
+      }
+      return {
+        ok: true,
+        value: {
+          kind: 'fourier-series',
+          source,
+          sourceVariable: variable.name,
+          period,
+          span: { start: start.start, end: this.lastSpan().end },
+        },
+      };
+    }
+
     if (callee === 'Convolution') {
       if (args.length !== 2) {
         return {
@@ -1555,7 +1600,10 @@ class LatexParser {
         };
       }
       if (leftVariable.name !== rightVariable.name) {
-        return { ok: false, issue: wrong(start, 'Convolution source calls must use the same variable.') };
+        return {
+          ok: false,
+          issue: wrong(start, 'Convolution source calls must use the same variable.'),
+        };
       }
       return {
         ok: true,
@@ -1791,6 +1839,9 @@ function latexPrecedenceOf(expr: Expr): number {
       return 100;
     case 'dft-transform':
       return 100;
+    case 'fourier-series':
+      return 100;
+
     case 'convolution':
       return 100;
     default:
@@ -1937,6 +1988,9 @@ function printLatex(expr: Expr, minimumPrecedence: number): string {
 
     case 'dft-transform':
       return `\\operatorname{DFT}\\left(${printLatex(expr.source, 0)}\\right)`;
+
+    case 'fourier-series':
+      return `\\operatorname{FourierSeries}\\left(${printLatex(expr.source, 0)},${printLatex(expr.period, 0)}\\right)`;
 
     case 'convolution':
       return `\\operatorname{Convolution}\\left(${printLatex(expr.left, 0)},${printLatex(expr.right, 0)}\\right)`;

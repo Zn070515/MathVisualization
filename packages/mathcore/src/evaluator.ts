@@ -184,6 +184,15 @@ export function evaluate(
         span: expr.span,
       });
 
+    case 'fourier-series':
+      return fail({
+        kind: 'unsupported',
+        detail: 'Fourier series are evaluated by a partial-sum estimator.',
+        message:
+          'A Fourier series is a finite partial-sum family, not a pointwise scalar value here.',
+        span: expr.span,
+      });
+
     case 'constant': {
       const constant = builtinConstant(expr.name);
       if (constant === undefined) {
