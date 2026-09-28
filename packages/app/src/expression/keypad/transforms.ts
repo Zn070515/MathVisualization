@@ -29,6 +29,7 @@ export const TRANSFORMS_FUNCTION_ROWS: readonly KeypadRow[] = [
       functionKey('sin', 'A sinusoid'),
       functionKey('cos', 'A cosinusoid'),
       functionKey('exp', 'Exponential in t'),
+      key('sign', '\\operatorname{sign}\\left(#?\\right)', 'The real sign function'),
     ],
   },
   { kind: 'heading', title: 'Transform operations' },
@@ -41,6 +42,11 @@ export const TRANSFORMS_FUNCTION_ROWS: readonly KeypadRow[] = [
         'Convolution',
         '\\operatorname{Convolution}\\left(#0,#1\\right)',
         'A finite-window numerical convolution',
+      ),
+      key(
+        'Σ',
+        '\\operatorname{FourierSeries}\\left(#0,#1\\right)',
+        'A numerical Fourier-series partial sum',
       ),
     ],
   },
@@ -57,7 +63,6 @@ export const TRANSFORMS_PLANNED_ROWS: readonly KeypadRow[] = [
       plannedKey('δ', 'the impulse'),
       plannedKey('u(t)', 'the unit step'),
       plannedKey('∫', 'integration'),
-      plannedKey('Σ', 'Fourier series'),
     ],
   },
 ];

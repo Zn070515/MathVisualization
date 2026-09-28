@@ -134,6 +134,7 @@ describe('functions', () => {
     expect(canonical('\\operatorname{Re}(z)')).toBe('re(z)');
     expect(canonical('\\operatorname{Im}(z)')).toBe('im(z)');
     expect(canonical('\\operatorname{arg}(z)')).toBe('arg(z)');
+    expect(canonical('\\operatorname{sign}(z)')).toBe('sign(z)');
     expect(canonical('\\Re(z)')).toBe('re(z)');
   });
 

@@ -159,6 +159,32 @@ describe('at a point with no value', () => {
   });
 });
 
+describe('at a Fourier-series point', () => {
+  it('reads the source and the shared numerical partial sum', () => {
+    const store = makeStoreFromLatex(
+      [
+        'f\\left(u\\right)=u',
+        'S\\left(t\\right)=\\operatorname{FourierSeries}\\left(f\\left(u\\right),2\\pi\\right)',
+      ],
+      'transforms',
+    );
+    store.focusLine(store.getState().lines[1]?.id as string);
+    store.setHover(cx(0.5, 0));
+
+    const { container, rerender } = render(<ReadoutBar store={store} />);
+    const firstPartial = readCell(container, 'S_N(t)');
+
+    expect(readCell(container, 't')).toBe('0.5');
+    expect(readCell(container, 'f(t)')).toBe('0.5');
+    expect(firstPartial).not.toBe('undefined');
+
+    store.setFourierSeriesSettings({ order: 1, integrationSampleCount: 64 });
+    rerender(<ReadoutBar store={store} />);
+
+    expect(readCell(container, 'S_N(t)')).not.toBe(firstPartial);
+  });
+});
+
 describe('parameter changes are reflected immediately', () => {
   it('reads a different value after a slider moves', () => {
     const store = makeStore(['a=2', 'f(z)=a*z']);

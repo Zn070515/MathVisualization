@@ -17,6 +17,7 @@
 import { useMemo } from 'react';
 import {
   type Complex,
+  evaluateFourierSeriesAt,
   type UserFunctionDefinition,
   DEFAULT_DOMAIN_COLORING,
   cabs,
@@ -41,8 +42,10 @@ import {
   readoutAtFrequency,
   selectDftTransform,
 } from '../views/dftEvaluation';
+import { estimateActiveFourierSeries, selectFourierSeries } from '../views/seriesEvaluation';
 import type { FourierEstimate } from '@mathviz/mathcore';
 import type { DftEstimate } from '@mathviz/mathcore';
+import type { FourierSeriesEstimate } from '@mathviz/mathcore';
 import type { ActiveExpression, WorkspaceStore } from '../state/workspaceStore';
 
 export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Element {
@@ -64,6 +67,16 @@ export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Elem
   const dftEstimate = useMemo(
     () => estimateActiveDft(transform, state.workspace, state.parameterValues, state.sampling),
     [transform, state.workspace, state.parameterValues, state.sampling],
+  );
+  const seriesEstimate = useMemo(
+    () =>
+      estimateActiveFourierSeries(
+        transform,
+        state.workspace,
+        state.parameterValues,
+        state.seriesSettings,
+      ),
+    [transform, state.parameterValues, state.seriesSettings, state.workspace],
   );
 
   if (frequency !== null && selectDftTransform(transform) !== null) {
@@ -104,6 +117,24 @@ export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Elem
     );
   }
 
+  if (selectFourierSeries(transform) !== null) {
+    return (
+      <div className="readout">
+        <SeriesValueCells
+          active={active}
+          point={point}
+          parameters={state.parameterValues}
+          functions={state.workspace.functions}
+          estimate={seriesEstimate}
+        />
+        <span className="readout__spacer" />
+        <span className="readout__held">
+          {state.selection !== null ? 'held' : 'following the pointer'}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className="readout">
       <Cell label="point" value={<ComplexText value={displayComplex(point, { digits: 5 })} />} />
@@ -124,6 +155,52 @@ export function ReadoutBar({ store }: { store: WorkspaceStore }): React.JSX.Elem
         {state.selection !== null ? 'held' : 'following the pointer'}
       </span>
     </div>
+  );
+}
+
+function SeriesValueCells({
+  active,
+  point,
+  parameters,
+  functions,
+  estimate,
+}: {
+  active: ActiveExpression | null;
+  point: Complex;
+  parameters: ReadonlyMap<string, number>;
+  functions: ReadonlyMap<string, UserFunctionDefinition>;
+  estimate: FourierSeriesEstimate | null;
+}): React.JSX.Element {
+  const evaluation = makePointEvaluation(active, parameters, functions);
+  const source = evaluation?.evaluate({ re: point.re, im: 0 });
+  const sourceValue =
+    source?.ok === true && Number.isFinite(source.value.re) && source.value.im === 0
+      ? displayComplex(source.value, { digits: 6 })
+      : { kind: 'undefined' as const };
+  const partial = estimate === null ? null : evaluateFourierSeriesAt(estimate, point.re);
+
+  return (
+    <>
+      <Cell label="t" value={<NumberText value={displayNumber(point.re, { digits: 5 })} />} />
+      <Cell label="f(t)" value={<ComplexText value={sourceValue} />} />
+      <Cell
+        label="S_N(t)"
+        value={
+          partial === null ? (
+            <span>unresolved</span>
+          ) : (
+            <NumberText value={displayNumber(partial, { digits: 6 })} />
+          )
+        }
+      />
+      {(source?.ok !== true || partial === null) && (
+        <span className="readout__reason">
+          {source?.ok !== true ? (source?.issue.message ?? 'source value unavailable') : null}
+          {source?.ok !== true && partial === null ? ' · ' : null}
+          {partial === null ? 'Fourier-series partial sum unresolved' : null}
+        </span>
+      )}
+    </>
   );
 }
 

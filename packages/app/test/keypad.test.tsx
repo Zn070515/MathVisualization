@@ -71,6 +71,18 @@ describe('page structure', () => {
     ).toBeTruthy();
     expect(screen.queryByRole('button', { name: '∗' })).toBeNull();
   });
+
+  it('offers live Fourier-series and sign input in transforms', async () => {
+    const user = userEvent.setup();
+    renderWithKeypad(makeStore([''], 'transforms'));
+    await user.click(screen.getByRole('tab', { name: 'func' }));
+
+    expect(
+      screen.getByRole('button', { name: 'A numerical Fourier-series partial sum' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'The real sign function' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Fourier series' })).toBeNull();
+  });
 });
 
 describe('insertion at the caret', () => {
@@ -331,6 +343,8 @@ describe('keys for mathematics the language does not have yet', () => {
               contexts.push('\\operatorname{DFT}\\left(f(t)\\right)');
             } else if (entry.title === 'A finite-window numerical convolution') {
               contexts.push('\\operatorname{Convolution}\\left(f(t),g(t)\\right)');
+            } else if (entry.title === 'A numerical Fourier-series partial sum') {
+              contexts.push('\\operatorname{FourierSeries}\\left(f(u),2\\pi\\right)');
             }
             expect(
               contexts.some(
@@ -339,7 +353,8 @@ describe('keys for mathematics the language does not have yet', () => {
                     candidate,
                     entry.title === 'A numerical Fourier transform' ||
                       entry.title === 'A numerical discrete Fourier transform' ||
-                      entry.title === 'A finite-window numerical convolution'
+                      entry.title === 'A finite-window numerical convolution' ||
+                      entry.title === 'A numerical Fourier-series partial sum'
                       ? { knownFunctions: new Set(['f', 'g']) }
                       : entry.title === 'A numerical Fourier transform' ||
                           entry.title === 'A numerical discrete Fourier transform'
