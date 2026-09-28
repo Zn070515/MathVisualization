@@ -70,6 +70,7 @@ export * from './fft';
 export * from './aliasing';
 export * from './dft';
 export * from './convolution';
+export * from './fourierSeries';
 export * from './surface';
 export * from './gradient';
 export * from './hessian';
