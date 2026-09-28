@@ -133,6 +133,32 @@ describe('which version is read', () => {
     expect(loadWorkspace('transforms')?.sampling).toEqual(sampling);
   });
 
+  it('round-trips Fourier series settings and an explicit viewport', () => {
+    const seriesSettings = { order: 32, integrationSampleCount: 128 };
+    const seriesViewport = { xMin: -Math.PI, xMax: Math.PI, yMin: -2, yMax: 2 };
+    saveWorkspace('transforms', workspace({ seriesSettings, seriesViewport }));
+
+    expect(loadWorkspace('transforms')?.seriesSettings).toEqual(seriesSettings);
+    expect(loadWorkspace('transforms')?.seriesViewport).toEqual(seriesViewport);
+  });
+
+  it('restores an explicit null series viewport', () => {
+    saveWorkspace('transforms', workspace({ seriesViewport: null }));
+    expect(loadWorkspace('transforms')?.seriesViewport).toBeNull();
+  });
+
+  it('drops malformed Fourier series persistence fields', () => {
+    writeFile(V3, {
+      transforms: {
+        seriesSettings: { order: 0, integrationSampleCount: 7 },
+        seriesViewport: { xMin: 1, xMax: 1, yMin: -2, yMax: 2 },
+      },
+    });
+    const loaded = loadWorkspace('transforms');
+    expect(loaded?.seriesSettings).toBeUndefined();
+    expect(loaded?.seriesViewport).toBeUndefined();
+  });
+
   it('defaults older DFT sampling records to the direct algorithm', () => {
     writeFile(V3, {
       transforms: {

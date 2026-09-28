@@ -34,4 +34,13 @@ describe('subsystem capability registry', () => {
         ?.status,
     ).toBe('implemented');
   });
+
+  it('allows transforms to select Fourier-series pairs', () => {
+    expect(subsystemById('transforms').drawableKinds).toContain('series-pair');
+    expect(
+      subsystemById('transforms').capabilities.find(
+        (entry) => entry.name === 'Fourier series and Gibbs phenomenon',
+      )?.status,
+    ).toBe('planned');
+  });
 });

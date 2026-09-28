@@ -11,6 +11,7 @@ import { latex, makeStore, makeStoreFromLatex, toLatex } from './helpers';
 import { cx } from '@mathviz/mathcore';
 import {
   DEFAULT_DFT_SAMPLING,
+  DEFAULT_FOURIER_SERIES_SETTINGS,
   DEFAULT_CONVOLUTION_VIEWPORT,
   DEFAULT_FREQUENCY_VIEWPORT,
   DEFAULT_VIEWPORT,
@@ -163,6 +164,52 @@ describe('DFT sampling state', () => {
       sampleCount: 32,
       algorithm: 'fft',
     });
+  });
+});
+
+describe('Fourier series state', () => {
+  it('starts with deterministic settings and no explicit series frame', () => {
+    const store = makeStore([], 'transforms');
+    expect(store.getState().seriesSettings).toEqual(DEFAULT_FOURIER_SERIES_SETTINGS);
+    expect(store.getState().seriesViewport).toBeNull();
+  });
+
+  it('accepts supported settings and rejects invalid order or sample count', () => {
+    const store = makeStore([], 'transforms');
+    store.setFourierSeriesSettings({ order: 32, integrationSampleCount: 128 });
+    expect(store.getState().seriesSettings).toEqual({ order: 32, integrationSampleCount: 128 });
+
+    store.setFourierSeriesSettings({ order: 0, integrationSampleCount: 128 });
+    expect(store.getState().seriesSettings).toEqual({ order: 32, integrationSampleCount: 128 });
+    store.setFourierSeriesSettings({ order: 32, integrationSampleCount: 31 });
+    expect(store.getState().seriesSettings).toEqual({ order: 32, integrationSampleCount: 128 });
+  });
+
+  it('keeps and resets an explicit series viewport', () => {
+    const store = makeStore([], 'transforms');
+    const viewport = { xMin: -Math.PI, xMax: Math.PI, yMin: -2, yMax: 2 };
+    store.setSeriesViewport(viewport);
+    expect(store.getState().seriesViewport).toEqual(viewport);
+    store.setSeriesViewport({ xMin: 1, xMax: 1, yMin: -1, yMax: 1 });
+    expect(store.getState().seriesViewport).toEqual(viewport);
+
+    store.resetSeriesViewport();
+    expect(store.getState().seriesViewport).toBeNull();
+  });
+
+  it('selects the focused Fourier-series pair among multiple pairs', () => {
+    const store = makeStoreFromLatex(
+      [
+        'f\\left(u\\right)=\\sin\\left(u\\right)',
+        'S\\left(t\\right)=\\operatorname{FourierSeries}\\left(f\\left(u\\right),2\\pi\\right)',
+        'g\\left(u\\right)=\\cos\\left(u\\right)',
+        'T\\left(t\\right)=\\operatorname{FourierSeries}\\left(g\\left(u\\right),2\\pi\\right)',
+      ],
+      'transforms',
+    );
+    store.focusLine(store.getState().lines[3]?.id ?? null);
+    expect(store.activeExpression()?.entry.source).toBe(store.getState().lines[3]?.latex);
+    expect(store.sourceExpression()?.entry.source).toBe(store.getState().lines[2]?.latex);
   });
 });
 

@@ -121,6 +121,35 @@ export function isDftAlgorithm(value: unknown): value is DftAlgorithm {
   return value === 'direct' || value === 'fft';
 }
 
+export interface FourierSeriesSettings {
+  readonly order: number;
+  readonly integrationSampleCount: number;
+}
+
+export const FOURIER_SERIES_SAMPLE_COUNTS = [32, 64, 128, 256, 512] as const;
+
+export const DEFAULT_FOURIER_SERIES_SETTINGS: FourierSeriesSettings = {
+  order: 16,
+  integrationSampleCount: 64,
+};
+
+export function isFourierSeriesOrder(value: number): boolean {
+  return Number.isInteger(value) && value >= 1 && value <= 64;
+}
+
+export function isFourierSeriesSampleCount(value: number): boolean {
+  return FOURIER_SERIES_SAMPLE_COUNTS.includes(
+    value as (typeof FOURIER_SERIES_SAMPLE_COUNTS)[number],
+  );
+}
+
+export interface SeriesViewport {
+  readonly xMin: number;
+  readonly xMax: number;
+  readonly yMin: number;
+  readonly yMax: number;
+}
+
 export interface Direction2d {
   readonly x: number;
   readonly y: number;
@@ -196,6 +225,8 @@ export interface WorkspaceState {
   readonly frequencyViewport: FrequencyViewport;
   readonly convolutionViewport: ConvolutionViewport;
   readonly sampling: SamplingSettings;
+  readonly seriesSettings: FourierSeriesSettings;
+  readonly seriesViewport: SeriesViewport | null;
   /** The shared unit direction used by directional-derivative views. */
   readonly direction: Direction2d;
   /** The explicitly selected level set c shared by contour-capable views. */
@@ -305,7 +336,8 @@ export function selectActiveExpression(
   const focused = drawable.find((entry) => entry.id === focusedLineId);
   if (
     focused?.type?.classification.kind === 'transform-pair' ||
-    focused?.type?.classification.kind === 'convolution-pair'
+    focused?.type?.classification.kind === 'convolution-pair' ||
+    focused?.type?.classification.kind === 'series-pair'
   ) {
     return activeExpressionForEntry(focused, workspace);
   }
@@ -329,6 +361,9 @@ export function selectActiveExpression(
           (source) => source.kind === 'call' && source.callee === focusedFunctionName,
         );
       }
+      if (entry.type?.classification.kind === 'series-pair' && body?.kind === 'fourier-series') {
+        return body.source.kind === 'call' && body.source.callee === focusedFunctionName;
+      }
       return false;
     });
     if (matchingPair !== undefined) return activeExpressionForEntry(matchingPair, workspace);
@@ -340,7 +375,8 @@ export function selectActiveExpression(
   const pair = drawable.find(
     (entry) =>
       entry.type?.classification.kind === 'transform-pair' ||
-      entry.type?.classification.kind === 'convolution-pair',
+      entry.type?.classification.kind === 'convolution-pair' ||
+      entry.type?.classification.kind === 'series-pair',
   );
   const entry = focused ?? pair ?? (drawable[0] as WorkspaceEntry);
   if (entry.type === null) return null;
@@ -376,7 +412,13 @@ export function selectSourceExpression(
   const active = selectActiveExpression(workspace, focusedLineId, drawableKinds);
   const statement = active?.entry.statement;
   const body = statement?.kind === 'function-definition' ? statement.body : null;
-  if (body?.kind !== 'fourier-transform' && body?.kind !== 'dft-transform') return active;
+  if (
+    body?.kind !== 'fourier-transform' &&
+    body?.kind !== 'dft-transform' &&
+    body?.kind !== 'fourier-series'
+  ) {
+    return active;
+  }
 
   const source = body.source;
   if (source.kind !== 'call') return active;
@@ -428,6 +470,8 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
       frequencyViewport: DEFAULT_FREQUENCY_VIEWPORT,
       convolutionViewport: DEFAULT_CONVOLUTION_VIEWPORT,
       sampling: DEFAULT_DFT_SAMPLING,
+      seriesSettings: DEFAULT_FOURIER_SERIES_SETTINGS,
+      seriesViewport: null,
       direction: DEFAULT_DIRECTION,
       contourLevel: 0,
       viewport: DEFAULT_VIEWPORT,
@@ -458,6 +502,8 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
     frequencyViewport?: FrequencyViewport;
     convolutionViewport?: ConvolutionViewport;
     sampling?: SamplingSettings;
+    seriesSettings?: FourierSeriesSettings;
+    seriesViewport?: SeriesViewport | null;
     contourLevel?: number;
     camera3d?: Camera3d;
     views?: readonly ViewBlueprint[];
@@ -472,6 +518,9 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
       frequencyViewport: parts.frequencyViewport ?? state.frequencyViewport,
       convolutionViewport: parts.convolutionViewport ?? state.convolutionViewport,
       sampling: parts.sampling ?? state.sampling,
+      seriesSettings: parts.seriesSettings ?? state.seriesSettings,
+      seriesViewport:
+        parts.seriesViewport === undefined ? state.seriesViewport : parts.seriesViewport,
       contourLevel:
         parts.contourLevel !== undefined && Number.isFinite(parts.contourLevel)
           ? parts.contourLevel
@@ -636,6 +685,40 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
     }));
   }
 
+  setFourierSeriesSettings(seriesSettings: FourierSeriesSettings): void {
+    if (
+      !isFourierSeriesOrder(seriesSettings.order) ||
+      !isFourierSeriesSampleCount(seriesSettings.integrationSampleCount)
+    ) {
+      return;
+    }
+    this.update((state) => ({
+      ...state,
+      seriesSettings: { ...seriesSettings },
+    }));
+  }
+
+  setSeriesViewport(seriesViewport: SeriesViewport): void {
+    if (
+      !Number.isFinite(seriesViewport.xMin) ||
+      !Number.isFinite(seriesViewport.xMax) ||
+      seriesViewport.xMax <= seriesViewport.xMin ||
+      !Number.isFinite(seriesViewport.yMin) ||
+      !Number.isFinite(seriesViewport.yMax) ||
+      seriesViewport.yMax <= seriesViewport.yMin
+    ) {
+      return;
+    }
+    this.update((state) => ({
+      ...state,
+      seriesViewport: { ...seriesViewport },
+    }));
+  }
+
+  resetSeriesViewport(): void {
+    this.update((state) => ({ ...state, seriesViewport: null }));
+  }
+
   /** Set the linked directional-derivative vector, preserving unit length. */
   setDirection(direction: Direction2d): void {
     const length = Math.hypot(direction.x, direction.y);
@@ -686,6 +769,7 @@ export class WorkspaceStore extends MutableStore<WorkspaceState> {
       viewport: DEFAULT_VIEWPORT,
       frequencyViewport: DEFAULT_FREQUENCY_VIEWPORT,
       convolutionViewport: DEFAULT_CONVOLUTION_VIEWPORT,
+      seriesViewport: null,
       camera3d: DEFAULT_CAMERA_3D,
     }));
   }

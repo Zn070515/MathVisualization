@@ -33,6 +33,10 @@ import type { Camera3d } from '../render/camera3d';
 import {
   isDftAlgorithm,
   isDftSampleCount,
+  isFourierSeriesOrder,
+  isFourierSeriesSampleCount,
+  type FourierSeriesSettings,
+  type SeriesViewport,
   type SamplingSettings,
   type ViewKind,
 } from './workspaceStore';
@@ -107,6 +111,8 @@ export interface PersistedConvolutionViewport {
 }
 
 export type PersistedSampling = SamplingSettings;
+export type PersistedFourierSeriesSettings = FourierSeriesSettings;
+export type PersistedSeriesViewport = SeriesViewport;
 
 /** What is written. */
 export interface PersistedWorkspace {
@@ -116,6 +122,8 @@ export interface PersistedWorkspace {
   readonly frequencyViewport?: PersistedFrequencyViewport;
   readonly convolutionViewport?: PersistedConvolutionViewport;
   readonly sampling?: PersistedSampling;
+  readonly seriesSettings?: PersistedFourierSeriesSettings;
+  readonly seriesViewport?: PersistedSeriesViewport | null;
   /** The selected contour level, optional for records written before contours were linked. */
   readonly contourLevel?: number;
   /**
@@ -154,6 +162,8 @@ export interface LoadedWorkspace {
   readonly frequencyViewport: PersistedWorkspace['frequencyViewport'];
   readonly convolutionViewport: PersistedWorkspace['convolutionViewport'];
   readonly sampling: PersistedWorkspace['sampling'];
+  readonly seriesSettings: PersistedWorkspace['seriesSettings'];
+  readonly seriesViewport: PersistedWorkspace['seriesViewport'];
   readonly contourLevel: PersistedWorkspace['contourLevel'];
   /** Null when nothing usable was stored, which is what the store's default is for. */
   readonly camera: Camera3d | null;
@@ -298,6 +308,45 @@ function readSampling(entry: Record<string, unknown>): PersistedWorkspace['sampl
   return { timeWindow: { min, max }, sampleCount, algorithm };
 }
 
+function readSeriesSettings(entry: Record<string, unknown>): PersistedWorkspace['seriesSettings'] {
+  const stored = entry['seriesSettings'];
+  if (!isRecord(stored)) return undefined;
+  const order = stored['order'];
+  const integrationSampleCount = stored['integrationSampleCount'];
+  if (
+    typeof order !== 'number' ||
+    !isFourierSeriesOrder(order) ||
+    typeof integrationSampleCount !== 'number' ||
+    !isFourierSeriesSampleCount(integrationSampleCount)
+  ) {
+    return undefined;
+  }
+  return { order, integrationSampleCount };
+}
+
+function readSeriesViewport(entry: Record<string, unknown>): PersistedWorkspace['seriesViewport'] {
+  const stored = entry['seriesViewport'];
+  if (stored === null) return null;
+  if (!isRecord(stored)) return undefined;
+
+  const xMin = stored['xMin'];
+  const xMax = stored['xMax'];
+  const yMin = stored['yMin'];
+  const yMax = stored['yMax'];
+  const usable =
+    typeof xMin === 'number' &&
+    Number.isFinite(xMin) &&
+    typeof xMax === 'number' &&
+    Number.isFinite(xMax) &&
+    xMax > xMin &&
+    typeof yMin === 'number' &&
+    Number.isFinite(yMin) &&
+    typeof yMax === 'number' &&
+    Number.isFinite(yMax) &&
+    yMax > yMin;
+  return usable ? { xMin, xMax, yMin, yMax } : undefined;
+}
+
 function readContourLevel(entry: Record<string, unknown>): number | undefined {
   const level = entry['contourLevel'];
   return typeof level === 'number' && Number.isFinite(level) ? level : undefined;
@@ -376,6 +425,8 @@ function readEntry(
     frequencyViewport: readFrequencyViewport(entry),
     convolutionViewport: readConvolutionViewport(entry),
     sampling: readSampling(entry),
+    seriesSettings: readSeriesSettings(entry),
+    seriesViewport: readSeriesViewport(entry),
     contourLevel: readContourLevel(entry),
     camera: readCamera(entry),
     views: readViews(entry),
