@@ -77,6 +77,13 @@ export function makePointEvaluation(
   const bindings = active?.bindings;
   if (body === undefined || bindings === undefined) return null;
 
+  // A Fourier-series definition is also the source selector when its source is
+  // a builtin expression such as `sin(u)`. There is no WorkspaceEntry for that
+  // nested expression, so evaluate the source AST with its declared variable
+  // bound to the real coordinate instead of trying to evaluate the series node
+  // as a pointwise scalar function.
+  const seriesSource = body.kind === 'fourier-series' ? body : null;
+
   // Built once per expression, not once per sample: measuring a field's range
   // evaluates thousands of points, and rebuilding the environment for each of
   // them would dominate the cost of drawing.
@@ -85,9 +92,16 @@ export function makePointEvaluation(
     functions: [...functions],
   });
 
-  const hasComplexVariable = [...bindings.values()].some((binding) => binding.kind === 'complex');
+  const hasComplexVariable =
+    seriesSource === null && [...bindings.values()].some((binding) => binding.kind === 'complex');
 
   const evaluate = (point: Complex): Result<Complex, MathIssue> => {
+    if (seriesSource !== null) {
+      const values = new Map(environment.values);
+      values.set(seriesSource.sourceVariable, cx(point.re, 0));
+      return evaluateScalar(seriesSource.source, { values, functions: environment.functions });
+    }
+
     const values = new Map(environment.values);
     for (const [name, binding] of bindings) {
       values.set(
@@ -100,7 +114,7 @@ export function makePointEvaluation(
 
   return {
     hasComplexVariable,
-    variableNames: [...bindings.keys()],
+    variableNames: seriesSource === null ? [...bindings.keys()] : [seriesSource.sourceVariable],
     evaluate,
     valueAt: (point) => {
       const result = evaluate(point);

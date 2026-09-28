@@ -41,8 +41,22 @@ interface Range {
   readonly max: number;
 }
 
+interface SeriesDrag {
+  readonly originX: number;
+  readonly originY: number;
+  readonly frame: SeriesViewport;
+  moved: boolean;
+}
+
 export function SeriesDomainView({ store }: ViewRendererProps): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const dragging = useRef<SeriesDrag | null>(null);
+  const derivedFrame = useRef<{
+    readonly activeId: string | null;
+    readonly period: number;
+    readonly sourceRange: Range | null;
+    readonly frame: SeriesViewport;
+  } | null>(null);
   const resizeVersion = useResizeVersion(canvasRef);
   const state = useStore(store, (current) => current);
   const active = useMemo(
@@ -69,13 +83,31 @@ export function SeriesDomainView({ store }: ViewRendererProps): React.JSX.Elemen
     [active, state.parameterValues, state.seriesSettings, state.workspace],
   );
   const sourceRange = useMemo(
-    () => measureCurves(evaluation, estimate, estimate?.period ?? 2),
-    [evaluation, estimate],
+    () => measureSource(evaluation, estimate?.period ?? 2),
+    [evaluation, estimate?.period],
   );
+  const period = estimate?.period ?? 2;
   const frame = useMemo<SeriesViewport>(() => {
     if (state.seriesViewport !== null) return state.seriesViewport;
-    return initialSeriesViewport(estimate?.period ?? 2, sourceRange ?? { min: -1, max: 1 });
-  }, [estimate?.period, sourceRange, state.seriesViewport]);
+
+    const cached = derivedFrame.current;
+    if (
+      cached === null ||
+      cached.activeId !== (active?.entry.id ?? null) ||
+      cached.period !== period ||
+      cached.sourceRange !== sourceRange
+    ) {
+      const next = initialSeriesViewport(period, sourceRange ?? { min: -1, max: 1 });
+      derivedFrame.current = {
+        activeId: active?.entry.id ?? null,
+        period,
+        sourceRange,
+        frame: next,
+      };
+      return next;
+    }
+    return cached.frame;
+  }, [active?.entry.id, period, sourceRange, state.seriesViewport]);
   const plot = frame as Window2d;
   const samples = useMemo(
     () => sampleCurves(evaluation, estimate, frame),
@@ -135,6 +167,60 @@ export function SeriesDomainView({ store }: ViewRendererProps): React.JSX.Elemen
     [plot],
   );
 
+  const pointerPosition = useCallback((event: { clientX: number; clientY: number }) => {
+    const canvas = canvasRef.current;
+    if (canvas === null) return null;
+    const bounds = canvas.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) return null;
+    return {
+      x: event.clientX - bounds.left,
+      y: event.clientY - bounds.top,
+      width: bounds.width,
+      height: bounds.height,
+    };
+  }, []);
+
+  const panFromDrag = useCallback(
+    (drag: SeriesDrag, event: { clientX: number; clientY: number }): SeriesViewport | null => {
+      const position = pointerPosition(event);
+      if (position === null) return null;
+      const dx = event.clientX - drag.originX;
+      const dy = event.clientY - drag.originY;
+      const xUnitsPerPixel = (drag.frame.xMax - drag.frame.xMin) / position.width;
+      const yUnitsPerPixel = (drag.frame.yMax - drag.frame.yMin) / position.height;
+      return {
+        ...drag.frame,
+        xMin: drag.frame.xMin - dx * xUnitsPerPixel,
+        xMax: drag.frame.xMax - dx * xUnitsPerPixel,
+        yMin: drag.frame.yMin + dy * yUnitsPerPixel,
+        yMax: drag.frame.yMax + dy * yUnitsPerPixel,
+      };
+    },
+    [pointerPosition],
+  );
+
+  const zoomAtPointer = useCallback(
+    (event: { clientX: number; clientY: number; deltaY: number }): SeriesViewport | null => {
+      const position = pointerPosition(event);
+      if (position === null) return null;
+      const anchor = fromScreen(
+        plot,
+        { x: position.x, y: position.y },
+        position.width,
+        position.height,
+      );
+      const factor = Math.exp(event.deltaY * 0.0015);
+      if (!Number.isFinite(factor) || factor <= 0) return null;
+      return {
+        xMin: anchor.x - (anchor.x - plot.xMin) * factor,
+        xMax: anchor.x + (plot.xMax - anchor.x) * factor,
+        yMin: anchor.y - (anchor.y - plot.yMin) * factor,
+        yMax: anchor.y + (plot.yMax - anchor.y) * factor,
+      };
+    },
+    [plot, pointerPosition],
+  );
+
   const onFit = (): void => {
     if (estimate === null) return;
     const fitted = fitSeriesViewport(frame, estimate, sourceRange ?? { min: -1, max: 1 });
@@ -156,15 +242,48 @@ export function SeriesDomainView({ store }: ViewRendererProps): React.JSX.Elemen
         onPointerMove={(event) => {
           const time = onPointerTime(event);
           store.setHover(time === null ? null : cx(time, 0));
+          const drag = dragging.current;
+          if (drag === null) return;
+          const travelled =
+            Math.abs(event.clientX - drag.originX) + Math.abs(event.clientY - drag.originY);
+          if (travelled <= 3) return;
+          const next = panFromDrag(drag, event);
+          if (next === null) return;
+          drag.moved = true;
+          store.setSeriesViewport(next);
         }}
         onPointerDown={(event) => {
-          const time = onPointerTime(event);
-          if (time !== null) {
-            store.setSelection(cx(time, 0));
-            store.setHover(cx(time, 0));
+          // Some pointer-event test doubles omit `button`; real primary pointer
+          // presses still report 0, while secondary presses are rejected.
+          if (event.button !== undefined && event.button !== 0) return;
+          if (typeof event.currentTarget.setPointerCapture === 'function') {
+            event.currentTarget.setPointerCapture(event.pointerId);
           }
+          dragging.current = {
+            originX: event.clientX,
+            originY: event.clientY,
+            frame,
+            moved: false,
+          };
+          const time = onPointerTime(event);
+          if (time !== null) store.setHover(cx(time, 0));
+        }}
+        onPointerUp={(event) => {
+          const drag = dragging.current;
+          dragging.current = null;
+          if (drag === null || drag.moved) return;
+          const time = onPointerTime(event);
+          if (time !== null) store.setSelection(cx(time, 0));
+        }}
+        onPointerCancel={() => {
+          dragging.current = null;
         }}
         onPointerLeave={() => store.clearCursor()}
+        onWheel={(event) => {
+          event.preventDefault();
+          const next = zoomAtPointer(event);
+          if (next !== null) store.setSeriesViewport(next);
+        }}
       />
 
       <div className="legend legend--corner">
@@ -267,9 +386,8 @@ function seriesDiagnostic(estimate: FourierSeriesEstimate | null): string | null
   return `Fourier-series estimate unresolved: ${estimate.diagnostics.at(-1) ?? 'no finite coefficients were obtained.'}`;
 }
 
-function measureCurves(
+function measureSource(
   evaluation: ReturnType<typeof makePointEvaluation>,
-  estimate: FourierSeriesEstimate | null,
   period: number,
 ): Range | null {
   if (evaluation === null || !Number.isFinite(period) || period <= 0) return null;
@@ -281,11 +399,6 @@ function measureCurves(
     if (value !== null && Number.isFinite(value.re) && value.im === 0) {
       min = Math.min(min, value.re);
       max = Math.max(max, value.re);
-    }
-    const partial = estimate === null ? null : evaluateFourierSeriesAt(estimate, time);
-    if (partial !== null && Number.isFinite(partial)) {
-      min = Math.min(min, partial);
-      max = Math.max(max, partial);
     }
   }
   return Number.isFinite(min) && Number.isFinite(max) ? { min, max } : null;

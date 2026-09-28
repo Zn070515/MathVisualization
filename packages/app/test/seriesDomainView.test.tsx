@@ -1,11 +1,17 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SeriesDomainView } from '../src/views/SeriesDomainView';
 import type { ViewRendererProps } from '../src/state/workspaceStore';
 import { makeStoreFromLatex } from './helpers';
 
 afterEach(() => {
   cleanup();
+});
+
+beforeEach(() => {
+  if (!HTMLCanvasElement.prototype.setPointerCapture) {
+    HTMLCanvasElement.prototype.setPointerCapture = () => {};
+  }
 });
 
 function renderSeriesView(
@@ -20,6 +26,21 @@ function renderSeriesView(
   if (view === undefined) throw new Error('expected a Fourier series domain view');
   render(<SeriesDomainView {...({ store, view } satisfies ViewRendererProps)} />);
   return store;
+}
+
+function firePointer(
+  element: Element,
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  values: { readonly clientX: number; readonly clientY: number },
+): void {
+  const event = new Event(type, { bubbles: true });
+  Object.defineProperties(event, {
+    button: { value: 0 },
+    clientX: { value: values.clientX },
+    clientY: { value: values.clientY },
+    pointerId: { value: 1 },
+  });
+  fireEvent(element, event);
 }
 
 describe('Fourier series domain view', () => {
@@ -44,6 +65,36 @@ describe('Fourier series domain view', () => {
 
     expect(store.getState().seriesSettings.order).toBe(24);
     expect(store.getState().seriesViewport).toEqual(frame);
+  });
+
+  it('persists a drag pan and wheel zoom in the shared series viewport', () => {
+    const store = renderSeriesView();
+    const canvas = screen.getByRole('img', { name: /Fourier series partial sums/i });
+
+    firePointer(canvas, 'pointerdown', { clientX: 160, clientY: 120 });
+    firePointer(canvas, 'pointermove', { clientX: 240, clientY: 150 });
+    firePointer(canvas, 'pointerup', { clientX: 240, clientY: 150 });
+
+    const panned = store.getState().seriesViewport;
+    expect(panned).not.toBeNull();
+
+    fireEvent.wheel(canvas, { deltaY: -120, clientX: 320, clientY: 200 });
+
+    const zoomed = store.getState().seriesViewport;
+    expect(zoomed).not.toBeNull();
+    expect((zoomed?.xMax ?? 0) - (zoomed?.xMin ?? 0)).toBeLessThan(
+      (panned?.xMax ?? 0) - (panned?.xMin ?? 0),
+    );
+  });
+
+  it('keeps the derived frame stable when only the series order changes', () => {
+    const store = renderSeriesView();
+    const initialRange = screen.getByText(/t ∈ \[/).textContent;
+
+    fireEvent.change(screen.getByLabelText('Fourier series order'), { target: { value: '32' } });
+
+    expect(store.getState().seriesViewport).toBeNull();
+    expect(screen.getByText(/t ∈ \[/).textContent).toBe(initialRange);
   });
 
   it('keeps an unresolved estimate visibly unresolved', () => {

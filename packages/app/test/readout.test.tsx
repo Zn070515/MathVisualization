@@ -183,6 +183,20 @@ describe('at a Fourier-series point', () => {
 
     expect(readCell(container, 'S_N(t)')).not.toBe(firstPartial);
   });
+
+  it('reads a builtin source from the Fourier-series definition', () => {
+    const store = makeStoreFromLatex(
+      ['S\\left(t\\right)=\\operatorname{FourierSeries}\\left(\\sin\\left(u\\right),2\\pi\\right)'],
+      'transforms',
+    );
+    store.focusLine(store.getState().lines[0]?.id as string);
+    store.setHover(cx(0.5, 0));
+
+    const { container } = render(<ReadoutBar store={store} />);
+
+    expect(readCell(container, 'f(t)')).not.toBe('undefined');
+    expect(readCell(container, 'f(t)')).not.toBe('—');
+  });
 });
 
 describe('parameter changes are reflected immediately', () => {
