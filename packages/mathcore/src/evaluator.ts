@@ -179,7 +179,8 @@ export function evaluate(
       return fail({
         kind: 'unsupported',
         detail: 'Convolution is evaluated by a finite-window numerical estimator.',
-        message: 'A convolution is a finite-window numerical estimate, not a pointwise scalar value.',
+        message:
+          'A convolution is a finite-window numerical estimate, not a pointwise scalar value.',
         span: expr.span,
       });
 
@@ -861,6 +862,16 @@ function evaluateBuiltin(
       return ok(scalarValue(cim(value)));
     case 'conj':
       return ok(scalarValue(cconj(value)));
+    case 'sign':
+      if (value.im !== 0 || !Number.isFinite(value.re)) {
+        return fail({
+          kind: 'domain-error',
+          detail: 'Sign of a non-real or non-finite value',
+          message: `sign is defined only for finite real values, but ${argumentText} is not one.`,
+          span: expr.span,
+        });
+      }
+      return ok(scalarValue(cx(Math.sign(value.re), 0)));
     default:
       return fail({
         kind: 'unsupported',

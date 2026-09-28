@@ -32,8 +32,14 @@ function valueOf(
   functions: readonly UserFunctionDefinition[] = [],
 ): Complex {
   const result = evaluateScalar(
-    expr(source, functions.map((fn) => fn.name)),
-    makeEnvironment({ values: Object.entries(values), functions: functions.map((fn) => [fn.name, fn] as const) }),
+    expr(
+      source,
+      functions.map((fn) => fn.name),
+    ),
+    makeEnvironment({
+      values: Object.entries(values),
+      functions: functions.map((fn) => [fn.name, fn] as const),
+    }),
   );
   if (!result.ok) throw new Error(`expected a value, got: ${result.issue.message}`);
   return result.value;
@@ -46,8 +52,14 @@ function issueOf(
   functions: readonly UserFunctionDefinition[] = [],
 ): string {
   const result = evaluateScalar(
-    expr(source, functions.map((fn) => fn.name)),
-    makeEnvironment({ values: Object.entries(values), functions: functions.map((fn) => [fn.name, fn] as const) }),
+    expr(
+      source,
+      functions.map((fn) => fn.name),
+    ),
+    makeEnvironment({
+      values: Object.entries(values),
+      functions: functions.map((fn) => [fn.name, fn] as const),
+    }),
   );
   if (result.ok) throw new Error(`expected an issue for: ${source}`);
   return result.issue.kind;
@@ -106,6 +118,17 @@ describe('values', () => {
     expectCloseTo(valueOf('im(3+4i)').re, 4);
   });
 
+  it('evaluates the real sign function with its three mathematical values', () => {
+    expect(valueOf('sign(-2)').re).toBe(-1);
+    expect(valueOf('sign(0)').re).toBe(0);
+    expect(valueOf('sign(3)').re).toBe(1);
+    expect(valueOf('sign(-2)').im).toBe(0);
+  });
+
+  it('rejects sign of a non-real value instead of discarding its imaginary part', () => {
+    expect(issueOf('sign(1+i)')).toBe('domain-error');
+  });
+
   it('evaluates a pointwise value in a list', () => {
     const result = evaluate(expr('(2, 3)'));
     if (!result.ok) throw new Error('expected a value');
@@ -117,7 +140,10 @@ describe('values', () => {
 
 describe('undefined points carry a reason', () => {
   it('reports division by zero and names the divisor', () => {
-    const result = evaluateScalar(expr('1/(z^2-1)'), makeEnvironment({ values: [['z', cx(1, 0)]] }));
+    const result = evaluateScalar(
+      expr('1/(z^2-1)'),
+      makeEnvironment({ values: [['z', cx(1, 0)]] }),
+    );
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.issue.kind).toBe('division-by-zero');
@@ -212,10 +238,7 @@ describe('user-defined functions', () => {
 describe('lists', () => {
   it('evaluates a vector field at a point', () => {
     const field = define('F(x,y)=(-y, x)');
-    const result = evaluate(
-      expr('F(1, 2)', ['F']),
-      makeEnvironment({ functions: [['F', field]] }),
-    );
+    const result = evaluate(expr('F(1, 2)', ['F']), makeEnvironment({ functions: [['F', field]] }));
     if (!result.ok) throw new Error(`expected a value, got: ${result.issue.message}`);
     const components = asComponents(result.value);
     expect(components?.map((component) => component.re)).toEqual([-2, 1]);

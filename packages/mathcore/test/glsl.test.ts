@@ -138,6 +138,12 @@ describe('the expression is translated, not interpreted', () => {
     expect(fragmentFor('abs(z)')).toContain('absToComplex(v_z)');
     expect(fragmentFor('arg(z)')).toContain('argToComplex(v_z)');
   });
+
+  it('lowers real sign with an explicit non-real domain guard', () => {
+    const fragment = fragmentFor('sign(z)');
+    expect(fragment).toContain('signToComplex(v_z)');
+    expect(fragment).toContain('vec2 signToComplex(vec2 a)');
+  });
 });
 
 describe('variables become plane coordinates', () => {

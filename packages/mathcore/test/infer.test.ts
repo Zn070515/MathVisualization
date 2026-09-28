@@ -163,6 +163,11 @@ describe('builtin functions follow their space rule', () => {
     expect(spaceOf('im(z)', { variables: { z: 'C' } })).toBe('R');
   });
 
+  it('keeps sign real and rejects a complex argument', () => {
+    expect(spaceOf('sign(x)', { variables: { x: 'R' } })).toBe('R');
+    expect(issueOf('sign(z)', { variables: { z: 'C' } })).toBe('dimension-mismatch');
+  });
+
   it('widens a real logarithm, because the logarithm of a negative real is imaginary', () => {
     expect(spaceOf('log(x)', { variables: { x: 'R' } })).toBe('C');
     expect(spaceOf('log(2)')).toBe('R');
@@ -256,9 +261,7 @@ describe('signatures of definitions', () => {
 
   it('accepts a real argument where a complex one is expected', () => {
     // R embeds in C, so passing 2 to a function of z is legitimate.
-    expect(
-      spaceOf('f(2)', { knownFunctions: ['f'], functions: { f: C_TO_C } }),
-    ).toBe('C');
+    expect(spaceOf('f(2)', { knownFunctions: ['f'], functions: { f: C_TO_C } })).toBe('C');
   });
 
   it('rejects a complex argument where a real one is expected', () => {
@@ -274,9 +277,13 @@ describe('signatures of definitions', () => {
   });
 
   it('rejects a call with the wrong number of arguments', () => {
-    expect(issueOf('f(z, 1)', { knownFunctions: ['f'], functions: { f: C_TO_C }, variables: { z: 'C' } })).toBe(
-      'arity-mismatch',
-    );
+    expect(
+      issueOf('f(z, 1)', {
+        knownFunctions: ['f'],
+        functions: { f: C_TO_C },
+        variables: { z: 'C' },
+      }),
+    ).toBe('arity-mismatch');
   });
 });
 

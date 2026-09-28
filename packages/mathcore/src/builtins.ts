@@ -26,8 +26,9 @@ import type { Space } from './types';
  *   imaginary. Complex arguments stay complex.
  * - `sqrt`: real arguments widen to complex unless provably non-negative;
  *   complex arguments stay complex.
+ * - `real-only`: the function is defined only on real scalar arguments.
  */
-export type SpaceRule = 'preserve' | 'to-real' | 'log' | 'sqrt';
+export type SpaceRule = 'preserve' | 'to-real' | 'log' | 'sqrt' | 'real-only';
 
 export interface BuiltinFunction {
   readonly name: string;
@@ -56,15 +57,25 @@ export const BUILTIN_FUNCTIONS: readonly BuiltinFunction[] = [
   },
   { name: 'sqrt', arity: 1, spaceRule: 'sqrt', summary: 'Principal square root', gpu: true },
   { name: 'abs', arity: 1, spaceRule: 'to-real', summary: 'Modulus |z|', gpu: true },
-  { name: 'arg', arity: 1, spaceRule: 'to-real', summary: 'Principal argument, in (-π, π]', gpu: true },
+  {
+    name: 'arg',
+    arity: 1,
+    spaceRule: 'to-real',
+    summary: 'Principal argument, in (-π, π]',
+    gpu: true,
+  },
   { name: 're', arity: 1, spaceRule: 'to-real', summary: 'Real part', gpu: true },
   { name: 'im', arity: 1, spaceRule: 'to-real', summary: 'Imaginary part', gpu: true },
   { name: 'conj', arity: 1, spaceRule: 'preserve', summary: 'Complex conjugate', gpu: true },
+  { name: 'sign', arity: 1, spaceRule: 'real-only', summary: 'Sign of a real number', gpu: true },
 ];
 
-export const BUILTIN_FUNCTION_NAMES: ReadonlySet<string> = new Set(
-  [...BUILTIN_FUNCTIONS.map((fn) => fn.name), 'Fourier', 'DFT', 'Convolution'],
-);
+export const BUILTIN_FUNCTION_NAMES: ReadonlySet<string> = new Set([
+  ...BUILTIN_FUNCTIONS.map((fn) => fn.name),
+  'Fourier',
+  'DFT',
+  'Convolution',
+]);
 
 export function builtinFunction(name: string): BuiltinFunction | undefined {
   return BUILTIN_FUNCTIONS.find((fn) => fn.name === name);
@@ -80,13 +91,13 @@ export function builtinFunction(name: string): BuiltinFunction | undefined {
  */
 export const NAME_ALIASES: Readonly<Record<string, string>> = {
   ln: 'log',
-  'π': 'pi',
-  'τ': 'tau',
-  'θ': 'theta',
-  'σ': 'sigma',
-  'ω': 'omega',
-  'ϕ': 'phi',
-  'φ': 'phi',
+  π: 'pi',
+  τ: 'tau',
+  θ: 'theta',
+  σ: 'sigma',
+  ω: 'omega',
+  ϕ: 'phi',
+  φ: 'phi',
 };
 
 export function canonicalName(name: string): string {
@@ -119,5 +130,7 @@ export function resultSpaceFor(rule: SpaceRule, argument: Space): Space {
       return argument.kind === 'C' ? argument : { kind: 'C', dim: 1 };
     case 'sqrt':
       return argument.kind === 'C' ? argument : { kind: 'C', dim: 1 };
+    case 'real-only':
+      return { kind: 'R', dim: 1 };
   }
 }

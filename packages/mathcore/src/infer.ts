@@ -299,10 +299,7 @@ function inferConvolutionSpace(
     if (!sourceSpace.ok) return sourceSpace;
 
     const signature = context.functions.get(source.callee);
-    if (
-      signature !== undefined &&
-      (signature.domain.kind !== 'R' || signature.domain.dim !== 1)
-    ) {
+    if (signature !== undefined && (signature.domain.kind !== 'R' || signature.domain.dim !== 1)) {
       return fail({
         kind: 'dimension-mismatch',
         message: `Convolution currently accepts one-real-variable sources, but "${source.callee}" has signature ${spaceToString(signature.domain)} → ${spaceToString(signature.codomain)}.`,
@@ -382,6 +379,13 @@ function inferCallSpace(
         return ok(provablyPositive(argumentExpr) ? R1 : C1);
       case 'sqrt':
         return ok(provablyNonNegative(argumentExpr) ? R1 : C1);
+      case 'real-only':
+        if (argument.value.kind === 'R' && argument.value.dim === 1) return ok(R1);
+        return fail({
+          kind: 'dimension-mismatch',
+          message: `${builtin.name} is defined only for real scalar arguments, but ${spaceToString(argument.value)} was supplied.`,
+          span: argumentExpr.span,
+        });
     }
   }
 
@@ -423,7 +427,7 @@ function inferCallSpace(
 }
 
 function builtinFunctionNamesForMessage(): string {
-  return 'sin, cos, tan, sinh, cosh, tanh, exp, log, sqrt, abs, arg, re, im, conj';
+  return 'sin, cos, tan, sinh, cosh, tanh, exp, log, sqrt, abs, arg, re, im, conj, sign';
 }
 
 /** Number of arguments a domain space corresponds to. */
@@ -571,15 +575,11 @@ export function inferSignature(
   const domain = inferDomain(parameters, spaceOfParameter, body);
   if (!domain.ok) return domain;
 
-  if (
-    body.kind === 'dft-transform' &&
-    (domain.value.kind !== 'R' || domain.value.dim !== 1)
-  ) {
+  if (body.kind === 'dft-transform' && (domain.value.kind !== 'R' || domain.value.dim !== 1)) {
     return fail({
       kind: 'dimension-mismatch',
       detail: 'A DFT frequency variable must be one-dimensional and real.',
-      message:
-        'A DFT frequency variable must be one real variable, as in D(ω) = DFT(f(t)).',
+      message: 'A DFT frequency variable must be one real variable, as in D(ω) = DFT(f(t)).',
       span: body.span,
     });
   }
@@ -604,10 +604,7 @@ export function classifySignatureWith(signature: Signature): InferredType {
 }
 
 /** Classify a valid definition body without changing generic signature rules. */
-export function classifyDefinitionWith(
-  signature: Signature,
-  body: Expr,
-): InferredType {
+export function classifyDefinitionWith(signature: Signature, body: Expr): InferredType {
   if (body.kind === 'convolution') {
     return {
       signature,

@@ -244,6 +244,7 @@ const GLSL_CALL_FUNCTION: Readonly<Record<string, string>> = {
   arg: 'argToComplex',
   re: 'realToComplex',
   im: 'imagToComplex',
+  sign: 'signToComplex',
 };
 
 /**
@@ -351,8 +352,7 @@ class Lowering {
         return fail({
           kind: 'unsupported',
           detail: `${transformName} transform lowered to a shader`,
-          message:
-            `A ${transformName} transform is a finite-window frequency-domain estimate, so it cannot be drawn by the pointwise shader backend.`,
+          message: `A ${transformName} transform is a finite-window frequency-domain estimate, so it cannot be drawn by the pointwise shader backend.`,
           span: expr.span,
         });
       }
@@ -361,7 +361,8 @@ class Lowering {
         return fail({
           kind: 'unsupported',
           detail: 'Convolution lowered to a shader',
-          message: 'A convolution is a finite-window estimate, so it cannot be drawn by the pointwise shader backend.',
+          message:
+            'A convolution is a finite-window estimate, so it cannot be drawn by the pointwise shader backend.',
           span: expr.span,
         });
     }
@@ -533,6 +534,12 @@ vec2 absToComplex(vec2 a) { return vec2(cabsValue(a), 0.0); }
 vec2 argToComplex(vec2 a) { return vec2(carg(a), 0.0); }
 vec2 realToComplex(vec2 a) { return vec2(a.x, 0.0); }
 vec2 imagToComplex(vec2 a) { return vec2(a.y, 0.0); }
+// sign is a real-only operation. A non-zero imaginary component is undefined;
+// do not silently order only the real part of a complex value.
+vec2 signToComplex(vec2 a) {
+  if (a.y != 0.0) return undefinedValue();
+  return vec2(sign(a.x), 0.0);
+}
 
 // ---------------------------------------------------------------------------
 // Value colouring. Mirror of coloring.ts domainColor.
