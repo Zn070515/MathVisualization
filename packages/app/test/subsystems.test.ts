@@ -37,10 +37,16 @@ describe('subsystem capability registry', () => {
 
   it('allows transforms to select Fourier-series pairs', () => {
     expect(subsystemById('transforms').drawableKinds).toContain('series-pair');
+    const transforms = subsystemById('transforms');
+    const series = transforms.capabilities.find(
+      (entry) => entry.name === 'Numerical Fourier series partial sums',
+    );
+
+    expect(series?.status).toBe('implemented');
+    expect(series?.summary).toMatch(/finite|numerical|partial sums|sampled/i);
+    expect(series?.summary).not.toMatch(/(?:claims?|is|are) exact|certified|automatic Gibbs/i);
     expect(
-      subsystemById('transforms').capabilities.find(
-        (entry) => entry.name === 'Fourier series and Gibbs phenomenon',
-      )?.status,
+      transforms.capabilities.find((entry) => entry.name === 'Gibbs phenomenon analysis')?.status,
     ).toBe('planned');
   });
 });

@@ -161,8 +161,15 @@ export const SUBSYSTEMS: readonly SubsystemDefinition[] = [
         status: 'implemented',
       },
       {
-        name: 'Fourier series and Gibbs phenomenon',
-        summary: 'Partial sums of a periodic signal, with the overshoot at a jump made visible.',
+        name: 'Numerical Fourier series partial sums',
+        summary:
+          'Finite one-period numerical coefficients and partial sums, with requested/effective quadrature counts and sampled coefficient-convergence diagnostics. This is not an exact reconstruction or a convergence certificate.',
+        status: 'implemented',
+      },
+      {
+        name: 'Gibbs phenomenon analysis',
+        summary:
+          'Automatic identification or certification of Gibbs overshoot at discontinuities is not implemented; the partial-sum view only makes the sampled behaviour available to inspect.',
         status: 'planned',
       },
       {
