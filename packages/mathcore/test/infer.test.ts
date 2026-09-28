@@ -19,6 +19,7 @@ import { spaceNameForVariable } from '../src/conventions';
 import {
   inferSignature,
   inferSpace,
+  classifyDefinitionWith,
   makeInferenceContext,
   provablyNonNegative,
   provablyPositive,
@@ -211,6 +212,49 @@ describe('signatures of definitions', () => {
     expect(signatureOf('f(z)=z^2')).toBe('C -> C');
     expect(signatureOf('f(z)=sin(z)/(z^2+1)')).toBe('C -> C');
     expect(signatureOf('f(z)=(z-1)/(z+1)')).toBe('C -> C');
+  });
+
+  it('types a Fourier series as a real signal and partial-sum family', () => {
+    const header = detectDefinitionHeader('S(t)=FourierSeries(f(u),2*pi)');
+    const parsed = parseStatement('S(t)=FourierSeries(f(u),2*pi)', {
+      knownFunctions: new Set(['S', 'f']),
+      knownValues: new Set(['t']),
+    });
+    if (!parsed.ok) throw new Error(`expected a parse, got: ${parsed.issue.message}`);
+    if (parsed.value.kind !== 'function-definition') throw new Error('expected a definition');
+    const result = inferSignature(
+      parsed.value.parameters,
+      parsed.value.body,
+      contextFor({ functions: { f: R_TO_R } }),
+      spaceOfParameter,
+    );
+    if (!result.ok) throw new Error(`expected a signature, got: ${result.issue.message}`);
+    expect(result.value).toEqual({ domain: R1, codomain: R1 });
+    expect(classifyDefinitionWith(result.value, parsed.value.body).classification).toEqual({
+      kind: 'series-pair',
+      description: 'A real periodic signal and its numerical Fourier-series partial sum',
+    });
+    expect(header).toEqual({ name: 'S', parameters: ['t'] });
+  });
+
+  it('allows a workspace parameter but rejects source and outer variables as periods', () => {
+    const valid = signatureOf('S(t)=FourierSeries(f(u),a)', {
+      functions: { f: R_TO_R },
+      variables: { a: 'R' },
+    });
+    expect(valid).toBe('R -> R');
+    expect(() => signatureOf('S(t)=FourierSeries(f(u),u)', { functions: { f: R_TO_R } })).toThrow(
+      /invalid-parameter|bound|period/i,
+    );
+    expect(() => signatureOf('S(t)=FourierSeries(f(u),t)', { functions: { f: R_TO_R } })).toThrow(
+      /invalid-parameter|bound|period/i,
+    );
+  });
+
+  it('rejects a complex-valued source signal', () => {
+    expect(() =>
+      signatureOf('S(t)=FourierSeries(f(u),2*pi)', { functions: { f: C_TO_C } }),
+    ).toThrow(/real|dimension/i);
   });
 
   it('types a real function of one real variable', () => {

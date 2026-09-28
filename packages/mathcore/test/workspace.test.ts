@@ -73,6 +73,14 @@ describe('classifying lines', () => {
     expect(typeOf(workspace.entries[0]).classification.kind).toBe('complex-path');
   });
 
+  it('classifies a Fourier series as a series pair', () => {
+    const workspace = buildWorkspace(inputs('f(u)=sin(u)', 'S(t)=FourierSeries(f(u),2*pi)'));
+    const entry = workspace.entries[1];
+    expect(entry?.typeIssue).toBeNull();
+    expect(typeOf(entry).classification.kind).toBe('series-pair');
+    expect(signatureToString(typeOf(entry).signature)).toBe('R → R');
+  });
+
   it('types a vector field', () => {
     const workspace = buildWorkspace(inputs('F(x,y)=(-y, x)'));
     expect(typeOf(workspace.entries[0]).classification.kind).toBe('vector-field');
@@ -119,7 +127,12 @@ describe('parameters', () => {
     if (function_ === undefined) return;
 
     const result = evaluateScalar(
-      { kind: 'call', callee: 'f', args: [{ kind: 'number', value: { n: 3n, d: 1n }, raw: '3', span: { start: 0, end: 1 } }], span: { start: 0, end: 4 } },
+      {
+        kind: 'call',
+        callee: 'f',
+        args: [{ kind: 'number', value: { n: 3n, d: 1n }, raw: '3', span: { start: 0, end: 1 } }],
+        span: { start: 0, end: 4 },
+      },
       environment,
     );
     expect(result.ok).toBe(true);

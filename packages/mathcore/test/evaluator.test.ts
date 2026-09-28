@@ -129,6 +129,14 @@ describe('values', () => {
     expect(issueOf('sign(1+i)')).toBe('domain-error');
   });
 
+  it('does not treat a Fourier series as an ordinary pointwise value', () => {
+    const result = evaluateScalar(expr('FourierSeries(f(u), 2*pi)', ['f']), makeEnvironment());
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issue.kind).toBe('unsupported');
+    expect(result.issue.message).toMatch(/partial|series/i);
+  });
+
   it('evaluates a pointwise value in a list', () => {
     const result = evaluate(expr('(2, 3)'));
     if (!result.ok) throw new Error('expected a value');

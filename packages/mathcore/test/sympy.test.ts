@@ -104,6 +104,18 @@ describe('structure', () => {
   it('translates a list into a matrix', () => {
     expect(sympyOf('(x, y)', ['x', 'y'])).toBe('Matrix([x, y])');
   });
+
+  it('refuses to hand a Fourier series to the symbolic engine', () => {
+    const parsed = parseExpression('FourierSeries(f(u), 2*pi)', {
+      knownFunctions: new Set(['f']),
+    });
+    if (!parsed.ok) throw new Error(`expected a parse, got: ${parsed.issue.message}`);
+    const result = lowerToSympy(parsed.value, []);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issue.kind).toBe('unsupported');
+    expect(result.issue.message).toMatch(/partial|series/i);
+  });
 });
 
 describe('symbol safety', () => {

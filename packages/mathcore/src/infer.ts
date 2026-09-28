@@ -22,7 +22,13 @@
  * forces a widening, the type system widens. Callers that need a narrower type
  * must prove non-negativity to get it.
  */
-import { type ConvolutionNode, type Expr, asIntegerLiteral } from './ast';
+import {
+  collectVariableNames,
+  type ConvolutionNode,
+  type Expr,
+  type FourierSeriesNode,
+  asIntegerLiteral,
+} from './ast';
 import { builtinFunction } from './builtins';
 import { builtinConstant } from './conventions';
 import { fail, ok, type MathIssue, type Result } from './errors';
@@ -203,13 +209,7 @@ export function inferSpace(
       return inferConvolutionSpace(expr, context);
 
     case 'fourier-series':
-      return fail({
-        kind: 'unsupported',
-        detail: 'Fourier series typing is handled by the series classifier.',
-        message:
-          'A Fourier series needs its real source and period to be validated as a series object.',
-        span: expr.span,
-      });
+      return inferFourierSeriesSpace(expr, context);
 
     case 'unary':
       return inferSpace(expr.operand, context);
@@ -319,6 +319,76 @@ function inferConvolutionSpace(
   }
 
   return sourceSpaces.some((space) => space.kind === 'C') ? ok(C1) : ok(R1);
+}
+
+function fourierSeriesPeriodIssue(
+  expr: FourierSeriesNode,
+  forbiddenNames: ReadonlySet<string>,
+): MathIssue | null {
+  for (const name of collectVariableNames(expr.period)) {
+    if (!forbiddenNames.has(name)) continue;
+    return {
+      kind: 'invalid-parameter',
+      detail: `Fourier-series period depends on ${name}`,
+      message: `The Fourier-series period cannot depend on the source or outer function variable "${name}".`,
+      span: expr.period.span,
+    };
+  }
+  return null;
+}
+
+function inferFourierSeriesSpace(
+  expr: FourierSeriesNode,
+  context: InferenceContext,
+): Result<Space, MathIssue> {
+  const source = expr.source;
+  if (source.kind !== 'call' || source.args.length !== 1) {
+    return fail({
+      kind: 'unsupported',
+      detail: 'Fourier series source is not a unary function call.',
+      message: 'A Fourier series needs a one-variable real source function.',
+      span: expr.span,
+    });
+  }
+
+  const sourceVariable = source.args[0];
+  if (sourceVariable?.kind !== 'variable' || sourceVariable.name !== expr.sourceVariable) {
+    return fail({
+      kind: 'unsupported',
+      detail: 'Fourier series source variable is not explicitly bound.',
+      message:
+        'A Fourier series needs the source variable explicitly, as in FourierSeries(f(u), P).',
+      span: expr.span,
+    });
+  }
+
+  const sourceContext: InferenceContext = {
+    variables: new Map([...context.variables, [expr.sourceVariable, R1]]),
+    functions: context.functions,
+  };
+  const sourceSpace = inferSpace(source, sourceContext);
+  if (!sourceSpace.ok) return sourceSpace;
+  if (sourceSpace.value.kind !== 'R' || sourceSpace.value.dim !== 1) {
+    return fail({
+      kind: 'dimension-mismatch',
+      message: 'A Fourier series currently accepts a real signal f: R → R.',
+      span: source.span,
+    });
+  }
+
+  const period = inferSpace(expr.period, sourceContext);
+  if (!period.ok) return period;
+  if (period.value.kind !== 'R' || period.value.dim !== 1) {
+    return fail({
+      kind: 'dimension-mismatch',
+      message: 'A Fourier-series period must be a real scalar.',
+      span: expr.period.span,
+    });
+  }
+
+  const issue = fourierSeriesPeriodIssue(expr, new Set([expr.sourceVariable]));
+  if (issue !== null) return fail(issue);
+  return ok(R1);
 }
 
 function inferPowerSpace(
@@ -596,6 +666,11 @@ export function inferSignature(
   const innerVariables = new Map(context.variables);
   for (const parameter of parameters) innerVariables.set(parameter, spaceOfParameter(parameter));
 
+  if (body.kind === 'fourier-series') {
+    const periodIssue = fourierSeriesPeriodIssue(body, new Set(parameters));
+    if (periodIssue !== null) return fail(periodIssue);
+  }
+
   const codomain = inferSpace(body, { variables: innerVariables, functions: context.functions });
   if (!codomain.ok) return codomain;
 
@@ -632,6 +707,15 @@ export function classifyDefinitionWith(signature: Signature, body: Expr): Inferr
           body.kind === 'dft-transform'
             ? 'A sampled real signal and its discrete Fourier spectrum'
             : 'A real signal and its numerical Fourier transform',
+      },
+    };
+  }
+  if (body.kind === 'fourier-series') {
+    return {
+      signature,
+      classification: {
+        kind: 'series-pair',
+        description: 'A real periodic signal and its numerical Fourier-series partial sum',
       },
     };
   }

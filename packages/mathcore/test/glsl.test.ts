@@ -144,6 +144,14 @@ describe('the expression is translated, not interpreted', () => {
     expect(fragment).toContain('signToComplex(v_z)');
     expect(fragment).toContain('vec2 signToComplex(vec2 a)');
   });
+
+  it('refuses to lower a Fourier series to a pointwise shader', () => {
+    const result = lower('FourierSeries(sin(u), 2*pi)');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issue.kind).toBe('unsupported');
+    expect(result.issue.message).toMatch(/partial|series/i);
+  });
 });
 
 describe('variables become plane coordinates', () => {

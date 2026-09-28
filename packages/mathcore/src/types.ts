@@ -67,6 +67,7 @@ export type MathObjectKind =
   | 'parametric-surface'
   | 'transform-pair'
   | 'convolution-pair'
+  | 'series-pair'
   | 'unknown';
 
 export interface Classification {
